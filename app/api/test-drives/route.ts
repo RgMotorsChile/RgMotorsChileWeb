@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTestDrives, addTestDrive, type TrafficInfo } from "@/lib/server/testDrivesStore";
-import { notifyTeam } from "@/lib/server/notify";
+import {
+  buildTestDriveEmails,
+  notifyCustomer,
+  notifyTeam,
+} from "@/lib/server/notify";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -29,7 +33,7 @@ export async function POST(req: NextRequest) {
   try {
     const clientName = String(body.clientName || "").trim();
     const clientPhone = String(body.clientPhone || "").trim();
-    const clientEmail = body.clientEmail ? String(body.clientEmail).trim() : "";
+    const clientEmail = String(body.clientEmail || "").trim();
     const vehicleSlug = String(body.vehicleSlug || "").trim();
 
     if (!clientName || !clientPhone || !vehicleSlug) {
@@ -38,11 +42,23 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    if (!clientEmail) {
+      return NextResponse.json(
+        {
+          error:
+            "Necesitamos tu correo para enviarte la confirmación de la visita.",
+        },
+        { status: 400 },
+      );
+    }
     if (!isValidChilePhone(clientPhone)) {
       return NextResponse.json({ error: "Teléfono inválido." }, { status: 400 });
     }
-    if (clientEmail && !isValidEmail(clientEmail)) {
-      return NextResponse.json({ error: "Correo electrónico inválido." }, { status: 400 });
+    if (!isValidEmail(clientEmail)) {
+      return NextResponse.json(
+        { error: "Correo electrónico inválido." },
+        { status: 400 },
+      );
     }
 
     const created = await addTestDrive({
@@ -62,14 +78,51 @@ export async function POST(req: NextRequest) {
       notes: body.notes ? String(body.notes).slice(0, 1000) : "",
     });
 
-    await notifyTeam({
-      type: "test-drive",
-      title: `Prueba de manejo: ${created.vehicleTitle}`,
-      body: `${clientName} · ${clientPhone} · ${created.date} ${created.time}`,
-      meta: { id: created.id, vehicleSlug },
+    const mails = buildTestDriveEmails({
+      clientName,
+      clientPhone,
+      clientEmail,
+      vehicleTitle: created.vehicleTitle,
+      branch: created.branch,
+      date: created.date,
+      time: created.time,
+      executive: created.executive,
+      id: created.id,
     });
 
-    return NextResponse.json({ ok: true, testDrive: created }, { status: 201 });
+    const [teamNotify, customerNotify] = await Promise.all([
+      notifyTeam({
+        type: "test-drive",
+        title: `Prueba de manejo: ${created.vehicleTitle} · ${created.date} ${created.time}`,
+        body: mails.teamBody,
+        meta: {
+          id: created.id,
+          vehicleSlug,
+          date: created.date,
+          time: created.time,
+        },
+      }),
+      notifyCustomer({
+        to: clientEmail,
+        type: "test-drive-customer",
+        title: `Confirmación: prueba de manejo ${created.vehicleTitle}`,
+        body: mails.customerBody,
+        html: mails.customerHtml,
+        meta: { id: created.id, vehicleSlug },
+      }),
+    ]);
+
+    return NextResponse.json(
+      {
+        ok: true,
+        testDrive: created,
+        emails: {
+          team: teamNotify.channel,
+          customer: customerNotify.channel,
+        },
+      },
+      { status: 201 },
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Error" },

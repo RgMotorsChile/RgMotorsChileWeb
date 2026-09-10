@@ -39,7 +39,14 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
-  const canConfirm = !!(day && time && name.trim() && phone.trim() && !isSubmitting);
+  const canConfirm = !!(
+    day &&
+    time &&
+    name.trim() &&
+    phone.trim() &&
+    email.trim() &&
+    !isSubmitting
+  );
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
@@ -103,7 +110,8 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
         <p className="mt-3 text-xs leading-relaxed text-white/70">
           Hola <b>{name}</b>, te esperamos el <b>{day} de {monthName}</b> a las{" "}
           <b>{time} hrs</b> en la sucursal <b>{branch}</b> para probar tu{" "}
-          <b>{v.brand} {v.model}</b> con asistencia de un especialista comercial.
+          <b>{v.brand} {v.model}</b>. También te enviamos la confirmación a{" "}
+          <b>{email}</b> (revisá spam si no la ves).
         </p>
 
         <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-left text-xs space-y-2">
@@ -261,14 +269,18 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-white/70">Correo electrónico (Opcional)</label>
+          <label className="text-xs font-semibold text-white/70">Correo electrónico *</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="correo@ejemplo.com"
+            required
             className="mt-1.5 w-full rounded-2xl border border-white/15 bg-white/[0.05] px-4 py-3 text-xs text-white outline-none focus:border-brand-500 placeholder-white/40"
           />
+          <p className="mt-1.5 text-[10px] text-white/40">
+            Te enviamos la confirmación con fecha, hora y vehículo.
+          </p>
         </div>
 
         <button
@@ -280,7 +292,7 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
             ? "Agendando tu prueba…"
             : canConfirm
             ? "Confirmar prueba de manejo"
-            : "Selecciona fecha, hora y contacto"}
+            : "Completá fecha, hora, contacto y correo"}
         </button>
       </div>
     </div>
