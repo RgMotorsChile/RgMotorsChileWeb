@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
+import TelemetryDashboard from "@/components/admin/TelemetryDashboard";
 import {
   InventoryHubSection,
   CrmHubSection,
@@ -12,8 +13,17 @@ import {
 import { asset } from "@/lib/asset";
 import { Vehicle, formatCLP } from "@/lib/vehicles";
 
-const NAV = [
+type AdminTab =
+  | "dashboard"
+  | "telemetria"
+  | "inventario"
+  | "crm"
+  | "analitica"
+  | "config";
+
+const NAV: { id: AdminTab; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard Ejecutivo", icon: "▦" },
+  { id: "telemetria", label: "Telemetría & Salud", icon: "◎" },
   { id: "inventario", label: "Inventario & Multimedia", icon: "🚘" },
   { id: "crm", label: "CRM Comercial & Leads", icon: "👥" },
   { id: "analitica", label: "Analítica & Reportes", icon: "📊" },
@@ -21,7 +31,7 @@ const NAV = [
 ];
 
 export default function AdminPage() {
-  const [active, setActive] = useState<"dashboard" | "inventario" | "crm" | "analitica" | "config">("dashboard");
+  const [active, setActive] = useState<AdminTab>("dashboard");
   const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
   const [reservationsList, setReservationsList] = useState<any[]>([]);
 
@@ -74,7 +84,7 @@ export default function AdminPage() {
               {NAV.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => setActive(n.id as typeof active)}
+                  onClick={() => setActive(n.id)}
                   className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
                     active === n.id
                       ? "bg-brand-500 text-white shadow-glow"
@@ -112,6 +122,7 @@ export default function AdminPage() {
                 {
                   {
                     dashboard: "Dashboard Ejecutivo",
+                    telemetria: "Telemetría & Salud del Negocio",
                     inventario: "Inventario & Multimedia",
                     crm: "Centro Comercial & Oportunidades (CRM)",
                     analitica: "Analítica & Inteligencia de Negocio",
@@ -123,6 +134,8 @@ export default function AdminPage() {
                 {
                   {
                     dashboard: "Resumen gerencial de inventario, prospectos y reservas activas",
+                    telemetria:
+                      "Visitas, impacto comercial, estado de la base de datos y avisos — en lenguaje claro",
                     inventario: "Administración integral de vehículos, fichas técnicas y fotos",
                     crm: "Gestión unificada de prospectos, pruebas de manejo, reservas y créditos",
                     analitica: "Proyecciones de ventas, radar de compra inteligente y atribución multicanal",
@@ -153,7 +166,7 @@ export default function AdminPage() {
             {NAV.map((n) => (
               <button
                 key={n.id}
-                onClick={() => setActive(n.id as typeof active)}
+                onClick={() => setActive(n.id)}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold ${
                   active === n.id
                     ? "bg-brand-500 text-white shadow-sm"
@@ -164,6 +177,9 @@ export default function AdminPage() {
               </button>
             ))}
           </div>
+
+          {/* MÓDULO: TELEMETRÍA */}
+          {active === "telemetria" && <TelemetryDashboard />}
 
           {/* MÓDULO 1: DASHBOARD EJECUTIVO */}
           {active === "dashboard" && (
@@ -242,15 +258,15 @@ export default function AdminPage() {
                   </button>
 
                   <button
-                    onClick={() => setActive("analitica")}
-                    className="flex items-center gap-3 rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-left transition hover:bg-purple-500/20 hover:border-purple-500/40"
+                    onClick={() => setActive("telemetria")}
+                    className="flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-left transition hover:bg-cyan-500/20 hover:border-cyan-500/40"
                   >
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-purple-500/20 text-lg">
-                      📊
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500/20 text-lg">
+                      ◎
                     </span>
                     <div>
-                      <p className="text-xs font-bold text-white">Analítica & Canales</p>
-                      <p className="text-[11px] text-purple-300">Reportes y compra inteligente</p>
+                      <p className="text-xs font-bold text-white">Telemetría & Salud</p>
+                      <p className="text-[11px] text-cyan-300">Visitas, leads y sistemas</p>
                     </div>
                   </button>
                 </div>
