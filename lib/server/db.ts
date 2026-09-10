@@ -40,16 +40,16 @@ export async function readJsonOptional<T>(filename: string): Promise<T | null> {
 
   if (isKvConfigured()) {
     try {
-      let data = await kv.get<T>(filename);
+      let data: unknown = await kv.get(filename);
       // Defensa: algunos writes REST dejan el valor como string JSON.
       if (typeof data === "string") {
         try {
-          data = JSON.parse(data) as T;
+          data = JSON.parse(data) as unknown;
         } catch {
           /* keep string */
         }
       }
-      if (data !== null && data !== undefined) return data;
+      if (data !== null && data !== undefined) return data as T;
     } catch (error) {
       console.warn(`Error leyendo ${filename} de Vercel KV:`, error);
     }
