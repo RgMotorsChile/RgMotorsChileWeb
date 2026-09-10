@@ -39,7 +39,11 @@ export async function getVehicles(opts?: {
   }
 
   const list = await readJson<Vehicle[]>(FILENAME, initialVehicles);
-  const cleaned = list.map(normalizeVehicle);
+  const safeList = Array.isArray(list) ? list : initialVehicles;
+  if (!Array.isArray(list)) {
+    console.error("[vehiclesStore] vehicles.json no es un array — usando fallback.");
+  }
+  const cleaned = safeList.map(normalizeVehicle);
   cacheSet(CACHE_KEY, cleaned, CACHE_TTL_MS);
   return cleaned;
 }

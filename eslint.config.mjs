@@ -16,6 +16,7 @@ export default defineConfig([
     "documentos/**",
     "public/**",
     "scripts/**",
+    "scratch/**",
     "e2e/**",
     "next-env.d.ts",
     "vitest.config.mts",

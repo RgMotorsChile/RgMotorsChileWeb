@@ -1,7 +1,6 @@
-import { getVehicles } from "./vehiclesStore";
-import { archiveSoldVehicle, getSoldVehicles } from "./soldVehiclesStore";
+import { getVehicles, replaceAllVehicles } from "./vehiclesStore";
+import { archiveSoldVehicle } from "./soldVehiclesStore";
 import { Vehicle } from "@/lib/vehicles";
-import { writeJson } from "./db";
 import {
   evaluateSheetWipeGuard,
   guessBodyTypeFromModel,
@@ -387,8 +386,23 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
     return b.price - a.price;
   });
 
-  // Save to DB (KV + local files)
-  await writeJson("vehicles.json", updatedActiveList);
+  // Persistencia + invalidación de caché (no reportar éxito si KV falla)
+  const saved = await replaceAllVehicles(updatedActiveList);
+  if (!saved.success) {
+    return {
+      success: false,
+      message:
+        saved.error ||
+        "Sync Sheets calculó el inventario pero no se pudo persistir en KV.",
+      totalActive: updatedActiveList.length,
+      newVehicles: newCount,
+      soldVehicles: soldCount,
+      updatedVehicles: updatedCount,
+      sheetAccessGranted: true,
+      antiWipeSkippedArchive: wipeGuard.skipArchive,
+      timestamp: new Date().toISOString(),
+    };
+  }
 
   return {
     success: true,

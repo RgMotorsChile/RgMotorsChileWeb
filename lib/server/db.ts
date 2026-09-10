@@ -72,13 +72,20 @@ export async function readJsonOptional<T>(filename: string): Promise<T | null> {
 /**
  * Lee un archivo JSON de forma segura.
  * En desarrollo prioriza data/ local para no pisar el stock nuevo con KV viejo.
- * Si el archivo no existe, devuelve `fallback` y lo almacena.
+ * Si el archivo no existe: en prod NO siembra fallback (evita stock demo / defaults
+ * inventados); en local sí escribe el fallback para DX.
  */
 export async function readJson<T>(filename: string, fallback: T): Promise<T> {
   const existing = await readJsonOptional<T>(filename);
   if (existing !== null) return existing;
 
-  // Si no existe en ningún lado, guardamos en memoria y tratamos de escribir
+  if (isVercelProduction()) {
+    console.warn(
+      `[RG Storage] ${filename} ausente en KV — no se siembra fallback en producción.`,
+    );
+    return fallback;
+  }
+
   await writeJson(filename, fallback);
   return fallback;
 }

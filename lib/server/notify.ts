@@ -99,13 +99,20 @@ export async function notifyTeam(event: {
     channel: emailed ? "email" : "email-pending",
   };
 
-  console.info("[RG NOTIFY]", {
-    to,
-    type: entry.type,
-    title: entry.title,
-    channel: entry.channel,
-    meta: sanitizeMetaForLog(entry.meta),
-  });
+  if (!emailed) {
+    console.error(
+      "[RG NOTIFY] Email NO enviado (email-pending). Revisá RESEND_API_KEY, EMAIL_FROM y dominio verificado.",
+      { to, type: entry.type, title: entry.title },
+    );
+  } else {
+    console.info("[RG NOTIFY]", {
+      to,
+      type: entry.type,
+      title: entry.title,
+      channel: entry.channel,
+      meta: sanitizeMetaForLog(entry.meta),
+    });
+  }
 
   const list = await readJson<NotificationEvent[]>(FILENAME, []);
   list.unshift(entry);

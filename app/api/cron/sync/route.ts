@@ -40,8 +40,21 @@ async function runDailySync() {
   console.log("[CronSync] Ejecutando sincronización de Google Sheets e inventario...");
   const sheetResult = await syncFromLiveGoogleSheet();
   const driveResult = await runAutoSync();
+  const sheetOk = Boolean(sheetResult.success);
+  const driveOk = Boolean(driveResult.success);
+  const success = sheetOk && driveOk;
+  const partial = !success && (sheetOk || driveOk);
+  if (partial) {
+    console.warn("[CronSync] Sync parcial:", {
+      sheetOk,
+      driveOk,
+      sheetMessage: sheetResult.message,
+      driveMessage: (driveResult as { message?: string }).message,
+    });
+  }
   return {
-    success: Boolean(sheetResult.success || driveResult.success),
+    success,
+    partial,
     sheetSync: sheetResult,
     driveSync: driveResult,
     status: getAutoSyncStatus(),

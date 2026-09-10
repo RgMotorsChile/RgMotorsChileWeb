@@ -39,10 +39,24 @@ function defaultCredentials(): StoredCredentials {
   };
 }
 
+/**
+ * En producción NO se re-siembra admin/rgmotors2026 si falta el JSON en KV
+ * (evita reabrir la puerta por defecto tras pérdida de key).
+ * Bootstrap explícito: ADMIN_ALLOW_DEFAULT_SEED=1 (solo una vez, luego quitar).
+ */
 export async function getAdminCredentials(): Promise<StoredCredentials> {
   const existing = await readJsonOptional<StoredCredentials>(FILENAME);
   if (existing?.username && existing?.passwordHash) {
     return existing;
+  }
+
+  const allowSeed =
+    process.env.ADMIN_ALLOW_DEFAULT_SEED === "1" || !isVercelProduction();
+
+  if (!allowSeed) {
+    throw new Error(
+      "Credenciales admin no inicializadas en KV. Definí ADMIN_ALLOW_DEFAULT_SEED=1, iniciá sesión, cambiá usuario/clave y eliminá el flag.",
+    );
   }
 
   const defaults = defaultCredentials();
@@ -59,15 +73,20 @@ export async function validateAdminLogin(
   username: string,
   password: string,
 ): Promise<{ ok: true; mustChange: boolean; username: string } | { ok: false }> {
-  const creds = await getAdminCredentials();
-  const userOk = username.trim().toLowerCase() === creds.username.toLowerCase();
-  const passOk = verifyPassword(password, creds.passwordHash);
-  if (!userOk || !passOk) return { ok: false };
-  return {
-    ok: true,
-    mustChange: creds.mustChangePassword,
-    username: creds.username,
-  };
+  try {
+    const creds = await getAdminCredentials();
+    const userOk = username.trim().toLowerCase() === creds.username.toLowerCase();
+    const passOk = verifyPassword(password, creds.passwordHash);
+    if (!userOk || !passOk) return { ok: false };
+    return {
+      ok: true,
+      mustChange: creds.mustChangePassword,
+      username: creds.username,
+    };
+  } catch (err) {
+    console.error("[AdminAuth] Credenciales no disponibles:", err);
+    return { ok: false };
+  }
 }
 
 /** Requisitos mínimos de contraseña fuerte. */

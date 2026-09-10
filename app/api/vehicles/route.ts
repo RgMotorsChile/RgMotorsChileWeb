@@ -3,6 +3,7 @@ import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import { Vehicle } from "@/lib/vehicles";
 import { toVehicleCardDTO } from "@/lib/vehicles/publicFields";
 import { isCamionetaBody, isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,13 @@ function matchesBodyTypeQuery(vehicleBody: string, query: string): boolean {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const admin = searchParams.get("admin");
-    let list = await getVehicles({ bypassCache: admin === "true" });
+    const adminRequested = searchParams.get("admin") === "true";
+    const isAdmin = adminRequested ? await requireAdminSession() : false;
+    if (adminRequested && !isAdmin) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    }
+
+    let list = await getVehicles({ bypassCache: isAdmin });
 
     const featured = searchParams.get("featured");
     if (featured === "true") {
@@ -39,8 +45,8 @@ export async function GET(req: NextRequest) {
       list = list.filter((v) => (v.status || "Disponible").toLowerCase() === status.toLowerCase());
     }
 
-    // Exclude drafts / sold unless admin mode
-    if (admin !== "true") {
+    // Exclude drafts / sold unless admin mode autenticado
+    if (!isAdmin) {
       list = list.filter(isPublicCatalogVehicle);
     }
 
@@ -51,10 +57,9 @@ export async function GET(req: NextRequest) {
         : list;
 
     const res = NextResponse.json({ vehicles: payload, total: payload.length });
-    if (admin === "true" || process.env.NODE_ENV !== "production") {
+    if (isAdmin || process.env.NODE_ENV !== "production") {
       res.headers.set("Cache-Control", "private, no-store");
     } else {
-      // CDN: cache corto tras sync de stock
       res.headers.set(
         "Cache-Control",
         "public, s-maxage=60, stale-while-revalidate=120",
@@ -70,6 +75,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
   try {
     const body = (await req.json()) as Partial<Vehicle>;
 
