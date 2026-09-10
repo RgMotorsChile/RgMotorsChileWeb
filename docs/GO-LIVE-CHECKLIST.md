@@ -7,7 +7,8 @@ Sitio en producción: `https://www.rgmotorschile.cl` (también apex `rgmotorschi
 - KV + Blob + `ADMIN_SESSION_SECRET` + `CRON_SECRET`
 - Dominios www + apex
 - Auth admin, leads, headers de seguridad, CI
-- Cron diario: **GET ejecuta el sync** (Sheets + inventario)
+- Cron **2×/día** (08:00 y 19:00 Chile / UTC-3): GET `/api/cron/sync` ejecuta Sheets (solo hoja **RG MOTORS**, con precio+km) + fotos Drive
+- Sync omite preparación / incompletos; catálogo público exige precio y km > 0
 - Sitemap solo vehículos públicos (sin vendidos/borrador)
 - Mutaciones admin con `requireAdminSession` (defense-in-depth)
 

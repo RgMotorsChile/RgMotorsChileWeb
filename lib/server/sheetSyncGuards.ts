@@ -1,7 +1,45 @@
 /**
- * Guardas anti-wipe para sync de inventario desde Sheets.
- * Evita vaciar el catálogo si la planilla falla o viene incompleta.
+ * Guardas anti-wipe y reglas de inventario desde Sheets (solo RG MOTORS).
  */
+
+/** Única pestaña de stock que alimenta el sitio. */
+export const INVENTORY_SHEET_TAB = "RG MOTORS";
+
+export function isInventorySheetTab(name: string): boolean {
+  return name.trim().toUpperCase() === INVENTORY_SHEET_TAB;
+}
+
+const BLOCKED_INVENTORY_TEXT =
+  /falta|reservado|preparacion|preparación|terminar|taller|casa|consignado|\brq\b|fotos|en revision|en revisión|sin precio|sin km|pendiente/i;
+
+/** Texto de celda/fila que indica no listo para vitrina. */
+export function hasBlockedInventoryText(...parts: unknown[]): boolean {
+  const joined = parts.map((p) => (p == null ? "" : String(p))).join(" ");
+  return BLOCKED_INVENTORY_TEXT.test(joined);
+}
+
+export type SellableSheetRowInput = {
+  price: number;
+  km: number;
+  brand?: string;
+  model?: string;
+  year?: number;
+  /** Texto crudo de la fila (precio, km, notas, etc.). */
+  rawParts?: unknown[];
+};
+
+/**
+ * Solo entran al catálogo activo: precio y km reales, marca/modelo/año, sin preparación.
+ */
+export function isSellableSheetRow(input: SellableSheetRowInput): boolean {
+  if (input.price <= 0 || input.km <= 0) return false;
+  if (!input.brand || !String(input.brand).trim()) return false;
+  if (!input.model || !String(input.model).trim()) return false;
+  const year = Number(input.year) || 0;
+  if (year < 1990 || year > new Date().getFullYear() + 1) return false;
+  if (input.rawParts && hasBlockedInventoryText(...input.rawParts)) return false;
+  return true;
+}
 
 export type MassArchiveGuardInput = {
   /** Filas activas válidas leídas de la hoja (no vendidas). */

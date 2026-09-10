@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `Se importaron/actualizaron ${imported} vehículos exclusivamente de las hojas RG MOTORS y UNIDADES CHILE.`,
+        message: `Se importaron/actualizaron ${imported} vehículos exclusivamente de la hoja RG MOTORS (con precio y km válidos).`,
         imported,
       });
     }

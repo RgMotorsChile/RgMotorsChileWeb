@@ -5,6 +5,10 @@ import { join } from "node:path";
 import * as XLSX from "xlsx";
 import { Vehicle } from "@/lib/vehicles";
 import { getVehicles, saveVehicle } from "./vehiclesStore";
+import {
+  isInventorySheetTab,
+  isSellableSheetRow,
+} from "@/lib/server/sheetSyncGuards";
 
 export type SyncResult = {
   success: boolean;
@@ -139,10 +143,7 @@ export async function parseExcelStockBuffer(buffer: Buffer): Promise<any[]> {
   const vehicles: any[] = [];
 
   for (const name of workbook.SheetNames) {
-    const norm = name.trim().toUpperCase();
-    if (norm !== "RG MOTORS" && norm !== "UNIDADES CHILE") {
-      continue;
-    }
+    if (!isInventorySheetTab(name)) continue;
 
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
@@ -162,14 +163,16 @@ export async function parseExcelStockBuffer(buffer: Buffer): Promise<any[]> {
       const marca = String(r[2] || "").trim();
       const modelo = String(r[3] || "").trim().toUpperCase();
       const color = String(r[4] || "").trim();
-      const year = parseInt(String(r[5]), 10) || 2022;
+      const year = parseInt(String(r[5]), 10) || 0;
 
       // Parse offer price and list price
       const cleanNum = (val: any) => {
         if (!val) return 0;
-        const str = String(val).replace(/[^0-9]/g, "");
-        if (!str) return 0;
-        let n = parseInt(str, 10);
+        const str = String(val);
+        if (/falta|reservado|preparacion|preparación|taller|vendido/i.test(str)) return 0;
+        const digits = str.replace(/[^0-9]/g, "");
+        if (!digits) return 0;
+        let n = parseInt(digits, 10);
         if (n > 100000000) n = Math.round(n / 100);
         return n;
       };
@@ -182,8 +185,21 @@ export async function parseExcelStockBuffer(buffer: Buffer): Promise<any[]> {
       const kmStr = String(r[8] || "").split(/km/i)[0].replace(/[^0-9]/g, "");
       const km = kmStr ? parseInt(kmStr, 10) : 0;
 
+      if (
+        !isSellableSheetRow({
+          price,
+          km,
+          brand: marca,
+          model: modelo,
+          year,
+          rawParts: [r[6], r[7], r[8], r.join(" ")],
+        })
+      ) {
+        continue;
+      }
+
       vehicles.push({
-        sheet: norm,
+        sheet: "RG MOTORS",
         plate: `${rawPlate.slice(0, 4)} ${rawPlate.slice(4)}`,
         rawPlate,
         brand: marca,

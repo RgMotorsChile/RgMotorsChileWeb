@@ -225,7 +225,7 @@ export default function DriveSyncModal({ isOpen, onClose, onSuccess }: Props) {
               <span className="text-base">📁</span>
               <div>
                 <p className="text-xs font-bold text-white">Carpeta Google Drive de Fotos</p>
-                <p className="text-[11px] text-white/40">FOTOS RG Y UNIDADES CHILE (Solo Lectura)</p>
+                <p className="text-[11px] text-white/40">FOTOS RG MOTORS (Solo Lectura)</p>
               </div>
             </div>
             <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">

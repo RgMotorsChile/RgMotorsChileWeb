@@ -3,9 +3,12 @@ import type { Vehicle } from "@/lib/vehicles";
 /** Estados visibles en catálogo / home (no borrador ni vendido). */
 export function isPublicCatalogVehicle(v: Vehicle): boolean {
   const status = v.status || "Disponible";
-  if (status === "Borrador" || status === "Vendido") return false;
-  // Sin precio publicado (FALTA PRECIO) no sale a vitrina
-  if (status === "En preparación" && !(v.price > 0)) return false;
+  if (status === "Borrador" || status === "Vendido" || status === "En preparación") {
+    return false;
+  }
+  // Solo listos para vender: precio y kilometraje reales
+  if (!(v.price > 0) || !(v.km > 0)) return false;
+  if (!v.brand?.trim() || !v.model?.trim()) return false;
   return true;
 }
 
