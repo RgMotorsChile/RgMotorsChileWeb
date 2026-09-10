@@ -13,7 +13,6 @@ import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { asset } from "@/lib/asset";
 import VehicleViewer from "@/components/VehicleViewer";
 import CuotaSimulator from "@/components/CuotaSimulator";
-import VehicleHealthCard from "@/components/VehicleHealthCard";
 import VehicleActionButtons from "@/components/VehicleActionButtons";
 import MobileVehicleStickyBar from "@/components/MobileVehicleStickyBar";
 
@@ -94,8 +93,6 @@ export default async function VehiclePage({
             slug={v.slug}
             spinFrames={spinFramesOf(v)}
           />
-
-          <VehicleHealthCard vehicleName={`${v.brand} ${v.model}`} />
 
           <section className="apple-glass-card rounded-2xl p-4 space-y-4 sm:rounded-3xl sm:p-6">
             <h2 className="border-b border-white/10 pb-3 text-base font-bold tracking-tight text-white">
