@@ -30,7 +30,6 @@ export async function GET() {
       blob: isBlobReady(),
       adminSessionSecret: sessionOk,
       cronSecret: cronOk,
-      companyRut: Boolean(process.env.COMPANY_RUT?.trim()),
       resend: Boolean(process.env.RESEND_API_KEY?.trim()),
     },
     warnings: storage.warnings,

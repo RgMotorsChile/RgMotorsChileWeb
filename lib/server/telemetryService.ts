@@ -122,7 +122,6 @@ export async function buildTelemetryReport() {
     process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length >= 16,
   );
   const resendOk = Boolean(process.env.RESEND_API_KEY?.trim());
-  const companyRutOk = Boolean(process.env.COMPANY_RUT?.trim());
 
   const emailPending = notifications.filter((n) => n.channel === "email-pending");
   const emailOkRecent = notifications
@@ -240,19 +239,10 @@ export async function buildTelemetryReport() {
       id: "cron",
       label: "Sincronización automática",
       plain: cronOk
-        ? "El cron de Sheets/Drive está configurado."
+        ? "El cron de Sheets/Drive está configurado (08:00 y 19:00 Chile)."
         : "Falta CRON_SECRET: la sync automática puede no correr en producción.",
       ok: cronOk || !isVercelProduction(),
       severity: "warn",
-    },
-    {
-      id: "rut",
-      label: "Datos legales (RUT)",
-      plain: companyRutOk
-        ? "El RUT de la empresa está publicado en el sitio."
-        : "Todavía no está el RUT en el footer (opcional pero recomendado).",
-      ok: companyRutOk,
-      severity: "info",
     },
   ];
 

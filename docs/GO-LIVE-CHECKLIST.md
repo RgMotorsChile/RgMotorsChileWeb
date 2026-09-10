@@ -18,17 +18,18 @@ Project → Settings → Environment Variables (**Production**):
 
 | Variable | Para qué |
 |----------|----------|
-| `COMPANY_RUT` | RUT en footer / legales |
-| `COMPANY_LEGAL_NAME` | Razón social (si no es “RG Motors Chile”) |
+| `COMPANY_LEGAL_NAME` | Razón social (si no es “RG Motors Chile”) — opcional |
 | `RESEND_API_KEY` | Avisos de leads por email |
 | `EMAIL_FROM` | Remitente verificado en Resend |
 | `NOTIFY_EMAIL` | Casilla donde llegan los leads |
 | `NEXT_PUBLIC_SITE_URL` | Debe ser `https://www.rgmotorschile.cl` |
 | `INVENTORY_SYNC_SECRET` | Opcional; si no, el webhook usa `CRON_SECRET` |
 
+> **RUT:** no se publica en el sitio (decisión de negocio).
+
 Después de setear: **Redeploy**.
 
-Verificar: `https://www.rgmotorschile.cl/api/health` → `ok: true` y `companyRut` / `resend` en `true`.
+Verificar: `https://www.rgmotorschile.cl/api/health` → `ok: true` y `resend` en `true`.
 
 ### Admin
 

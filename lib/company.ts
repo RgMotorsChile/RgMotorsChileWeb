@@ -1,14 +1,14 @@
 /**
  * Datos de contacto oficiales de RG Motors Chile.
- * RUT / razón social: preferir env COMPANY_RUT y COMPANY_LEGAL_NAME en Vercel.
+ * RUT de empresa: no se publica (dejar vacío a propósito).
  */
 export const COMPANY = {
   name: "RG Motors",
   /** Razón social / nombre comercial para legales y footer */
   legalName:
     process.env.COMPANY_LEGAL_NAME?.trim() || "RG Motors Chile",
-  /** RUT de la empresa. Vacío = no se muestra aún. */
-  rut: process.env.COMPANY_RUT?.trim() || "",
+  /** Intencionalmente vacío: no se muestra RUT en el sitio. */
+  rut: "",
   tagline: "Autos usados seleccionados en Puerto Montt",
   phoneDisplay: "+56 9 5907 3127",
   /** Solo dígitos, formato internacional sin + */

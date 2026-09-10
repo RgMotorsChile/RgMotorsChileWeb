@@ -10,7 +10,7 @@ export function isDemoAnalytics() {
   return false;
 }
 
-// Ancla temporal fija -> los "meses" del dashboard son estables y deterministas.
+// Ancla temporal fija (legacy); salesTrend usa Date.now() por defecto.
 export const ANCHOR = new Date("2026-07-15T12:00:00Z");
 const DAY = 86_400_000;
 
@@ -48,22 +48,94 @@ export type Lead = {
   segment: string;
 };
 
-// ---- PRNG (solo helpers internos; no se usan para inventar leads) -----------
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// ---- Helpers de fecha / CRM (sin inventar leads) ---------------------------
+
+export function daysAgoFromIso(iso: string | undefined, now = Date.now()): number {
+  if (!iso) return 999;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 999;
+  return Math.max(0, Math.floor((now - t) / DAY));
 }
 
-/** @deprecated No genera leads sintéticos. Usa leads reales desde la API. */
+function normalizeSource(raw?: string): Source {
+  const s = (raw || "").toLowerCase();
+  if (s.includes("google")) return "Google Ads";
+  if (s.includes("instagram") || s.includes("ig")) return "Instagram";
+  if (s.includes("facebook") || s.includes("meta") || s.includes("fb")) return "Facebook";
+  if (s.includes("refer")) return "Referido";
+  if (s.includes("chat") || s.includes("asistente")) return "Chatbot";
+  if (s.includes("orgán") || s.includes("organ")) return "Orgánico";
+  if (!raw || s.includes("direct")) return "Orgánico";
+  return "Orgánico";
+}
+
+function normalizeBody(raw?: string): BodyType {
+  const t = (raw || "").toLowerCase();
+  if (t.includes("camion") || t.includes("pickup")) return "Camioneta";
+  if (t.includes("suv")) return "SUV";
+  if (t.includes("sed")) return "Sedán";
+  if (t.includes("hatch")) return "Hatchback";
+  if (t.includes("furg")) return "Furgón";
+  return "SUV";
+}
+
+export type CrmLeadInput = {
+  id: string;
+  name?: string;
+  contact?: string;
+  phone?: string;
+  email?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  budget?: number;
+  bodyType?: string;
+  financing?: boolean;
+  models?: string[];
+  messages?: number;
+  trafficSource?: { source?: string } | null;
+  kind?: "chat" | "contact" | "test-drive" | "reservation" | "credit" | "simulation";
+};
+
+/** Convierte eventos CRM reales al modelo Lead del dashboard (sin inventar). */
+export function mapCrmToLead(input: CrmLeadInput, now = Date.now()): Lead {
+  const createdDaysAgo = daysAgoFromIso(input.createdAt || input.updatedAt, now);
+  const lastActivityDaysAgo = daysAgoFromIso(input.updatedAt || input.createdAt, now);
+  const brandFromModel = (input.models?.[0] || "").trim().split(/\s+/)[0] || "Varias";
+  const base: Omit<Lead, "score" | "segment"> = {
+    id: input.id,
+    name: (input.name || "Prospecto").slice(0, 80),
+    phone: (input.phone || input.contact || "").slice(0, 40),
+    email: (input.email || "").slice(0, 80),
+    region: "Los Lagos",
+    ageBand: "—",
+    source: normalizeSource(input.trafficSource?.source),
+    createdDaysAgo,
+    lastActivityDaysAgo,
+    interestBody: normalizeBody(input.bodyType),
+    interestBrand: brandFromModel,
+    budget: Number(input.budget) > 0 ? Number(input.budget) : 12_000_000,
+    wantsFinancing:
+      Boolean(input.financing) ||
+      input.kind === "credit" ||
+      input.kind === "simulation",
+    views: Math.max(1, Number(input.messages) || 1),
+    creditSims: input.kind === "credit" || input.kind === "simulation" ? 1 : 0,
+    testDrive: input.kind === "test-drive",
+    reserved: input.kind === "reservation",
+    purchased: false,
+  };
+  const score = leadScore(base);
+  return { ...base, score, segment: segmentOf(base, score) };
+}
+
+export function buildLeadsFromCrm(inputs: CrmLeadInput[], now = Date.now()): Lead[] {
+  return inputs.map((i) => mapCrmToLead(i, now));
+}
+
+/** @deprecated Preferí buildLeadsFromCrm con datos reales. */
 export function generateLeads(): Lead[] {
   return [];
 }
-
-void mulberry32; // keep helper available if demo mode is re-enabled later
 
 // ---- Scoring de leads (0-100) ---------------------------------------------
 export function leadScore(l: Omit<Lead, "score" | "segment">): number {
@@ -280,11 +352,11 @@ export function channels(leads: Lead[]) {
 }
 
 // ---- Tendencia de ventas + proyección (regresión lineal) -------------------
-export function salesTrend(leads: Lead[]) {
+export function salesTrend(leads: Lead[], now = new Date()) {
   const months: { key: string; label: string; leads: number; sales: number; revenue: number }[] = [];
   const MNAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
   for (let back = 5; back >= 0; back--) {
-    const d = new Date(ANCHOR.getTime() - back * 30 * DAY);
+    const d = new Date(now.getTime() - back * 30 * DAY);
     months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: MNAMES[d.getMonth()], leads: 0, sales: 0, revenue: 0 });
   }
   const idxOf = (daysAgo: number) => 5 - Math.min(5, Math.floor(daysAgo / 30));

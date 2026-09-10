@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatCLP } from "@/lib/vehicles";
+import { formatCLP, type Vehicle } from "@/lib/vehicles";
 import {
-  generateLeads,
+  buildLeadsFromCrm,
   computeKpis,
   funnel,
   segments,
@@ -19,6 +19,7 @@ import {
   UnmetDemandVehicle,
   scoreBand,
   formatCLPShort,
+  type CrmLeadInput,
 } from "@/lib/analytics";
 import { HBarChart, Donut, LineForecast, Funnel, Gauge, KpiCard } from "./charts";
 import { ChannelBadge } from "./AdminSections";
@@ -26,6 +27,7 @@ import { ChannelBadge } from "./AdminSections";
 type CapturedLead = {
   id: string;
   createdAt: string;
+  updatedAt?: string;
   budget?: number;
   bodyType?: string;
   financing?: boolean;
@@ -42,7 +44,167 @@ type CapturedLead = {
 };
 
 export default function AnalyticsDashboard() {
-  const leads = useMemo(() => generateLeads(), []);
+  const [loading, setLoading] = useState(true);
+  const [captured, setCaptured] = useState<CapturedLead[]>([]);
+  const [crmInputs, setCrmInputs] = useState<CrmLeadInput[]>([]);
+  const [liveVehicles, setLiveVehicles] = useState<Vehicle[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [trackRes, contactRes, tdRes, resRes, creditRes, simRes, vehRes] =
+          await Promise.all([
+            fetch("/api/track"),
+            fetch("/api/contact"),
+            fetch("/api/test-drives"),
+            fetch("/api/reservations"),
+            fetch("/api/credits"),
+            fetch("/api/simulations"),
+            fetch("/api/vehicles?admin=true"),
+          ]);
+
+        const trackJson = trackRes.ok ? await trackRes.json() : { leads: [] };
+        const contactJson = contactRes.ok ? await contactRes.json() : { messages: [] };
+        const tdJson = tdRes.ok ? await tdRes.json() : { testDrives: [] };
+        const resJson = resRes.ok ? await resRes.json() : { reservations: [] };
+        const creditJson = creditRes.ok ? await creditRes.json() : { applications: [] };
+        const simJson = simRes.ok ? await simRes.json() : { simulations: [] };
+        const vehJson = vehRes.ok ? await vehRes.json() : { vehicles: [] };
+
+        const chatLeads: CapturedLead[] = trackJson.leads ?? [];
+        const inputs: CrmLeadInput[] = [
+          ...chatLeads.map((l) => ({
+            id: l.id,
+            name: l.name,
+            contact: l.contact,
+            createdAt: l.createdAt,
+            updatedAt: l.updatedAt,
+            budget: l.budget,
+            bodyType: l.bodyType,
+            financing: l.financing,
+            models: l.models,
+            messages: l.messages,
+            trafficSource: l.trafficSource,
+            kind: "chat" as const,
+          })),
+          ...(contactJson.messages ?? []).map((m: {
+            id: string;
+            name?: string;
+            phone?: string;
+            email?: string;
+            createdAt?: string;
+            trafficSource?: { source?: string };
+          }) => ({
+            id: m.id,
+            name: m.name,
+            phone: m.phone,
+            email: m.email,
+            createdAt: m.createdAt,
+            trafficSource: m.trafficSource,
+            kind: "contact" as const,
+          })),
+          ...(tdJson.testDrives ?? []).map((t: {
+            id: string;
+            clientName?: string;
+            clientPhone?: string;
+            clientEmail?: string;
+            createdAt?: string;
+            trafficSource?: { source?: string };
+            vehicleTitle?: string;
+          }) => ({
+            id: t.id,
+            name: t.clientName,
+            phone: t.clientPhone,
+            email: t.clientEmail,
+            createdAt: t.createdAt,
+            models: t.vehicleTitle ? [t.vehicleTitle] : [],
+            trafficSource: t.trafficSource,
+            kind: "test-drive" as const,
+          })),
+          ...(resJson.reservations ?? []).map((r: {
+            id: string;
+            clientName?: string;
+            phone?: string;
+            email?: string;
+            date?: string;
+            amount?: number;
+            trafficSource?: { source?: string };
+            vehicleSlug?: string;
+          }) => ({
+            id: r.id,
+            name: r.clientName,
+            phone: r.phone,
+            email: r.email,
+            createdAt: r.date,
+            budget: r.amount,
+            models: r.vehicleSlug ? [r.vehicleSlug] : [],
+            trafficSource: r.trafficSource,
+            kind: "reservation" as const,
+          })),
+          ...(creditJson.applications ?? creditJson.credits ?? []).map((c: {
+            id: string;
+            clientName?: string;
+            phone?: string;
+            email?: string;
+            date?: string;
+            trafficSource?: { source?: string };
+          }) => ({
+            id: c.id,
+            name: c.clientName,
+            phone: c.phone,
+            email: c.email,
+            createdAt: c.date,
+            financing: true,
+            trafficSource: c.trafficSource,
+            kind: "credit" as const,
+          })),
+          ...(simJson.simulations ?? [])
+            .filter((e: { eventType?: string }) => e.eventType === "lead_submit")
+            .map((e: {
+              id: string;
+              clientName?: string;
+              phone?: string;
+              email?: string;
+              createdAt?: string;
+              vehiclePrice?: number;
+              trafficSource?: { source?: string };
+              vehicleSlug?: string;
+            }) => ({
+              id: e.id,
+              name: e.clientName,
+              phone: e.phone,
+              email: e.email,
+              createdAt: e.createdAt,
+              budget: e.vehiclePrice,
+              models: e.vehicleSlug ? [e.vehicleSlug] : [],
+              trafficSource: e.trafficSource,
+              kind: "simulation" as const,
+            })),
+        ];
+
+        if (!cancelled) {
+          setCaptured(chatLeads);
+          setCrmInputs(inputs);
+          setLiveVehicles(vehJson.vehicles ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setCaptured([]);
+          setCrmInputs([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const leads = useMemo(() => buildLeadsFromCrm(crmInputs), [crmInputs]);
   const kpis = useMemo(() => computeKpis(leads), [leads]);
   const fun = useMemo(() => funnel(leads), [leads]);
   const segs = useMemo(() => segments(leads), [leads]);
@@ -52,9 +214,15 @@ export default function AnalyticsDashboard() {
   const chs = useMemo(() => channels(leads), [leads]);
   const trend = useMemo(() => salesTrend(leads), [leads]);
   const recs = useMemo(() => recommendations(leads), [leads]);
-  const procurement = useMemo(() => topSellingModelsAndProcurement(leads), [leads]);
+  const procurement = useMemo(
+    () => topSellingModelsAndProcurement(leads, liveVehicles),
+    [leads, liveVehicles],
+  );
   const brandsShare = useMemo(() => brandMarketShare(leads), [leads]);
-  const missingDemand = useMemo(() => unmetDemandZeroStock(), []);
+  const missingDemand = useMemo(
+    () => unmetDemandZeroStock(liveVehicles),
+    [liveVehicles],
+  );
 
   const [analyticsTab, setAnalyticsTab] = useState<"rendimiento" | "compras" | "canales">("rendimiento");
   const [procurementView, setProcurementView] = useState<"zero_stock" | "bestsellers">("zero_stock");
@@ -82,16 +250,20 @@ export default function AnalyticsDashboard() {
     });
   }, [missingDemand, procurementCategory]);
 
-  const [captured, setCaptured] = useState<CapturedLead[]>([]);
-  useEffect(() => {
-    fetch("/api/track")
-      .then((r) => (r.ok ? r.json() : { leads: [] }))
-      .then((j) => setCaptured(j.leads ?? []))
-      .catch(() => {});
-  }, []);
+  const waitlistTotal = filteredMissingDemand.reduce((a, m) => a + m.waitlistBuyers, 0);
 
   return (
     <div className="space-y-6">
+      {loading ? (
+        <p className="text-xs text-white/40">Cargando datos reales del CRM…</p>
+      ) : null}
+      {!loading && leads.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-ink-800/50 px-4 py-3 text-sm text-white/60">
+          Todavía no hay leads reales suficientes. Los gráficos se irán llenando con contactos,
+          chat, reservas, créditos y test drives del sitio.
+        </div>
+      ) : null}
+
       {/* Sub-navegación de Analítica */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-900/80 p-2 backdrop-blur-xl">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
@@ -114,9 +286,11 @@ export default function AnalyticsDashboard() {
             }`}
           >
             <span>🛒</span> Compra Inteligente & Stock
-            <span className="rounded-full bg-red-500/30 border border-red-500/40 text-red-200 px-2 py-0.5 text-[10px]">
-              Sin Stock
-            </span>
+            {filteredMissingDemand.length > 0 ? (
+              <span className="rounded-full bg-red-500/30 border border-red-500/40 text-red-200 px-2 py-0.5 text-[10px]">
+                Sin Stock
+              </span>
+            ) : null}
           </button>
           <button
             onClick={() => setAnalyticsTab("canales")}
@@ -130,15 +304,18 @@ export default function AnalyticsDashboard() {
           </button>
         </div>
         <p className="text-xs text-white/40 px-3 hidden lg:block">
-          {analyticsTab === "rendimiento" && "Proyección de ingresos, conversión y segmentos"}
-          {analyticsTab === "compras" && "Radar de autos más buscados y rotación"}
-          {analyticsTab === "canales" && "Atribución multicanal y prospectos en vivo"}
+          Solo datos reales del CRM · sin demos
         </p>
       </div>
 
       {/* KPIs Globales */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard icon="👥" value={kpis.totalLeads.toLocaleString("es-CL")} label="Leads totales" trend={kpis.momLeadGrowth ? `+${kpis.momLeadGrowth}% MoM` : "Sin datos demo"} />
+        <KpiCard
+          icon="👥"
+          value={kpis.totalLeads.toLocaleString("es-CL")}
+          label="Leads totales"
+          trend={kpis.momLeadGrowth ? `${kpis.momLeadGrowth > 0 ? "+" : ""}${kpis.momLeadGrowth}% MoM` : "Datos reales"}
+        />
         <KpiCard icon="🔥" value={String(kpis.hotLeads)} label="Leads calientes por contactar" accent="#F97316" />
         <KpiCard icon="🎯" value={`${kpis.conversion}%`} label="Conversión a venta" accent="#22C55E" />
         <KpiCard icon="💰" value={formatCLPShort(kpis.revenue)} label="Ingresos atribuidos" accent="#7C3AED" />
@@ -244,19 +421,21 @@ export default function AnalyticsDashboard() {
             </p>
           </div>
 
-          {/* Mini KPIs de compra */}
+          {/* Mini KPIs de compra (solo reales) */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-center">
-              <p className="text-[10px] text-red-300/80">Sin Stock (Comprar Ya)</p>
-              <p className="text-xs font-bold text-red-400">6 Modelos Críticos</p>
+              <p className="text-[10px] text-red-300/80">Sin stock (señales)</p>
+              <p className="text-xs font-bold text-red-400">
+                {filteredMissingDemand.length} modelos
+              </p>
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-center">
-              <p className="text-[10px] text-amber-300/80">Compradores en Espera</p>
-              <p className="text-xs font-bold text-amber-400">58 Clientes Listos</p>
+              <p className="text-[10px] text-amber-300/80">En lista de espera</p>
+              <p className="text-xs font-bold text-amber-400">{waitlistTotal} clientes</p>
             </div>
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-center">
-              <p className="text-[10px] text-emerald-300/80">Tiempo Venta Estimado</p>
-              <p className="text-xs font-bold text-emerald-400">&lt; 24 a 48 hrs</p>
+            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-center">
+              <p className="text-[10px] text-white/50">Leads CRM</p>
+              <p className="text-xs font-bold text-white">{leads.length}</p>
             </div>
           </div>
         </div>
@@ -271,9 +450,9 @@ export default function AnalyticsDashboard() {
                 : "bg-ink-800 text-white/70 hover:bg-white/10 hover:text-white"
             }`}
           >
-            <span>🚨</span> Autos Más Buscados SIN STOCK (Comprar Ya)
+            <span>🚨</span> Autos más buscados sin stock
             <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
-              58 compradores esperando
+              {waitlistTotal} en espera
             </span>
           </button>
 
@@ -340,10 +519,17 @@ export default function AnalyticsDashboard() {
         {/* VISTA 1: AUTOS MÁS BUSCADOS SIN STOCK (VENTA INMEDIATA) */}
         {procurementView === "zero_stock" && (
           <div className="space-y-3">
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
-              ⚡ <strong>Demanda inmediata alta:</strong> Estos modelos registran el mayor volumen de búsquedas sin resultados en el catálogo y clientes activos con dinero en mano o crédito aprobado esperando en lista de espera. Si compras una unidad hoy, se vende prácticamente en <strong>24 a 48 horas</strong> a los compradores registrados.
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/60">
+              Señales de demanda sin stock a partir de leads y pedidos reales. Si aún no hay
+              datos, la tabla queda vacía (sin números inventados).
             </div>
 
+            {filteredMissingDemand.length === 0 ? (
+              <p className="py-8 text-center text-sm text-white/40">
+                Sin señales de demanda sin stock por ahora. Se llenará con pedidos a medida y
+                leads reales.
+              </p>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[880px] text-sm">
                 <thead className="text-left text-white/40 border-b border-white/10">
@@ -412,11 +598,17 @@ export default function AnalyticsDashboard() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
 
         {/* VISTA 2: RANKING DE MODELOS MÁS VENDIDOS (HISTÓRICO) */}
         {procurementView === "bestsellers" && (
+          filteredProcurement.length === 0 ? (
+            <p className="py-8 text-center text-sm text-white/40">
+              Sin ranking histórico aún. Cuando haya ventas y leads reales, aparecerá aquí.
+            </p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-sm">
               <thead className="text-left text-white/40 border-b border-white/10">
@@ -501,6 +693,7 @@ export default function AnalyticsDashboard() {
               </tbody>
             </table>
           </div>
+          )
         )}
 
         {/* Gráfico de Market Share por Marca & Reglas de Oro */}
@@ -511,7 +704,10 @@ export default function AnalyticsDashboard() {
               <span>📊</span> Participación de Ventas por Marca (% Market Share)
             </h3>
             <div className="space-y-2">
-              {brandsShare.map((b) => (
+              {brandsShare.length === 0 ? (
+                <p className="text-xs text-white/40 py-4">Sin participación de marca aún (datos reales).</p>
+              ) : (
+              brandsShare.map((b) => (
                 <div key={b.brand}>
                   <div className="mb-1 flex items-baseline justify-between text-xs">
                     <span className="font-semibold text-white flex items-center gap-1.5">
@@ -529,7 +725,8 @@ export default function AnalyticsDashboard() {
                     />
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
 
