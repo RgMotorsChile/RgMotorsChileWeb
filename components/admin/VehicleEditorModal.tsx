@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Vehicle, BRANDS, BODY_TYPES, FUELS, TRANSMISSIONS } from "@/lib/vehicles";
 import { asset } from "@/lib/asset";
 import { SALE_SUPPLIERS, type SaleSupplier } from "@/lib/sales/suppliers";
+import { mediaUrlsEqual, normalizeMediaUrl } from "@/lib/vehicles/frontCoverMap";
 
 type Props = {
   vehicle: Vehicle | null; // null = creating new
@@ -79,12 +80,14 @@ export default function VehicleEditorModal({
       setIsLoadingPhotos(true);
       const initialList: string[] = [];
       if (vehicle.image && !vehicle.image.includes("placeholder")) {
-        initialList.push(vehicle.image.split("?")[0]);
+        initialList.push(normalizeMediaUrl(vehicle.image));
       }
       if (vehicle.gallery && Array.isArray(vehicle.gallery)) {
         vehicle.gallery.forEach((g) => {
-          const clean = g.split("?")[0];
-          if (clean && !initialList.includes(clean)) initialList.push(clean);
+          const clean = normalizeMediaUrl(g);
+          if (clean && !initialList.some((u) => mediaUrlsEqual(u, clean))) {
+            initialList.push(clean);
+          }
         });
       }
       setVehiclePhotos(initialList);
@@ -96,11 +99,16 @@ export default function VehicleEditorModal({
           .then((data) => {
             if (data && data.gallery && Array.isArray(data.gallery)) {
               const fetchedUrls: string[] = data.gallery
-                .map((item: any) => (item.url ? String(item.url).split("?")[0] : ""))
+                .map((item: any) =>
+                  item.url ? normalizeMediaUrl(String(item.url)) : "",
+                )
                 .filter(Boolean);
 
               setVehiclePhotos((prev) => {
-                const merged = Array.from(new Set([...prev, ...fetchedUrls]));
+                const merged = [...prev];
+                for (const u of fetchedUrls) {
+                  if (!merged.some((m) => mediaUrlsEqual(m, u))) merged.push(u);
+                }
                 return merged;
               });
             }
@@ -202,14 +210,21 @@ export default function VehicleEditorModal({
     // Asegurar que la portada elegida sea el primer elemento de la galería
     let updatedGallery = formData.gallery ? [...formData.gallery] : [];
     if (formData.image) {
-      const cleanImg = formData.image.split("?")[0];
-      updatedGallery = [cleanImg, ...updatedGallery.filter((u) => u.split("?")[0] !== cleanImg)];
+      const cleanImg = normalizeMediaUrl(formData.image);
+      updatedGallery = [
+        cleanImg,
+        ...updatedGallery
+          .map(normalizeMediaUrl)
+          .filter((u) => !mediaUrlsEqual(u, cleanImg)),
+      ];
     }
 
     const payload: Partial<Vehicle> = {
       ...formData,
+      image: formData.image ? normalizeMediaUrl(formData.image) : formData.image,
       gallery: updatedGallery,
       hasRealPhotos: !!formData.image && !formData.image.includes("placeholder"),
+      coverLocked: !!formData.image && !formData.image.includes("placeholder"),
       spin: hasSpin ? { count: spinCount, ext: "jpg" } : undefined,
     };
 
@@ -535,7 +550,7 @@ export default function VehicleEditorModal({
                         Selecciona la Foto de Portada para este Vehículo
                       </h4>
                       <p className="text-xs text-white/70">
-                        Portada del catálogo: perfil delantero 3/4 (se ve el frente y el costado), como la foto estándar de patio.
+                        Portada del catálogo: elegí vos la foto en la galería (ya no se fuerza un perfil fijo).
                       </p>
                     </div>
                   </div>
@@ -564,7 +579,7 @@ export default function VehicleEditorModal({
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[42vh] overflow-y-auto pr-1">
                     {vehiclePhotos.map((photoUrl, idx) => {
                       const isCover =
-                        formData.image?.split("?")[0] === photoUrl.split("?")[0] ||
+                        (formData.image && mediaUrlsEqual(formData.image, photoUrl)) ||
                         (!formData.image && idx === 0);
                       const fileName = photoUrl.split("/").pop() || `Foto ${idx + 1}`;
 

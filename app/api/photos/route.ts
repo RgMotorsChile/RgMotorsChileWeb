@@ -7,6 +7,11 @@ import { storeMediaFile } from "@/lib/server/mediaStorage";
 import { isBlobReady, isVercelProduction } from "@/lib/server/storageHealth";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import {
+  driveFileId,
+  mediaUrlsEqual,
+  normalizeMediaUrl,
+} from "@/lib/vehicles/frontCoverMap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,21 +104,25 @@ export async function GET(req: NextRequest) {
 
   // Siempre fresco: tras subir, otra instancia no debe servir caché vieja sin fotos
   const vehicle = await getVehicleBySlug(slug, { bypassCache: true });
-  const currentCover = (vehicle?.image || "").split("?")[0];
+  const currentCover = vehicle?.image ? normalizeMediaUrl(vehicle.image) : "";
 
   const seen = new Set<string>();
   const pushUrl = (url: string, size = 0) => {
-    const clean = url.split("?")[0];
-    if (!clean || seen.has(clean)) return;
-    seen.add(clean);
-    const name = clean.split("/").pop() || clean;
+    const clean = normalizeMediaUrl(url);
+    if (!clean) return;
+    const key = driveFileId(clean) || clean;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const name = clean.split("/").pop()?.split("?")[0] || clean;
     gallery.push({
       name,
       url: clean,
       size,
       isCover: Boolean(
         currentCover &&
-          (currentCover === clean || currentCover.includes(name) || name.startsWith("cover_")),
+          (mediaUrlsEqual(currentCover, clean) ||
+            currentCover.includes(name) ||
+            name.startsWith("cover_")),
       ),
     });
   };
@@ -142,8 +151,8 @@ export async function GET(req: NextRequest) {
   // Portada primero si está en la lista
   if (currentCover && gallery.length > 1) {
     gallery.sort((a, b) => {
-      const aCover = a.url === currentCover || a.isCover ? 0 : 1;
-      const bCover = b.url === currentCover || b.isCover ? 0 : 1;
+      const aCover = mediaUrlsEqual(a.url, currentCover) || a.isCover ? 0 : 1;
+      const bCover = mediaUrlsEqual(b.url, currentCover) || b.isCover ? 0 : 1;
       if (aCover !== bCover) return aCover - bCover;
       return 0;
     });
@@ -151,14 +160,17 @@ export async function GET(req: NextRequest) {
     if (vehicle?.gallery?.length) {
       const orderMap = new Map<string, number>();
       vehicle.gallery.forEach((url, idx) => {
-        orderMap.set(url.split("?")[0], idx);
+        const key = driveFileId(url) || normalizeMediaUrl(url);
+        orderMap.set(key, idx);
       });
       gallery.sort((a, b) => {
-        const ia = orderMap.has(a.url) ? orderMap.get(a.url)! : 999;
-        const ib = orderMap.has(b.url) ? orderMap.get(b.url)! : 999;
+        const ka = driveFileId(a.url) || a.url;
+        const kb = driveFileId(b.url) || b.url;
+        const ia = orderMap.has(ka) ? orderMap.get(ka)! : 999;
+        const ib = orderMap.has(kb) ? orderMap.get(kb)! : 999;
         if (ia !== ib) return ia - ib;
-        if (a.url === currentCover) return -1;
-        if (b.url === currentCover) return 1;
+        if (mediaUrlsEqual(a.url, currentCover)) return -1;
+        if (mediaUrlsEqual(b.url, currentCover)) return 1;
         return 0;
       });
     }
@@ -424,13 +436,18 @@ export async function PUT(req: NextRequest) {
     }
 
     if (action === "set_cover" && coverUrl) {
-      const cleanUrl = String(coverUrl).split("?")[0];
+      // Drive: conservar ?id= — si se corta, el próximo sync vuelve a gallery[0]
+      const cleanUrl = normalizeMediaUrl(String(coverUrl));
 
-      let currentGallery = v.gallery ? [...v.gallery] : [];
-      if (!currentGallery.includes(cleanUrl)) {
+      let currentGallery = (v.gallery || []).map(normalizeMediaUrl);
+      const already = currentGallery.some((u) => mediaUrlsEqual(u, cleanUrl));
+      if (!already) {
         currentGallery.unshift(cleanUrl);
       } else {
-        currentGallery = [cleanUrl, ...currentGallery.filter((u) => u !== cleanUrl)];
+        currentGallery = [
+          cleanUrl,
+          ...currentGallery.filter((u) => !mediaUrlsEqual(u, cleanUrl)),
+        ];
       }
 
       const saved = await saveVehicle({
@@ -438,6 +455,7 @@ export async function PUT(req: NextRequest) {
         image: cleanUrl,
         gallery: currentGallery,
         hasRealPhotos: true,
+        coverLocked: true,
       });
       if (!saved.success) {
         return NextResponse.json({ error: saved.error || "No se pudo guardar la portada." }, { status: 500 });
@@ -451,14 +469,15 @@ export async function PUT(req: NextRequest) {
     }
 
     if (action === "reorder" && Array.isArray(gallery)) {
-      const cleanGallery = gallery.map((u: string) => String(u).split("?")[0]);
-      const newCover = cleanGallery.length > 0 ? cleanGallery[0] : v.image;
+      const cleanGallery = gallery.map((u: string) => normalizeMediaUrl(String(u)));
+      const newCover = cleanGallery.length > 0 ? cleanGallery[0]! : v.image;
 
       const saved = await saveVehicle({
         ...v,
         image: newCover,
         gallery: cleanGallery,
         hasRealPhotos: cleanGallery.length > 0,
+        coverLocked: true,
       });
       if (!saved.success) {
         return NextResponse.json({ error: saved.error || "No se pudo guardar el orden." }, { status: 500 });
@@ -510,16 +529,17 @@ export async function DELETE(req: NextRequest) {
     const v = await getVehicleBySlug(slug, { bypassCache: true });
     if (v && !isSpin) {
       const currentGallery = v.gallery || [];
-      const urlHint = typeof body.url === "string" ? body.url.split("?")[0] : "";
+      const urlHint =
+        typeof body.url === "string" ? normalizeMediaUrl(body.url) : "";
       const updatedGallery = currentGallery.filter((u) => {
-        if (urlHint && u.split("?")[0] === urlHint) return false;
+        if (urlHint && mediaUrlsEqual(u, urlHint)) return false;
         return !u.includes(safeFilename);
       });
 
       let updatedImage = v.image;
       if (
         updatedImage.includes(safeFilename) ||
-        (urlHint && updatedImage.split("?")[0] === urlHint)
+        (urlHint && mediaUrlsEqual(updatedImage, urlHint))
       ) {
         updatedImage =
           updatedGallery.length > 0 ? updatedGallery[0]! : "/images/placeholder-pending-car.svg";
@@ -530,6 +550,7 @@ export async function DELETE(req: NextRequest) {
         image: updatedImage,
         gallery: updatedGallery,
         hasRealPhotos: updatedGallery.length > 0,
+        coverLocked: updatedGallery.length > 0 ? v.coverLocked : false,
       });
       if (!saved.success) {
         return NextResponse.json(

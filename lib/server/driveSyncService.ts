@@ -6,6 +6,10 @@ import * as XLSX from "xlsx";
 import { Vehicle } from "@/lib/vehicles";
 import { getVehicles, saveVehicle } from "./vehiclesStore";
 import {
+  orderGalleryWithCover,
+  resolveCoverFromGallery,
+} from "@/lib/vehicles/frontCoverMap";
+import {
   isInventorySheetTab,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
@@ -50,7 +54,8 @@ export async function extractPhotosFromFolder(folderId: string): Promise<{ fileN
       }
     }
     // Ordenamos alfabéticamente por el nombre de archivo original. 
-    // Como las cámaras nombran secuencialmente (ej. IMG_001.jpg), la primera foto suele ser la frontal.
+    // Orden alfabético del nombre de archivo en Drive (no implica “perfil deseado”).
+    // La portada la elige el admin; aquí solo listamos fotos nuevas.
     return photos.sort((a, b) => a.fileName.localeCompare(b.fileName, undefined, { numeric: true }));
   } catch {
     return [];
@@ -111,15 +116,22 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
     if (photos.length === 0) continue;
 
     // Build gallery using direct Drive thumbnail URLs (no local downloads, no edits)
-    const gallery = photos.map(p => `https://drive.google.com/thumbnail?id=${p.fileId}&sz=w1000`);
+    const gallery = photos.map(
+      (p) => `https://drive.google.com/thumbnail?id=${p.fileId}&sz=w1000`,
+    );
     newPhotos += photos.length;
 
-    // Only update the gallery/image fields — preserve ALL other data from the PDF
+    // Conservar portada elegida en admin si esa foto sigue en Drive
+    // (si coverLocked y la URL previa está rota/sin id, no forzamos gallery[0] al azar)
+    const cover = resolveCoverFromGallery(existing.image, gallery);
+    const orderedGallery = orderGalleryWithCover(cover, gallery);
+
     const vehicle: Vehicle = {
       ...existing,
       hasRealPhotos: true,
-      gallery,
-      image: gallery[0],
+      gallery: orderedGallery,
+      image: cover || orderedGallery[0],
+      // coverLocked se mantiene vía ...existing
     };
 
     await saveVehicle(vehicle);

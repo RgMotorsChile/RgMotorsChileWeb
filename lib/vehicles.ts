@@ -32,6 +32,8 @@ export interface Vehicle {
   featured?: boolean;
   status?: "Disponible" | "En reserva" | "Vendido" | "Borrador" | "En preparación";
   hasRealPhotos?: boolean;
+  /** Si true, el sync de Drive conserva esta portada (no vuelve a gallery[0]). */
+  coverLocked?: boolean;
   supplier?: string;
   techReview?: string;
   circPermit?: string;

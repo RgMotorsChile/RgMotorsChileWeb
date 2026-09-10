@@ -11,6 +11,7 @@ import {
   convertImageToWebp,
   formatBytes,
 } from "@/lib/client/uploadPhotos";
+import { mediaUrlsEqual, normalizeMediaUrl } from "@/lib/vehicles/frontCoverMap";
 
 type PhotoItem = {
   name: string;
@@ -313,7 +314,7 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
         body: JSON.stringify({
           slug: selectedSlug,
           filename: photo.name,
-          url: photo.url.split("?")[0],
+          url: normalizeMediaUrl(photo.url),
           type: "gallery",
         }),
       });
@@ -341,7 +342,7 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
         body: JSON.stringify({
           slug: selectedSlug,
           action: "set_cover",
-          coverUrl: url.split("?")[0],
+          coverUrl: normalizeMediaUrl(url),
         }),
       });
       const data = await res.json();
@@ -367,8 +368,8 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
     newGallery[targetIdx] = temp;
     setGallery(newGallery);
 
-    // Usar URLs reales (Blob), no reconstruir rutas que rompen el catálogo
-    const urls = newGallery.map((g) => g.url.split("?")[0]);
+    // Usar URLs reales (Blob/Drive), sin cortar ?id= de Google Drive
+    const urls = newGallery.map((g) => normalizeMediaUrl(g.url));
     try {
       const res = await fetch("/api/photos", {
         method: "PUT",
@@ -717,7 +718,7 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
                     idx === 0 ||
                     photo.isCover ||
                     (coverImage &&
-                      (coverImage === photo.url.split("?")[0] ||
+                      (mediaUrlsEqual(coverImage, photo.url) ||
                         coverImage.includes(photo.name)));
                   return (
                     <div
@@ -869,7 +870,7 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ["1. PORTADA", "3/4 Frontal Exterior", "Ángulo frontal en 45°, parrilla y lateral."],
+              ["1. PORTADA", "La que vos elijas", "Cualquier ángulo: esa foto queda primera en el catálogo."],
               ["2. EXTERIOR", "Lateral & Trasera", "Perfil completo y 3/4 trasera."],
               ["3. INTERIOR", "Tablero & Km", "Tablero entero y kilometraje encendido."],
               ["4. DETALLES", "Motor, ruedas, asientos", "Vano motor, neumáticos y tapicería."],
