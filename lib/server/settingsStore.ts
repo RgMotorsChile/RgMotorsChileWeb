@@ -60,6 +60,50 @@ const DEFAULT_SETTINGS: SystemSettings = {
 
 const FILENAME = "settings.json";
 
+/** Placeholders / datos de demos viejos que no deben mostrarse en producción. */
+const LEGACY_BAD_EMAILS = new Set([
+  "contacto@rgmotors.cl",
+  "info@rgmotors.cl",
+  "ventas@rgmotors.cl",
+  "hola@rgmotors.cl",
+]);
+const LEGACY_BAD_PHONES = new Set(["+56 9 8765 4321", "56987654321", "987654321"]);
+const LEGACY_BAD_SITES = new Set(["www.rgmotors.cl", "rgmotors.cl"]);
+
+function sanitizeCompany(
+  company: SystemSettings["company"],
+): SystemSettings["company"] {
+  const email = (company.email || "").trim().toLowerCase();
+  const phone = (company.phoneDisplay || "").trim();
+  const wa = (company.whatsapp || "").trim();
+  const website = (company.website || "").trim().toLowerCase();
+
+  return {
+    ...company,
+    name: company.name?.trim() || COMPANY.name,
+    legalName: company.legalName?.trim() || COMPANY.legalName,
+    tagline: company.tagline?.trim() || COMPANY.tagline,
+    email:
+      !email || LEGACY_BAD_EMAILS.has(email)
+        ? COMPANY.email
+        : company.email.trim(),
+    phoneDisplay:
+      !phone || LEGACY_BAD_PHONES.has(phone)
+        ? COMPANY.phoneDisplay
+        : phone,
+    whatsapp:
+      !wa || LEGACY_BAD_PHONES.has(wa)
+        ? COMPANY.whatsapp
+        : wa,
+    website:
+      !website || LEGACY_BAD_SITES.has(website)
+        ? COMPANY.website
+        : company.website.trim(),
+    address: company.address?.trim() || COMPANY.address,
+    hours: company.hours?.trim() || COMPANY.hours,
+  };
+}
+
 function normalizeSettings(raw: SystemSettings): SystemSettings {
   const rate = Number(raw.preferences?.monthlyInterestRate);
   // Tasas legadas (1.85/1.9/2.5/3.21 fijo) → 0 (tabla por tramo).
@@ -75,17 +119,22 @@ function normalizeSettings(raw: SystemSettings): SystemSettings {
       ...raw.preferences,
       monthlyInterestRate: fixedRate,
     },
-    company: { ...DEFAULT_SETTINGS.company, ...raw.company },
+    company: sanitizeCompany({ ...DEFAULT_SETTINGS.company, ...raw.company }),
   };
 }
 
 export async function getSettings(): Promise<SystemSettings> {
   const raw = await readJson<SystemSettings>(FILENAME, DEFAULT_SETTINGS);
   const normalized = normalizeSettings(raw);
-  if (
+  const rateChanged =
     Number(raw.preferences?.monthlyInterestRate) !==
-    normalized.preferences.monthlyInterestRate
-  ) {
+    normalized.preferences.monthlyInterestRate;
+  const contactChanged =
+    (raw.company?.email || "") !== normalized.company.email ||
+    (raw.company?.phoneDisplay || "") !== normalized.company.phoneDisplay ||
+    (raw.company?.whatsapp || "") !== normalized.company.whatsapp ||
+    (raw.company?.website || "") !== normalized.company.website;
+  if (rateChanged || contactChanged) {
     await writeJson(FILENAME, normalized).catch(() => false);
   }
   return normalized;

@@ -76,3 +76,7 @@ next-env.d.ts
 # Sesiones locales de herramientas (no versionar)
 .omo/
 .env*
+
+# Documentos confidenciales con secretos
+**/CONFIDENCIAL*.docx
+**/CONFIDENCIAL*.md
