@@ -9,7 +9,6 @@ import { whatsappLink } from "@/lib/company";
 
 const BRANCHES = ["Showroom Av. El Tepual (Puerto Montt)"];
 const TIMES = ["10:00", "11:30", "12:30", "15:00", "16:30", "17:30"];
-const EXECUTIVES = ["Sin preferencia", "Asesor de Ventas RG Motors", "Especialista Comercial"];
 
 function daysOfMonth() {
   const now = new Date();
@@ -32,7 +31,6 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
   const [branch, setBranch] = useState(BRANCHES[0]);
   const [day, setDay] = useState<number | null>(null);
   const [time, setTime] = useState<string | null>(null);
-  const [exec, setExec] = useState(EXECUTIVES[0]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -66,12 +64,11 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
           branch,
           date: formattedDate,
           time: `${time} hrs`,
-          executive: exec,
           clientName: name.trim(),
           clientPhone: phone.trim(),
           clientEmail: email.trim(),
           trafficSource: traffic,
-          notes: `Agendado en sucursal ${branch} a las ${time} hrs con ${exec}.`,
+          notes: `Agendado en sucursal ${branch} a las ${time} hrs.`,
         }),
       });
 
@@ -128,8 +125,8 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
             <span className="font-bold text-white">{day} de {monthName} · {time} hrs</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/50">Ejecutivo:</span>
-            <span className="text-white/80">{exec}</span>
+            <span className="text-white/50">Correo:</span>
+            <span className="text-white/80">{email}</span>
           </div>
         </div>
 
@@ -232,17 +229,6 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
               </button>
             ))}
           </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-white/70">Ejecutivo de ventas (Opcional)</label>
-          <select
-            value={exec}
-            onChange={(e) => setExec(e.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-xs font-medium text-white outline-none focus:border-brand-500 cursor-pointer"
-          >
-            {EXECUTIVES.map((e) => <option key={e} className="bg-ink-900">{e}</option>)}
-          </select>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
