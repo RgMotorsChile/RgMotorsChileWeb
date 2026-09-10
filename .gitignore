@@ -80,3 +80,8 @@ next-env.d.ts
 # Documentos confidenciales con secretos
 **/CONFIDENCIAL*.docx
 **/CONFIDENCIAL*.md
+
+.env.kv.old.migrate
+.env.vercel.company
+.env.vercel.personal
+
