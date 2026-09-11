@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPlateFolderIndex,
   driveFileNeedsSync,
   folderMatchesVehiclePlate,
   normalizePlateKey,
@@ -97,13 +98,13 @@ describe("driveFileNeedsSync", () => {
   });
 });
 
-describe("prioritizeVehiclesForDriveSync", () => {
-  it("pone primero los sin hasRealPhotos", () => {
-    const ordered = prioritizeVehiclesForDriveSync([
-      { slug: "b", hasRealPhotos: true },
-      { slug: "a", hasRealPhotos: false },
-      { slug: "c", hasRealPhotos: false },
+describe("buildPlateFolderIndex", () => {
+  it("matchea RZVL 18 del stock con carpeta RZVL18", () => {
+    const index = buildPlateFolderIndex([
+      { id: "1", name: "RZVL18" },
+      { id: "2", name: "PGBV10" },
     ]);
-    expect(ordered.map((v) => v.slug)).toEqual(["a", "c", "b"]);
+    expect(index.get(normalizePlateKey("RZVL 18"))?.name).toBe("RZVL18");
+    expect(index.get("pgbv10")?.name).toBe("PGBV10");
   });
 });

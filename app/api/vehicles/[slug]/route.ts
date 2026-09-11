@@ -3,6 +3,7 @@ import { getVehicleBySlug, saveVehicle, deleteVehicle } from "@/lib/server/vehic
 import { Vehicle } from "@/lib/vehicles";
 import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +18,14 @@ export async function GET(
     return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
   }
 
-  if (!(await requireAdminSession()) && !isPublicCatalogVehicle(v)) {
+  const isAdmin = await requireAdminSession();
+  if (!isAdmin && !isPublicCatalogVehicle(v)) {
     return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
   }
 
-  return NextResponse.json({ vehicle: v });
+  return NextResponse.json({
+    vehicle: isAdmin ? v : stripPlateForPublic(v),
+  });
 }
 
 export async function PUT(

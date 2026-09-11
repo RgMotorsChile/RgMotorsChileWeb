@@ -6,6 +6,7 @@ import {
   filterPublicCatalog,
   pickFeaturedVehicles,
 } from "@/lib/vehicles/publicCatalog";
+import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import VehicleCard from "@/components/VehicleCard";
 import RevealOnScroll from "@/components/RevealOnScroll";
 import AppleCareTrustSection from "@/components/AppleCareTrustSection";
@@ -17,8 +18,8 @@ export const revalidate = 120;
 
 export default async function Home() {
   const vehicles = await getVehicles();
-  const publicVehicles = filterPublicCatalog(vehicles);
-  const featured = pickFeaturedVehicles(vehicles, 6);
+  const publicVehicles = filterPublicCatalog(vehicles).map(stripPlateForPublic);
+  const featured = pickFeaturedVehicles(vehicles, 6).map(stripPlateForPublic);
 
   return (
     <main className="relative overflow-x-clip">

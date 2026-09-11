@@ -8,6 +8,7 @@ import { storeMediaFile } from "@/lib/server/mediaStorage";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import {
+  buildPlateFolderIndex,
   driveFileNeedsSync,
   folderMatchesVehiclePlate,
   normalizePlateKey,
@@ -16,10 +17,10 @@ import {
 } from "@/lib/server/drivePlateMatch";
 import {
   downloadDriveFileBytes,
-  findPlateFolderByName,
   getDrivePhotosFolderId,
   isGoogleDriveOAuthConfigured,
   listImagesInFolder,
+  listPlateFolders,
   type DriveImageRef,
 } from "@/lib/server/googleDriveClient";
 
@@ -33,11 +34,9 @@ export type SyncResult = {
 };
 
 const STATE_FILENAME = "drive-photos-sync-state.json";
-/** Hobby + CDN ~60s: 2 autos/corrida es seguro con descarga+Blob. */
-export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 2;
-const MAX_PHOTOS_PER_VEHICLE = 8;
-/** Cuántos vehículos del stock priorizados intentar emparejar por nombre. */
-const MAX_CANDIDATES_TO_INSPECT = 6;
+/** Hobby + CDN ~60s: índice de carpetas es barato; limitar solo las descargas. */
+export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 3;
+const MAX_PHOTOS_PER_VEHICLE = 10;
 
 export type DrivePhotosSyncState = {
   lastRunAt: string | null;
@@ -134,38 +133,51 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const maxVehicles = opts?.maxVehicles ?? MAX_VEHICLES_PER_DRIVE_SYNC_RUN;
   const state = await loadDrivePhotosSyncState();
 
-  // Priorizar sin fotos reales; buscar carpeta por nombre (sin listar las 100+).
+  // 1) Listar TODAS las carpetas de patente una vez y matchear por clave normalizada
+  //    (RZVL 18 en Excel ≡ RZVL18 en Drive). Evita fallos de name= / contains.
+  let folders;
+  try {
+    folders = await listPlateFolders(rootId);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    const msg = `No se pudieron listar carpetas de Drive (${rootId}): ${detail}`;
+    console.error(`[DriveOAuthSync] ${msg}`);
+    return {
+      success: false,
+      totalFolders: 0,
+      syncedVehicles: 0,
+      newPhotosDownloaded: 0,
+      message: msg,
+      vehicles: existingList,
+    };
+  }
+
+  const folderIndex = buildPlateFolderIndex(folders);
+  console.log(
+    `[DriveOAuthSync] Índice Drive: ${folders.length} carpetas, ${folderIndex.size} claves de patente`,
+  );
+
   const prioritized = prioritizeVehiclesForDriveSync(
     existingList.filter((v) => normalizePlateKey(v.plate || "")),
   );
-  const inspectQueue = prioritized.slice(0, MAX_CANDIDATES_TO_INSPECT);
+
+  // Solo los que necesitan trabajo; el índice ya resolvió el match.
+  const needingPhotos = prioritized.filter((v) => {
+    const key = normalizePlateKey(v.plate || "");
+    return key && folderIndex.has(key) && !v.hasRealPhotos;
+  });
+  const needingRefresh = prioritized.filter((v) => {
+    const key = normalizePlateKey(v.plate || "");
+    return key && folderIndex.has(key) && v.hasRealPhotos;
+  });
+  const queue = [...needingPhotos, ...needingRefresh];
+
   const toProcess: FolderCandidate[] = [];
-  let foldersFound = 0;
-
-  for (const vehicle of inspectQueue) {
+  for (const vehicle of queue) {
     if (toProcess.length >= maxVehicles) break;
-
     const key = normalizePlateKey(vehicle.plate || "");
-    let folder;
-    try {
-      folder = await findPlateFolderByName(key, rootId);
-    } catch (err) {
-      console.warn(
-        `[DriveOAuthSync] Busqueda carpeta ${key}:`,
-        err instanceof Error ? err.message : err,
-      );
-      continue;
-    }
-    if (!folder) {
-      console.warn(
-        `[DriveOAuthSync] Sin carpeta Drive para patente ${vehicle.plate || key} (probado junto/separado)`,
-      );
-      continue;
-    }
-    foldersFound += 1;
-    console.log(
-      `[DriveOAuthSync] Match ${vehicle.plate || key} → carpeta "${folder.name}"`,
-    );
+    const folder = folderIndex.get(key);
+    if (!folder) continue;
     if (!folderMatchesVehiclePlate(folder.name, vehicle.plate)) continue;
 
     let images: DriveImageRef[] = [];
@@ -178,7 +190,10 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       );
       continue;
     }
-    if (images.length === 0) continue;
+    if (images.length === 0) {
+      console.warn(`[DriveOAuthSync] Carpeta ${folder.name} sin imágenes`);
+      continue;
+    }
 
     const limited = images.slice(0, MAX_PHOTOS_PER_VEHICLE);
     const needsWork =
@@ -186,6 +201,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       limited.some((img) => driveFileNeedsSync(img, state.files[img.id]));
     if (!needsWork) continue;
 
+    console.log(
+      `[DriveOAuthSync] Match ${vehicle.plate || key} → carpeta "${folder.name}" (${limited.length} fotos)`,
+    );
     toProcess.push({
       vehicle,
       folderId: folder.id,
@@ -195,10 +213,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     });
   }
 
-  if (foldersFound === 0 && toProcess.length === 0) {
+  const matchedInStock = prioritized.filter((v) =>
+    folderIndex.has(normalizePlateKey(v.plate || "")),
+  ).length;
+
+  if (folders.length === 0) {
     const msg =
-      "Drive OAuth OK pero no se encontró carpeta de patente para el lote priorizado. " +
-      "Revisá DRIVE_PHOTOS_FOLDER_ID y que la cuenta del refresh token vea FOTOS RG/UNIDADES.";
+      "Drive OAuth OK pero 0 subcarpetas. Revisá DRIVE_PHOTOS_FOLDER_ID " +
+      "y que la cuenta del refresh token vea FOTOS RG/UNIDADES.";
     console.error(`[DriveOAuthSync] ${msg}`);
     return {
       success: false,
@@ -272,10 +294,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   state.lastRunAt = new Date().toISOString();
   await saveDrivePhotosSyncState(state);
 
-  const remainingLikely = Math.max(
-    0,
-    prioritized.filter((v) => !v.hasRealPhotos).length - synced,
-  );
+  const remainingLikely = Math.max(0, needingPhotos.length - synced);
   const pendingNote =
     remainingLikely > 0
       ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
@@ -284,12 +303,12 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const updatedList = await getVehicles();
   return {
     success: true,
-    totalFolders: foldersFound,
+    totalFolders: folders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
     message:
       `Drive OAuth→Blob: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
-      `(${foldersFound} carpetas halladas en este lote, ${prioritized.length} en stock).` +
+      `(${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
       pendingNote,
     vehicles: updatedList,
   };

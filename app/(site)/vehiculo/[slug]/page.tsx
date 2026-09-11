@@ -10,6 +10,7 @@ import {
   spinFramesOf,
 } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
+import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import { asset } from "@/lib/asset";
 import VehicleViewer from "@/components/VehicleViewer";
 import CuotaSimulator from "@/components/CuotaSimulator";
@@ -44,14 +45,17 @@ export default async function VehiclePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const v = (await getVehicleBySlug(slug)) || getVehicle(slug);
-  if (!v) notFound();
+  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
+  if (!raw) notFound();
+  const v = stripPlateForPublic(raw);
 
   const allVehicles = await getVehicles().catch(() => vehicles);
-  const publicVehicles = allVehicles.filter((v) => {
-    const status = v.status || "Disponible";
-    return status !== "Borrador" && status !== "Vendido";
-  });
+  const publicVehicles = allVehicles
+    .filter((item) => {
+      const status = item.status || "Disponible";
+      return status !== "Borrador" && status !== "Vendido";
+    })
+    .map(stripPlateForPublic);
   const monthly = estimateMonthly(v.price);
 
   return (

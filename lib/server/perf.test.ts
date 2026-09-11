@@ -47,5 +47,6 @@ describe("toVehicleCardDTO", () => {
     expect(dto.doors).toBe(5);
     expect(dto).not.toHaveProperty("gallery");
     expect(dto).not.toHaveProperty("highlights");
+    expect(dto.plate).toBeUndefined();
   });
 });

@@ -18,7 +18,6 @@ export type VehicleCardDTO = Pick<
   | "featured"
   | "status"
   | "hasRealPhotos"
-  | "plate"
   | "engine"
   | "power"
   | "traction"
@@ -26,7 +25,17 @@ export type VehicleCardDTO = Pick<
 > & {
   galleryCount: number;
   hasSpin: boolean;
+  /** Nunca se expone al catálogo público. */
+  plate?: undefined;
 };
+
+/** Quita la patente del payload público (admin sí la ve vía ?admin=true). */
+export function stripPlateForPublic<T extends { plate?: string }>(
+  vehicle: T,
+): Omit<T, "plate"> & { plate?: undefined } {
+  const { plate: _plate, ...rest } = vehicle;
+  return { ...rest, plate: undefined };
+}
 
 export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
   return {
@@ -45,7 +54,6 @@ export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
     featured: v.featured,
     status: v.status,
     hasRealPhotos: v.hasRealPhotos,
-    plate: v.plate,
     engine: v.engine,
     power: v.power,
     traction: v.traction,

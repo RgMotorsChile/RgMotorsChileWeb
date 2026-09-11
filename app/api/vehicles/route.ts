@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import { Vehicle } from "@/lib/vehicles";
-import { toVehicleCardDTO } from "@/lib/vehicles/publicFields";
+import { toVehicleCardDTO, stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import { isCamionetaBody, isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
 
@@ -54,7 +54,9 @@ export async function GET(req: NextRequest) {
     const payload =
       fields === "card" || fields === "summary"
         ? list.map(toVehicleCardDTO)
-        : list;
+        : isAdmin
+          ? list
+          : list.map(stripPlateForPublic);
 
     const res = NextResponse.json({ vehicles: payload, total: payload.length });
     if (isAdmin || process.env.NODE_ENV !== "production") {

@@ -107,6 +107,30 @@ export function pickBestPlateFolder<T extends { name: string }>(
   return exact || matches[0];
 }
 
+/**
+ * Índice patente normalizada → carpeta Drive.
+ * Usa el nombre completo de carpeta (RZVL18) sin importar espacios en el stock.
+ */
+export function buildPlateFolderIndex(
+  folders: Array<{ id: string; name: string }>,
+): Map<string, { id: string; name: string }> {
+  const map = new Map<string, { id: string; name: string }>();
+  for (const f of folders) {
+    const key = normalizePlateKey(f.name);
+    if (!key) continue;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, f);
+      continue;
+    }
+    // Preferí nombre sin espacios/guiones (formato Drive típico)
+    const preferNew =
+      !/[\s\-_]/.test(f.name) && /[\s\-_]/.test(prev.name);
+    if (preferNew) map.set(key, f);
+  }
+  return map;
+}
+
 export type SyncPriorityVehicle = {
   slug: string;
   plate?: string;
