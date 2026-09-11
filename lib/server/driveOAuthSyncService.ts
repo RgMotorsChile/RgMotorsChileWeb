@@ -156,8 +156,16 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       );
       continue;
     }
-    if (!folder) continue;
+    if (!folder) {
+      console.warn(
+        `[DriveOAuthSync] Sin carpeta Drive para patente ${vehicle.plate || key} (probado junto/separado)`,
+      );
+      continue;
+    }
     foldersFound += 1;
+    console.log(
+      `[DriveOAuthSync] Match ${vehicle.plate || key} → carpeta "${folder.name}"`,
+    );
     if (!folderMatchesVehiclePlate(folder.name, vehicle.plate)) continue;
 
     let images: DriveImageRef[] = [];

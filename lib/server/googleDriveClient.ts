@@ -1,5 +1,11 @@
 import { google } from "googleapis";
 import type { drive_v3 } from "googleapis";
+import {
+  normalizePlateKey,
+  pickBestPlateFolder,
+  plateFolderNameVariants,
+  plateFolderSearchPrefixes,
+} from "@/lib/server/drivePlateMatch";
 
 export const DEFAULT_DRIVE_PHOTOS_FOLDER_ID =
   "1etQDf-_InkLx8m4_AUMnc8xg2O_137St";
@@ -92,36 +98,69 @@ export async function listPlateFolders(
 }
 
 /**
- * Busca una carpeta de patente por nombre exacto (ej. PGBV10) bajo la raíz.
- * Evita listar las 100+ carpetas en cada cron (timeout Hobby/CDN).
+ * Busca carpeta de patente bajo la raíz.
+ * Prioridad: nombre junto (RZVL18) → variantes con espacio/guion → contains + match normalizado.
  */
 export async function findPlateFolderByName(
   plateKey: string,
   folderId = getDrivePhotosFolderId(),
   drive = createDriveApi(),
 ): Promise<DriveFolderRef | null> {
-  const compact = String(plateKey || "")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase();
-  if (!compact) return null;
+  const key = normalizePlateKey(plateKey);
+  if (!key) return null;
 
-  const candidates = Array.from(
-    new Set([compact, `${compact.slice(0, 4)} ${compact.slice(4)}`.trim()]),
-  );
+  const parentQ = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
-  for (const name of candidates) {
+  // 1) Exact match: RZVL18 primero, luego RZVL 18 / guiones
+  for (const name of plateFolderNameVariants(plateKey)) {
     const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    const res = await drive.files.list({
-      q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false and name = '${escaped}'`,
-      fields: "files(id, name)",
-      pageSize: 5,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      spaces: "drive",
-    });
-    const hit = (res.data.files || []).find((f) => f.id && f.name);
-    if (hit?.id && hit.name) return { id: hit.id, name: hit.name };
+    try {
+      const res = await drive.files.list({
+        q: `${parentQ} and name = '${escaped}'`,
+        fields: "files(id, name)",
+        pageSize: 10,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        spaces: "drive",
+      });
+      const files = (res.data.files || []).filter(
+        (f): f is { id: string; name: string } => Boolean(f.id && f.name),
+      );
+      const best = pickBestPlateFolder(plateKey, files);
+      if (best) return { id: best.id, name: best.name };
+    } catch (err) {
+      console.warn(
+        `[Drive] name='${name}' falló:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
+
+  // 2) Fallback: name contains letras de la patente + filtro normalizado
+  for (const prefix of plateFolderSearchPrefixes(plateKey)) {
+    const escaped = prefix.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    try {
+      const res = await drive.files.list({
+        q: `${parentQ} and name contains '${escaped}'`,
+        fields: "files(id, name)",
+        pageSize: 50,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        spaces: "drive",
+      });
+      const files = (res.data.files || []).filter(
+        (f): f is { id: string; name: string } => Boolean(f.id && f.name),
+      );
+      const best = pickBestPlateFolder(plateKey, files);
+      if (best) return { id: best.id, name: best.name };
+    } catch (err) {
+      console.warn(
+        `[Drive] contains='${prefix}' falló:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return null;
 }
 
