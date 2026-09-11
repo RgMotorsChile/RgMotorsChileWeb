@@ -39,7 +39,10 @@ export async function runAutoSync(): Promise<{ success: boolean; message: string
     );
     return {
       success: true,
-      message: `Sincronización completada. ${result.syncedVehicles} vehículos al día.`,
+      message: result.message,
+      syncedVehicles: result.syncedVehicles,
+      newPhotosDownloaded: result.newPhotosDownloaded,
+      totalFolders: result.totalFolders,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error desconocido";
