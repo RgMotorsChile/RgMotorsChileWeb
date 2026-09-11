@@ -33,9 +33,11 @@ export type SyncResult = {
 };
 
 const STATE_FILENAME = "drive-photos-sync-state.json";
-/** Hobby Vercel ~60s: tope de vehículos procesados por corrida. */
-export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 10;
-const MAX_PHOTOS_PER_VEHICLE = 12;
+/** Hobby Vercel ~60s / proxy 504: lote chico por corrida. */
+export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 4;
+const MAX_PHOTOS_PER_VEHICLE = 8;
+/** Cuántos candidatos inspeccionar (listar fotos) antes de cortar. */
+const MAX_CANDIDATES_TO_INSPECT = 8;
 
 export type DrivePhotosSyncState = {
   lastRunAt: string | null;
@@ -177,8 +179,13 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }),
   );
 
-  const candidates: FolderCandidate[] = [];
-  for (const vehicle of matchedVehicles) {
+  // No listar fotos de todo el stock: solo un lote prioritario (evita 504 Hobby).
+  const inspectQueue = matchedVehicles.slice(0, MAX_CANDIDATES_TO_INSPECT);
+  const toProcess: FolderCandidate[] = [];
+
+  for (const vehicle of inspectQueue) {
+    if (toProcess.length >= maxVehicles) break;
+
     const key = normalizePlateKey(vehicle.plate || "");
     const folder = folderByPlate.get(key);
     if (!folder) continue;
@@ -200,17 +207,17 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     const needsWork =
       !vehicle.hasRealPhotos ||
       limited.some((img) => driveFileNeedsSync(img, state.files[img.id]));
+    if (!needsWork) continue;
 
-    candidates.push({
+    toProcess.push({
       vehicle,
       folderId: folder.id,
       folderName: folder.name,
       images: limited,
-      needsWork,
+      needsWork: true,
     });
   }
 
-  const toProcess = candidates.filter((c) => c.needsWork).slice(0, maxVehicles);
   let newPhotos = 0;
   let synced = 0;
 
@@ -262,6 +269,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     };
     await saveVehicle(vehicle);
     synced += 1;
+    // Checkpoint por vehículo: si el cron corta a los 60s, no se pierde el progreso.
+    state.lastRunAt = new Date().toISOString();
+    await saveDrivePhotosSyncState(state);
     console.log(
       `[DriveOAuthSync] ${item.folderName} → ${item.vehicle.slug}: ${galleryUrls.length} fotos (${uploadedThisVehicle} nuevas)`,
     );
@@ -270,10 +280,13 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   state.lastRunAt = new Date().toISOString();
   await saveDrivePhotosSyncState(state);
 
-  const pending = candidates.filter((c) => c.needsWork).length - synced;
+  const remainingLikely = Math.max(
+    0,
+    matchedVehicles.filter((v) => !v.hasRealPhotos).length - synced,
+  );
   const pendingNote =
-    pending > 0
-      ? ` Quedan ~${Math.max(0, candidates.filter((c) => c.needsWork).length - toProcess.length)} vehículos para la próxima corrida (tope ${maxVehicles}/run).`
+    remainingLikely > 0
+      ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
       : "";
 
   const updatedList = await getVehicles();
