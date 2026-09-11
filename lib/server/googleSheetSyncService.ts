@@ -203,12 +203,23 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
     if (!sheet) continue;
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
+    // Solo el primer bloque activo (índices 1..N). Tras una fila sin patente
+    // se ignora el resto (preparación / histórico en la misma pestaña).
+    let blockStarted = false;
+
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
-      if (!r || r.length < 3) continue;
+      if (!r || r.length < 3) {
+        if (blockStarted) break;
+        continue;
+      }
 
       const cleanP = cleanPlate(r[1]);
-      if (cleanP.length !== 6 || !/[A-Z]{2,4}[0-9]{2,4}/.test(cleanP)) continue;
+      if (cleanP.length !== 6 || !/[A-Z]{2,4}[0-9]{2,4}/.test(cleanP)) {
+        if (blockStarted) break;
+        continue;
+      }
+      blockStarted = true;
 
       const rawText = r.join(" ").toUpperCase();
       const isSold =

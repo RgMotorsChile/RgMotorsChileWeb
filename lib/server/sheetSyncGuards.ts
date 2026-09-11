@@ -36,11 +36,14 @@ export type SellableSheetRowInput = {
 };
 
 /**
- * Catálogo activo: precio y km reales + marca/modelo/año.
+ * Catálogo activo: precio real (CLP) + marca/modelo/año.
+ * Km 0 se permite si en la hoja aún no está cargado (ej. recién ingresado).
  * Notas tipo "FOTOS NUEVAS" / "FALTA REVISIÓN" no excluyen.
  */
 export function isSellableSheetRow(input: SellableSheetRowInput): boolean {
-  if (input.price <= 0 || input.km <= 0) return false;
+  // Precios de usados reales; evita basura tipo "CAMION 7/8" → 78
+  if (!(input.price >= 1_000_000)) return false;
+  if (input.km < 0) return false;
   if (!input.brand || !String(input.brand).trim()) return false;
   if (!input.model || !String(input.model).trim()) return false;
   const year = Number(input.year) || 0;

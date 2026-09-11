@@ -20,6 +20,30 @@ describe("isSellableSheetRow", () => {
     ).toBe(true);
   });
 
+  it("acepta precio real aunque km aún no esté en la hoja", () => {
+    expect(
+      isSellableSheetRow({
+        price: 39_990_000,
+        km: 0,
+        brand: "Subaru",
+        model: "WRX STI",
+        year: 2022,
+      }),
+    ).toBe(true);
+  });
+
+  it("rechaza basura numérica tipo CAMION 7/8", () => {
+    expect(
+      isSellableSheetRow({
+        price: 78,
+        km: 0,
+        brand: "Maxus",
+        model: "T60",
+        year: 2023,
+      }),
+    ).toBe(false);
+  });
+
   it("rechaza celda de precio 'FALTA FOTOS Y PRECIO'", () => {
     expect(hasBlockedInventoryText("FALTA FOTOS Y PRECIO")).toBe(true);
     expect(

@@ -6,8 +6,8 @@ export function isPublicCatalogVehicle(v: Vehicle): boolean {
   if (status === "Borrador" || status === "Vendido" || status === "En preparación") {
     return false;
   }
-  // Solo listos para vender: precio y kilometraje reales
-  if (!(v.price > 0) || !(v.km > 0)) return false;
+  // Solo listos para vender: precio real. Km puede faltar en hoja.
+  if (!(v.price >= 1_000_000)) return false;
   if (!v.brand?.trim() || !v.model?.trim()) return false;
   return true;
 }
