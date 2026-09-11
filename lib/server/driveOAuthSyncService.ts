@@ -16,10 +16,10 @@ import {
 } from "@/lib/server/drivePlateMatch";
 import {
   downloadDriveFileBytes,
+  findPlateFolderByName,
   getDrivePhotosFolderId,
   isGoogleDriveOAuthConfigured,
   listImagesInFolder,
-  listPlateFolders,
   type DriveImageRef,
 } from "@/lib/server/googleDriveClient";
 
@@ -33,11 +33,11 @@ export type SyncResult = {
 };
 
 const STATE_FILENAME = "drive-photos-sync-state.json";
-/** Hobby Vercel ~60s / proxy 504: lote chico por corrida. */
-export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 4;
+/** Hobby + CDN ~60s: 2 autos/corrida es seguro con descarga+Blob. */
+export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 2;
 const MAX_PHOTOS_PER_VEHICLE = 8;
-/** Cuántos candidatos inspeccionar (listar fotos) antes de cortar. */
-const MAX_CANDIDATES_TO_INSPECT = 8;
+/** Cuántos vehículos del stock priorizados intentar emparejar por nombre. */
+const MAX_CANDIDATES_TO_INSPECT = 6;
 
 export type DrivePhotosSyncState = {
   lastRunAt: string | null;
@@ -134,61 +134,30 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const maxVehicles = opts?.maxVehicles ?? MAX_VEHICLES_PER_DRIVE_SYNC_RUN;
   const state = await loadDrivePhotosSyncState();
 
-  let folders;
-  try {
-    folders = await listPlateFolders(rootId);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    const msg = `No se pudieron listar carpetas de Drive (${rootId}): ${detail}`;
-    console.error(`[DriveOAuthSync] ${msg}`);
-    return {
-      success: false,
-      totalFolders: 0,
-      syncedVehicles: 0,
-      newPhotosDownloaded: 0,
-      message: msg,
-      vehicles: existingList,
-    };
-  }
-
-  if (folders.length === 0) {
-    const msg =
-      "Drive OAuth OK pero 0 subcarpetas de patente. Revisá DRIVE_PHOTOS_FOLDER_ID " +
-      "y que la cuenta del refresh token vea FOTOS RG/UNIDADES.";
-    console.error(`[DriveOAuthSync] ${msg}`);
-    return {
-      success: false,
-      totalFolders: 0,
-      syncedVehicles: 0,
-      newPhotosDownloaded: 0,
-      message: msg,
-      vehicles: existingList,
-    };
-  }
-
-  const folderByPlate = new Map<string, { id: string; name: string }>();
-  for (const f of folders) {
-    const key = normalizePlateKey(f.name);
-    if (key) folderByPlate.set(key, f);
-  }
-
-  const matchedVehicles = prioritizeVehiclesForDriveSync(
-    existingList.filter((v) => {
-      const key = normalizePlateKey(v.plate || "");
-      return key && folderByPlate.has(key);
-    }),
+  // Priorizar sin fotos reales; buscar carpeta por nombre (sin listar las 100+).
+  const prioritized = prioritizeVehiclesForDriveSync(
+    existingList.filter((v) => normalizePlateKey(v.plate || "")),
   );
-
-  // No listar fotos de todo el stock: solo un lote prioritario (evita 504 Hobby).
-  const inspectQueue = matchedVehicles.slice(0, MAX_CANDIDATES_TO_INSPECT);
+  const inspectQueue = prioritized.slice(0, MAX_CANDIDATES_TO_INSPECT);
   const toProcess: FolderCandidate[] = [];
+  let foldersFound = 0;
 
   for (const vehicle of inspectQueue) {
     if (toProcess.length >= maxVehicles) break;
 
     const key = normalizePlateKey(vehicle.plate || "");
-    const folder = folderByPlate.get(key);
+    let folder;
+    try {
+      folder = await findPlateFolderByName(key, rootId);
+    } catch (err) {
+      console.warn(
+        `[DriveOAuthSync] Busqueda carpeta ${key}:`,
+        err instanceof Error ? err.message : err,
+      );
+      continue;
+    }
     if (!folder) continue;
+    foldersFound += 1;
     if (!folderMatchesVehiclePlate(folder.name, vehicle.plate)) continue;
 
     let images: DriveImageRef[] = [];
@@ -216,6 +185,21 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       images: limited,
       needsWork: true,
     });
+  }
+
+  if (foldersFound === 0 && toProcess.length === 0) {
+    const msg =
+      "Drive OAuth OK pero no se encontró carpeta de patente para el lote priorizado. " +
+      "Revisá DRIVE_PHOTOS_FOLDER_ID y que la cuenta del refresh token vea FOTOS RG/UNIDADES.";
+    console.error(`[DriveOAuthSync] ${msg}`);
+    return {
+      success: false,
+      totalFolders: 0,
+      syncedVehicles: 0,
+      newPhotosDownloaded: 0,
+      message: msg,
+      vehicles: existingList,
+    };
   }
 
   let newPhotos = 0;
@@ -282,7 +266,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
   const remainingLikely = Math.max(
     0,
-    matchedVehicles.filter((v) => !v.hasRealPhotos).length - synced,
+    prioritized.filter((v) => !v.hasRealPhotos).length - synced,
   );
   const pendingNote =
     remainingLikely > 0
@@ -292,12 +276,12 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const updatedList = await getVehicles();
   return {
     success: true,
-    totalFolders: folders.length,
+    totalFolders: foldersFound,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
     message:
       `Drive OAuth→Blob: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
-      `(${folders.length} carpetas Drive, ${matchedVehicles.length} con match de patente).` +
+      `(${foldersFound} carpetas halladas en este lote, ${prioritized.length} en stock).` +
       pendingNote,
     vehicles: updatedList,
   };

@@ -36,10 +36,24 @@ function authorizeCron(req: NextRequest): { ok: boolean } {
   return { ok: true };
 }
 
-async function runDailySync() {
-  console.log("[CronSync] Ejecutando sincronización de Google Sheets e inventario...");
-  const sheetResult = await syncFromLiveGoogleSheet();
-  const driveResult = await runAutoSync();
+async function runDailySync(opts?: { only?: "sheet" | "drive" | "all" }) {
+  const only = opts?.only || "all";
+  console.log("[CronSync] Ejecutando sincronización…", { only });
+
+  const sheetResult =
+    only === "drive"
+      ? {
+          success: true,
+          message: "Sheets omitido (only=drive).",
+          updated: 0,
+        }
+      : await syncFromLiveGoogleSheet();
+
+  const driveResult =
+    only === "sheet"
+      ? { success: true, message: "Drive omitido (only=sheet)." }
+      : await runAutoSync();
+
   const sheetOk = Boolean(sheetResult.success);
   const driveOk = Boolean(driveResult.success);
   const success = sheetOk && driveOk;
@@ -81,7 +95,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await runDailySync();
+    const onlyParam = req.nextUrl.searchParams.get("only");
+    const only =
+      onlyParam === "sheet" || onlyParam === "drive" ? onlyParam : "all";
+    const result = await runDailySync({ only });
     return NextResponse.json(result);
   } catch (err) {
     console.error("[CronSync] Falló el sync diario:", err);

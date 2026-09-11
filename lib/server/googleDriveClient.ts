@@ -91,6 +91,40 @@ export async function listPlateFolders(
   return out;
 }
 
+/**
+ * Busca una carpeta de patente por nombre exacto (ej. PGBV10) bajo la raíz.
+ * Evita listar las 100+ carpetas en cada cron (timeout Hobby/CDN).
+ */
+export async function findPlateFolderByName(
+  plateKey: string,
+  folderId = getDrivePhotosFolderId(),
+  drive = createDriveApi(),
+): Promise<DriveFolderRef | null> {
+  const compact = String(plateKey || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  if (!compact) return null;
+
+  const candidates = Array.from(
+    new Set([compact, `${compact.slice(0, 4)} ${compact.slice(4)}`.trim()]),
+  );
+
+  for (const name of candidates) {
+    const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false and name = '${escaped}'`,
+      fields: "files(id, name)",
+      pageSize: 5,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      spaces: "drive",
+    });
+    const hit = (res.data.files || []).find((f) => f.id && f.name);
+    if (hit?.id && hit.name) return { id: hit.id, name: hit.name };
+  }
+  return null;
+}
+
 /** Lista imágenes dentro de una carpeta de patente. */
 export async function listImagesInFolder(
   folderId: string,
