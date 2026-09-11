@@ -221,6 +221,7 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
       const model = String(r[3] || "").trim().toUpperCase();
       const year = parseInt(String(r[5]), 10) || 0;
 
+      // Solo precio lista/oferta y km — no la fila completa (evita sacar autos por "FOTOS NUEVAS")
       const sellable =
         !isSold &&
         isSellableSheetRow({
@@ -229,7 +230,7 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
           brand,
           model,
           year,
-          rawParts: [r[6], r[7], r[8], r.join(" ")],
+          rawParts: [r[6], r[7], r[8]],
         });
 
       sheetVehicles.push({

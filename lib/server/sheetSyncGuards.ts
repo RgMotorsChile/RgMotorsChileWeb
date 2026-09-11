@@ -9,13 +9,20 @@ export function isInventorySheetTab(name: string): boolean {
   return name.trim().toUpperCase() === INVENTORY_SHEET_TAB;
 }
 
-const BLOCKED_INVENTORY_TEXT =
-  /falta|reservado|preparacion|preparación|terminar|taller|casa|consignado|\brq\b|fotos|en revision|en revisión|sin precio|sin km|pendiente/i;
+/**
+ * Solo bloquea estados claros de no-venta en celdas de precio/km
+ * (ej. "FALTA FOTOS Y PRECIO"). NO usar notas de fila: "FOTOS NUEVAS" o
+ * "FALTA REVISIÓN" son operativas y no deben sacar el auto de vitrina.
+ */
+const BLOCKED_PRICE_OR_KM_CELL =
+  /falta\s+fotos|falta\s+precio|sin\s+precio|sin\s+km|reservado|en\s+preparaci[oó]n|preparando|consignado|\brq\b|vendido|entregado/i;
 
-/** Texto de celda/fila que indica no listo para vitrina. */
+/** Texto en precio/km que indica no listo para vitrina. */
 export function hasBlockedInventoryText(...parts: unknown[]): boolean {
-  const joined = parts.map((p) => (p == null ? "" : String(p))).join(" ");
-  return BLOCKED_INVENTORY_TEXT.test(joined);
+  return parts.some((p) => {
+    if (p == null || p === "") return false;
+    return BLOCKED_PRICE_OR_KM_CELL.test(String(p));
+  });
 }
 
 export type SellableSheetRowInput = {
@@ -24,12 +31,13 @@ export type SellableSheetRowInput = {
   brand?: string;
   model?: string;
   year?: number;
-  /** Texto crudo de la fila (precio, km, notas, etc.). */
+  /** Solo celdas de precio lista/oferta y km (no notas ni fila completa). */
   rawParts?: unknown[];
 };
 
 /**
- * Solo entran al catálogo activo: precio y km reales, marca/modelo/año, sin preparación.
+ * Catálogo activo: precio y km reales + marca/modelo/año.
+ * Notas tipo "FOTOS NUEVAS" / "FALTA REVISIÓN" no excluyen.
  */
 export function isSellableSheetRow(input: SellableSheetRowInput): boolean {
   if (input.price <= 0 || input.km <= 0) return false;
