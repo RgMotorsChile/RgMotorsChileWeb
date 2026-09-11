@@ -1,7 +1,4 @@
 import https from "node:https";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { createWriteStream, existsSync } from "node:fs";
-import { join } from "node:path";
 import * as XLSX from "xlsx";
 import { Vehicle } from "@/lib/vehicles";
 import { getVehicles, saveVehicle } from "./vehiclesStore";
@@ -13,6 +10,8 @@ import {
   isInventorySheetTab,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
+import { isGoogleDriveOAuthConfigured } from "@/lib/server/googleDriveClient";
+import { syncDrivePhotosViaOAuth } from "@/lib/server/driveOAuthSyncService";
 
 export type SyncResult = {
   success: boolean;
@@ -82,7 +81,18 @@ export async function extractFoldersFromDriveUrl(folderUrl: string): Promise<{ n
 }
 
 export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise<SyncResult> {
+  // Camino principal: OAuth cuenta U → Blob (carpeta restringida).
+  if (isGoogleDriveOAuthConfigured()) {
+    return syncDrivePhotosViaOAuth();
+  }
+
   const allFolders: { name: string; id: string }[] = [];
+  const existingList = await getVehicles();
+
+  // Fallback legacy (scrape HTML): solo útil si la carpeta es pública.
+  console.warn(
+    "[DriveSync] OAuth no configurado — intentando scrape HTML (falla si Drive está Restringido).",
+  );
 
   for (const url of folderUrls) {
     const folders = await extractFoldersFromDriveUrl(url);
@@ -93,22 +103,34 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
     }
   }
 
-  // Only work with vehicles already in the database (from PDF)
-  const existingList = await getVehicles();
+  if (allFolders.length === 0) {
+    const msg =
+      "Google Drive no devolvió carpetas (0). Configurá OAuth (GOOGLE_DRIVE_* + refresh token de la cuenta U) " +
+      "con scripts/google-drive-oauth-setup.mjs. El scrape público no funciona con la carpeta en modo Restringido.";
+    console.error(`[DriveSync] ${msg}`);
+    return {
+      success: false,
+      totalFolders: 0,
+      syncedVehicles: 0,
+      newPhotosDownloaded: 0,
+      message: msg,
+      vehicles: existingList,
+    };
+  }
+
   let newPhotos = 0;
   let synced = 0;
 
   for (const folder of allFolders) {
     const cleanFolderName = folder.name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    // RULE: Only match if an existing (PDF-verified) vehicle's plate exactly matches the folder name
+    // RULE: Only match if an existing vehicle's plate exactly matches the folder name
     const existing = existingList.find((v) => {
       const vPlate = v.plate ? v.plate.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
       return vPlate === cleanFolderName;
     });
 
     if (!existing) {
-      // Folder does not correspond to any PDF-verified vehicle → SKIP completely
       continue;
     }
 
@@ -122,7 +144,6 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
     newPhotos += photos.length;
 
     // Conservar portada elegida en admin si esa foto sigue en Drive
-    // (si coverLocked y la URL previa está rota/sin id, no forzamos gallery[0] al azar)
     const cover = resolveCoverFromGallery(existing.image, gallery);
     const orderedGallery = orderGalleryWithCover(cover, gallery);
 
@@ -131,7 +152,6 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
       hasRealPhotos: true,
       gallery: orderedGallery,
       image: cover || orderedGallery[0],
-      // coverLocked se mantiene vía ...existing
     };
 
     await saveVehicle(vehicle);
@@ -145,7 +165,7 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
     totalFolders: allFolders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
-    message: `Sincronización completada: ${synced} vehículos con fotos vinculadas desde Google Drive.`,
+    message: `Sincronización completada: ${synced} vehículos con fotos vinculadas desde Google Drive (${allFolders.length} carpetas leídas).`,
     vehicles: updatedList,
   };
 }

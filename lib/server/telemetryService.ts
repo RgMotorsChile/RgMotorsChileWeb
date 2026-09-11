@@ -15,6 +15,7 @@ import {
   isKvReady,
   isVercelProduction,
 } from "@/lib/server/storageHealth";
+import { isGoogleDriveOAuthConfigured } from "@/lib/server/googleDriveClient";
 import type { NotificationEvent } from "@/lib/server/notify";
 
 type ContactLike = { createdAt?: string; trafficSource?: unknown };
@@ -122,6 +123,7 @@ export async function buildTelemetryReport() {
     process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length >= 16,
   );
   const resendOk = Boolean(process.env.RESEND_API_KEY?.trim());
+  const driveOAuthOk = isGoogleDriveOAuthConfigured();
 
   const emailPending = notifications.filter((n) => n.channel === "email-pending");
   const emailOkRecent = notifications
@@ -242,6 +244,15 @@ export async function buildTelemetryReport() {
         ? "El cron de Sheets/Drive está configurado (08:00 y 19:00 Chile)."
         : "Falta CRON_SECRET: la sync automática puede no correr en producción.",
       ok: cronOk || !isVercelProduction(),
+      severity: "warn",
+    },
+    {
+      id: "drive-oauth",
+      label: "Fotos Google Drive (OAuth)",
+      plain: driveOAuthOk
+        ? "OAuth de Drive configurado: el cron puede bajar fotos a Blob."
+        : "Falta OAuth de Drive (GOOGLE_DRIVE_*). Sin eso no se sincronizan fotos de la carpeta restringida.",
+      ok: driveOAuthOk || !isVercelProduction(),
       severity: "warn",
     },
   ];

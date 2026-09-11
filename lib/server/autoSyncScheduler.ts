@@ -1,10 +1,14 @@
 import { syncCatalogFromDriveFolders } from "./driveSyncService";
+import {
+  DEFAULT_DRIVE_PHOTOS_FOLDER_ID,
+  getDrivePhotosFolderId,
+  isGoogleDriveOAuthConfigured,
+} from "./googleDriveClient";
 
 const DEFAULT_DRIVE_URLS = [
-  "https://drive.google.com/drive/folders/1VQ6IHTjk5sJYjJckZY1kzeRJAI5d09Od?usp=sharing",
+  `https://drive.google.com/drive/folders/${DEFAULT_DRIVE_PHOTOS_FOLDER_ID}?usp=sharing`,
 ];
 
-// Intervalo de sincronización automática: cada 60 minutos
 const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 
 let isSyncing = false;
@@ -16,12 +20,23 @@ export async function runAutoSync(): Promise<{ success: boolean; message: string
   }
 
   isSyncing = true;
-  console.log(`[AutoSync] [${new Date().toISOString()}] Iniciando sincronización automática con Google Drive (Modo Solo Lectura)...`);
+  const mode = isGoogleDriveOAuthConfigured()
+    ? "OAuth → Blob"
+    : "scrape HTML (legacy)";
+  console.log(
+    `[AutoSync] [${new Date().toISOString()}] Iniciando sync Drive (${mode}), folder=${getDrivePhotosFolderId()}...`,
+  );
 
   try {
     const result = await syncCatalogFromDriveFolders(DEFAULT_DRIVE_URLS);
     lastSyncTime = new Date();
-    console.log(`[AutoSync] Sincronización exitosa: ${result.syncedVehicles} vehículos verificados, ${result.newPhotosDownloaded} fotos nuevas.`);
+    if (!result.success) {
+      console.error(`[AutoSync] ${result.message}`);
+      return { success: false, message: result.message };
+    }
+    console.log(
+      `[AutoSync] OK: ${result.syncedVehicles} vehículos, ${result.newPhotosDownloaded} fotos nuevas.`,
+    );
     return {
       success: true,
       message: `Sincronización completada. ${result.syncedVehicles} vehículos al día.`,
@@ -36,7 +51,9 @@ export async function runAutoSync(): Promise<{ success: boolean; message: string
 }
 
 export function startAutoSyncScheduler() {
-  console.log("[AutoSync] El programador local ha sido desactivado a favor de Vercel Cron Jobs.");
+  console.log(
+    "[AutoSync] El programador local ha sido desactivado a favor de Vercel Cron Jobs.",
+  );
 }
 
 export function getAutoSyncStatus() {
@@ -45,6 +62,10 @@ export function getAutoSyncStatus() {
     lastSyncTime: lastSyncTime ? lastSyncTime.toISOString() : null,
     intervalMinutes: SYNC_INTERVAL_MS / 60000,
     foldersConfigured: DEFAULT_DRIVE_URLS.length,
-    mode: "Read-Only (Seguro / No modifica el Drive)",
+    driveFolderId: getDrivePhotosFolderId(),
+    oauthConfigured: isGoogleDriveOAuthConfigured(),
+    mode: isGoogleDriveOAuthConfigured()
+      ? "OAuth readonly → Vercel Blob"
+      : "Legacy HTML scrape (requiere carpeta pública o configurar OAuth)",
   };
 }

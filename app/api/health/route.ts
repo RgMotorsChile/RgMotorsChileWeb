@@ -6,6 +6,7 @@ import {
   isVercelProduction,
 } from "@/lib/server/storageHealth";
 import { applySecurityHeaders } from "@/lib/server/security";
+import { isGoogleDriveOAuthConfigured } from "@/lib/server/googleDriveClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function GET() {
   const cronOk = Boolean(
     process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length >= 16,
   );
+  const driveOAuthOk = isGoogleDriveOAuthConfigured();
 
   const body = {
     ok: !isVercelProduction() || (storage.ok && sessionOk && cronOk && isBlobReady()),
@@ -30,6 +32,7 @@ export async function GET() {
       blob: isBlobReady(),
       adminSessionSecret: sessionOk,
       cronSecret: cronOk,
+      driveOAuth: driveOAuthOk,
       resend: Boolean(process.env.RESEND_API_KEY?.trim()),
     },
     warnings: storage.warnings,

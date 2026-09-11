@@ -24,8 +24,13 @@ Project → Settings → Environment Variables (**Production**):
 | `NOTIFY_EMAIL` | Casilla donde llegan los leads |
 | `NEXT_PUBLIC_SITE_URL` | Debe ser `https://www.rgmotorschile.cl` |
 | `INVENTORY_SYNC_SECRET` | Opcional; si no, el webhook usa `CRON_SECRET` |
+| `GOOGLE_DRIVE_CLIENT_ID` | OAuth Desktop/Web — Drive API (fotos) |
+| `GOOGLE_DRIVE_CLIENT_SECRET` | Secreto OAuth de Drive |
+| `GOOGLE_DRIVE_REFRESH_TOKEN` | Refresh token de la cuenta U (o la que ve la carpeta). Generar con `node scripts/google-drive-oauth-setup.mjs` |
+| `DRIVE_PHOTOS_FOLDER_ID` | Default `1etQDf-_InkLx8m4_AUMnc8xg2O_137St` (FOTOS RG/UNIDADES) |
 
 > **RUT:** no se publica en el sitio (decisión de negocio).
+> **Fotos Drive:** la carpeta está restringida; el sync usa OAuth → Vercel Blob (no scrape público).
 
 Después de setear: **Redeploy**.
 
@@ -44,9 +49,16 @@ Verificar: `https://www.rgmotorschile.cl/api/health` → `ok: true` y `resend` e
 3. `WEBHOOK_SECRET` = mismo valor que `CRON_SECRET` (o `INVENTORY_SYNC_SECRET`)
 4. Activador “Al modificar” → `onSheetChange`
 
-### Fotos / cuota Vercel (próximo sprint)
+### Fotos Drive (OAuth → Blob)
 
-- Migrar `public/cars` a Blob y `git rm --cached`
+1. Habilitar Google Drive API + OAuth Desktop en Google Cloud
+2. `node scripts/google-drive-oauth-setup.mjs` con la cuenta que ve la carpeta
+3. Setear `GOOGLE_DRIVE_*` + `DRIVE_PHOTOS_FOLDER_ID` en Vercel → Redeploy
+4. Disparar `/api/cron/sync` varias veces (tope ~10 vehículos/corrida)
+
+### Cuota Vercel (próximo sprint)
+
+- Migrar restos de `public/cars` a Blob si quedan
 - Dejar 1–2 deploys recientes
 
 ## Smoke rápido

@@ -4,15 +4,19 @@ import { saveVehicle, getVehicles } from "@/lib/server/vehiclesStore";
 import { startAutoSyncScheduler, getAutoSyncStatus } from "@/lib/server/autoSyncScheduler";
 import { Vehicle } from "@/lib/vehicles";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import {
+  DEFAULT_DRIVE_PHOTOS_FOLDER_ID,
+  getDrivePhotosFolderId,
+  isGoogleDriveOAuthConfigured,
+} from "@/lib/server/googleDriveClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Inicializar temporizador si no estaba ya
 startAutoSyncScheduler();
 
 const DEFAULT_DRIVE_URLS = [
-  "https://drive.google.com/drive/folders/1VQ6IHTjk5sJYjJckZY1kzeRJAI5d09Od?usp=sharing",
+  `https://drive.google.com/drive/folders/${DEFAULT_DRIVE_PHOTOS_FOLDER_ID}?usp=sharing`,
 ];
 
 export async function GET() {
@@ -23,6 +27,9 @@ export async function GET() {
     const list = await getVehicles();
     return NextResponse.json({
       connectedFolders: DEFAULT_DRIVE_URLS,
+      driveFolderId: getDrivePhotosFolderId(),
+      oauthConfigured: isGoogleDriveOAuthConfigured(),
+      autoSync: getAutoSyncStatus(),
       totalVehicles: list.length,
       vehicles: list,
     });

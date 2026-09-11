@@ -26,9 +26,14 @@ CRON_SECRET=           # ≥16 caracteres
 KV_REST_API_URL=
 KV_REST_API_TOKEN=
 BLOB_READ_WRITE_TOKEN= # recomendado para fotos
+GOOGLE_DRIVE_CLIENT_ID=
+GOOGLE_DRIVE_CLIENT_SECRET=
+GOOGLE_DRIVE_REFRESH_TOKEN=  # cuenta con acceso a FOTOS RG/UNIDADES (readonly)
+DRIVE_PHOTOS_FOLDER_ID=      # opcional; default FOTOS RG/UNIDADES
 NEXT_PUBLIC_SITE_URL=https://tu-dominio.cl
 ```
 
+> Drive OAuth: solo scope `drive.readonly`. No subir el refresh token a git.
 ## Checklist go-live
 
 1. [ ] Setear secretos en Vercel (no usar defaults del código).
