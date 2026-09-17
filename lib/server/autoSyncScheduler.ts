@@ -14,7 +14,13 @@ const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 let isSyncing = false;
 let lastSyncTime: Date | null = null;
 
-export async function runAutoSync(): Promise<{ success: boolean; message: string }> {
+export async function runAutoSync(): Promise<{
+  success: boolean;
+  message: string;
+  syncedVehicles?: number;
+  newPhotosDownloaded?: number;
+  totalFolders?: number;
+}> {
   if (isSyncing) {
     return { success: false, message: "Una sincronización ya está en curso." };
   }
