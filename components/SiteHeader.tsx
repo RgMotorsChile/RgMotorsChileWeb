@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Logo from "./Logo";
 import { COMPANY, whatsappLink } from "@/lib/company";
 import TradeInModal from "./TradeInModal";
@@ -17,109 +17,94 @@ const NAV_LINKS = [
 ];
 
 /** Píxeles de scroll para pasar a negro sólido en Inicio. */
-const HOME_SOLID_AFTER_PX = 40;
+const HOME_SOLID_AFTER_PX = 24;
 
 function getScrollY() {
-  if (typeof window === "undefined") return 0;
   return window.scrollY || document.documentElement.scrollTop || 0;
 }
 
+function subscribeScroll(onChange: () => void) {
+  window.addEventListener("scroll", onChange, { passive: true });
+  window.addEventListener("resize", onChange, { passive: true });
+  window.addEventListener("pageshow", onChange);
+  return () => {
+    window.removeEventListener("scroll", onChange);
+    window.removeEventListener("resize", onChange);
+    window.removeEventListener("pageshow", onChange);
+  };
+}
+
+function getScrolledSnapshot() {
+  return getScrollY() > HOME_SOLID_AFTER_PX;
+}
+
+/** SSR + primer paint: nunca “scrolleado” → transparente en Inicio. */
+function getScrolledServerSnapshot() {
+  return false;
+}
+
+function useScrolledPast() {
+  return useSyncExternalStore(
+    subscribeScroll,
+    getScrolledSnapshot,
+    getScrolledServerSnapshot,
+  );
+}
+
+function normalizePathname(value: string | null | undefined): string {
+  if (!value) return "";
+  if (value.length > 1 && value.endsWith("/")) return value.slice(0, -1);
+  return value;
+}
+
 /**
- * Solo en Inicio: true cuando el usuario ya scrolleó.
- * - Al montar / reentrar a Inicio → siempre false (transparente).
- * - Al volver arriba (scrollY ≈ 0) → false.
- * - Nunca deja “solid” pegado al salir a otra ruta.
+ * En Next 16, usePathname() en el layout cliente puede venir vacío/null en el SSR de `/`
+ * (el HTML de prod salía sticky + negro con ningún nav activo). Tratar vacío como Inicio.
  */
-function useHomeScrolled(isHome: boolean) {
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    if (!isHome) {
-      setScrolled(false);
-      return;
-    }
-
-    let alive = true;
-    const previousRestoration = history.scrollRestoration;
-
-    try {
-      history.scrollRestoration = "manual";
-    } catch {
-      /* ignore */
-    }
-
-    const sync = () => {
-      if (!alive) return;
-      setScrolled(getScrollY() > HOME_SOLID_AFTER_PX);
-    };
-
-    const pinTop = () => {
-      if (!alive) return;
-      if (window.location.hash) {
-        sync();
-        return;
-      }
-      window.scrollTo(0, 0);
-      setScrolled(false);
-    };
-
-    // Cada visita a Inicio empieza arriba y transparente.
-    pinTop();
-
-    window.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync, { passive: true });
-    window.addEventListener("pageshow", pinTop);
-
-    return () => {
-      alive = false;
-      window.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      window.removeEventListener("pageshow", pinTop);
-      try {
-        history.scrollRestoration = previousRestoration;
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [isHome]);
-
-  // Fuera de Inicio no usamos este flag (el header va sólido por ruta).
-  return isHome ? scrolled : false;
+function isHomePath(pathname: string | null | undefined) {
+  const normalized = normalizePathname(pathname);
+  return !pathname || normalized === "" || normalized === "/";
 }
 
 export default function SiteHeader() {
   const pathname = usePathname();
+  const scrolledPast = useScrolledPast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tradeInOpen, setTradeInOpen] = useState(false);
   const [carRequestOpen, setCarRequestOpen] = useState(false);
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const path = normalizePathname(pathname) || "/";
 
-  const isHome = pathname === "/";
-  const homeScrolled = useHomeScrolled(isHome);
+  const isActive = (href: string) => {
+    const target = normalizePathname(href);
+    return target === "/"
+      ? isHomePath(pathname)
+      : path === target || path.startsWith(`${target}/`);
+  };
+
+  const isHome = isHomePath(pathname);
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
 
   const goHomeTop = () => {
-    if (pathname !== "/") return;
+    if (!isHome) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Inicio + arriba + menú cerrado → transparente sobre el hero.
-  const homeFloating = isHome && !homeScrolled && !mobileMenuOpen;
+  const homeFloating = isHome && !scrolledPast && !mobileMenuOpen;
 
   return (
     <>
       <header
         data-home-floating={homeFloating ? "true" : "false"}
-        className={`z-40 transition-[background-color,border-color] duration-300 ease-out ${
+        className={`z-40 transition-[background-color,border-color,backdrop-filter] duration-300 ease-out ${
           isHome ? "fixed inset-x-0 top-0" : "sticky top-0"
         } ${
           homeFloating
-            ? "border-b border-transparent bg-transparent"
+            ? "border-b border-transparent bg-transparent shadow-none backdrop-blur-none"
             : "border-b border-white/[0.08] bg-[#06070a]"
         }`}
         style={{ paddingTop: "env(safe-area-inset-top)" }}
