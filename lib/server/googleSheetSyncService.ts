@@ -10,7 +10,24 @@ import {
 import * as XLSX from "xlsx";
 import https from "node:https";
 
-const DEFAULT_SHEET_ID = "1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc";
+const FALLBACK_SHEET_ID = "1BG2uR6APbXEMvVvRmdR-Nn0Vko6eobJ6Xam0XX41Ldc";
+
+/** IDs de Google Sheets: alfanumérico + _/- (evita path injection / SSRF). */
+function isValidGoogleSheetId(id: string): boolean {
+  return /^[a-zA-Z0-9_-]{20,128}$/.test(id);
+}
+
+function resolveSheetId(customSheetId?: string): string {
+  const candidates = [
+    customSheetId?.trim(),
+    process.env.GOOGLE_SHEET_ID?.trim(),
+    FALLBACK_SHEET_ID,
+  ];
+  for (const id of candidates) {
+    if (id && isValidGoogleSheetId(id)) return id;
+  }
+  return FALLBACK_SHEET_ID;
+}
 
 function fetchBuffer(url: string, redirectCount = 0): Promise<{ buffer: Buffer; statusCode: number }> {
   return new Promise((resolve, reject) => {
@@ -128,7 +145,7 @@ export interface SyncReport {
 }
 
 export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<SyncReport> {
-  const sheetId = customSheetId || DEFAULT_SHEET_ID;
+  const sheetId = resolveSheetId(customSheetId);
   const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
 
   console.log(`[GoogleSheetSync] Descargando inventario en vivo desde Google Sheets (${sheetId})...`);

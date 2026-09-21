@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReservations, addReservation } from "@/lib/server/reservationsStore";
 import { notifyTeam } from "@/lib/server/notify";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -11,6 +12,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   try {
     const list = await getReservations();
     return NextResponse.json({ reservations: list, total: list.length });

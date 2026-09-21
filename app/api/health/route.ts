@@ -6,12 +6,14 @@ import {
   isVercelProduction,
 } from "@/lib/server/storageHealth";
 import { applySecurityHeaders } from "@/lib/server/security";
-import { isGoogleDriveOAuthConfigured } from "@/lib/server/googleDriveClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Healthcheck público (sin secretos): KV/Blob/session config. */
+/**
+ * Healthcheck público mínimo (sin detalles de configuración ni secretos).
+ * Útil para uptime monitors; no expone qué dependencias fallan.
+ */
 export async function GET() {
   const storage = assertProductionStorage();
   const sessionOk = Boolean(
@@ -22,25 +24,18 @@ export async function GET() {
   const cronOk = Boolean(
     process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length >= 16,
   );
-  const driveOAuthOk = isGoogleDriveOAuthConfigured();
 
-  const body = {
-    ok: !isVercelProduction() || (storage.ok && sessionOk && cronOk && isBlobReady()),
-    env: isVercelProduction() ? "production" : process.env.VERCEL_ENV || "local",
-    checks: {
-      kv: isKvReady(),
-      blob: isBlobReady(),
-      adminSessionSecret: sessionOk,
-      cronSecret: cronOk,
-      driveOAuth: driveOAuthOk,
-      resend: Boolean(process.env.RESEND_API_KEY?.trim()),
+  const ok =
+    !isVercelProduction() ||
+    (storage.ok && sessionOk && cronOk && isBlobReady() && isKvReady());
+
+  const res = NextResponse.json(
+    {
+      ok,
+      status: ok ? "ok" : "degraded",
+      timestamp: new Date().toISOString(),
     },
-    warnings: storage.warnings,
-    timestamp: new Date().toISOString(),
-  };
-
-  const res = NextResponse.json(body, {
-    status: body.ok ? 200 : 503,
-  });
+    { status: ok ? 200 : 503 },
+  );
   return applySecurityHeaders(res);
 }

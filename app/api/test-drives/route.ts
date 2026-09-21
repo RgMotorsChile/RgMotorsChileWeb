@@ -5,6 +5,7 @@ import {
   notifyCustomer,
   notifyTeam,
 } from "@/lib/server/notify";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -14,6 +15,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   try {
     const list = await getTestDrives();
     return NextResponse.json({ testDrives: list });

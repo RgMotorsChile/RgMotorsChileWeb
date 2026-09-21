@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson, writeJson } from "@/lib/server/db";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import { guardPublicLeadPost } from "@/lib/server/security";
 
 export const runtime = "nodejs";
@@ -32,6 +33,9 @@ async function writeAll(list: CapturedLead[]) {
 }
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   const list = await readAll();
   list.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   return NextResponse.json({ leads: list });

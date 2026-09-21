@@ -2,7 +2,7 @@
  * Rate limit: memoria local + KV distribuido cuando está configurado.
  */
 import { kv } from "@vercel/kv";
-import { isKvReady } from "@/lib/server/storageHealth";
+import { isKvReady, isVercelProduction } from "@/lib/server/storageHealth";
 
 type Bucket = { count: number; resetAt: number };
 
@@ -29,6 +29,14 @@ export function rateLimit(
   return { ok: true, remaining: limit - current.count };
 }
 
+export type RateLimitOptions = {
+  /**
+   * Si KV falla en producción, denegar (p. ej. login) en lugar de
+   * multiplicar el cupo por instancia en memoria.
+   */
+  failClosed?: boolean;
+};
+
 /**
  * Preferido en APIs: usa Vercel KV/Upstash si hay credenciales (multi-instancia).
  */
@@ -36,6 +44,7 @@ export async function rateLimitAsync(
   key: string,
   limit = 20,
   windowMs = 60_000,
+  opts?: RateLimitOptions,
 ): Promise<{ ok: boolean; remaining: number }> {
   if (isKvReady()) {
     try {
@@ -49,14 +58,41 @@ export async function rateLimitAsync(
       }
       return { ok: true, remaining: Math.max(0, limit - count) };
     } catch (err) {
-      console.warn("[rateLimit] KV falló, usando memoria:", err);
+      console.warn("[rateLimit] KV falló:", err);
+      if (opts?.failClosed && isVercelProduction()) {
+        return { ok: false, remaining: 0 };
+      }
     }
+  } else if (opts?.failClosed && isVercelProduction()) {
+    return { ok: false, remaining: 0 };
   }
   return rateLimit(key, limit, windowMs);
 }
 
+/**
+ * IP del cliente detrás de Cloudflare/Vercel.
+ * Preferir CF-Connecting-IP (fijado por Cloudflare); no confiar en XFF[0].
+ */
+export function clientIp(request: Request): string {
+  const cf = request.headers.get("cf-connecting-ip")?.trim();
+  if (cf) return cf;
+
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) {
+    const parts = fwd
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    // Cloudflare/Vercel agregan el hop real al final.
+    if (parts.length) return parts[parts.length - 1]!;
+  }
+
+  return "unknown";
+}
+
 export function clientKey(request: Request, prefix: string): string {
-  const fwd = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = fwd || request.headers.get("x-real-ip") || "unknown";
-  return `${prefix}:${ip}`;
+  return `${prefix}:${clientIp(request)}`;
 }

@@ -4,6 +4,7 @@ const basePath = isGhPages ? "/RGmotors" : "";
 
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
   outputFileTracingExcludes: {
     "**/*": [
       "public/**/*",

@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { mkdtemp, writeFile, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import { processVideoToSpin } from "@/lib/server/spinProcessor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Lista los giros 360° ya generados (para el panel de admin). */
+/** Lista los giros 360° ya generados (público: solo metadatos, sin archivos). */
 export async function GET() {
   const base = join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "spin");
   const out: Array<{ slug: string; count: number; studio?: boolean; aiUsed?: boolean; updatedAt?: string }> = [];
@@ -33,6 +34,10 @@ export async function GET() {
 
 /** Sube un video y genera el giro 360°, transmitiendo el progreso (NDJSON). */
 export async function POST(req: NextRequest) {
+  if (!(await requireAdminSession())) {
+    return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();

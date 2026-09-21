@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCarRequests, addCarRequest } from "@/lib/server/carRequestsStore";
 import { notifyTeam } from "@/lib/server/notify";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -11,6 +12,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   const list = await getCarRequests();
   return NextResponse.json({ requests: list, total: list.length });
 }

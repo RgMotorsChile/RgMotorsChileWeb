@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCreditApplications, addCreditApplication } from "@/lib/server/creditsStore";
 import { notifyTeam } from "@/lib/server/notify";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -13,6 +14,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   try {
     const list = await getCreditApplications();
     return NextResponse.json({ credits: list, total: list.length });

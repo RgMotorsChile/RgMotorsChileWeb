@@ -1,39 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAutoSync, getAutoSyncStatus } from "@/lib/server/autoSyncScheduler";
 import { syncFromLiveGoogleSheet } from "@/lib/server/googleSheetSyncService";
-import { timingSafeEqualString } from "@/lib/auth/session";
+import { authorizeMachineSecret } from "@/lib/auth/machineAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /** Sync Sheets + Drive puede tardar; Hobby permite hasta 60s, Pro más. */
 export const maxDuration = 60;
 
-function authorizeCron(req: NextRequest): { ok: boolean } {
-  const secret = process.env.CRON_SECRET?.trim();
-  const isProd =
-    process.env.VERCEL_ENV === "production" ||
-    (process.env.NODE_ENV === "production" && process.env.VERCEL === "1");
-
-  if (!secret || secret.length < 16) {
-    if (isProd) return { ok: false };
-    console.warn("[CronSync] CRON_SECRET ausente — solo permitido en desarrollo.");
-    return { ok: true };
-  }
-
-  const auth = req.headers.get("authorization") || "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  // Query secret solo en no-prod o con flag explícito (evita leaks en logs/Referer).
-  const allowQuery =
-    !isProd || process.env.CRON_ALLOW_QUERY_SECRET === "1";
-  const querySecret = allowQuery
-    ? req.nextUrl.searchParams.get("secret") || ""
-    : "";
-  const provided = bearer || querySecret;
-
-  if (!provided || !timingSafeEqualString(provided, secret)) {
-    return { ok: false };
-  }
-  return { ok: true };
+function authorizeCron(req: NextRequest): boolean {
+  return authorizeMachineSecret(req, ["CRON_SECRET"], {
+    allowQuerySecret: true,
+    allowQueryInProd: process.env.CRON_ALLOW_QUERY_SECRET === "1",
+    searchParams: req.nextUrl.searchParams,
+    logLabel: "CronSync",
+  });
 }
 
 async function runDailySync(opts?: { only?: "sheet" | "drive" | "all" }) {
@@ -81,8 +62,7 @@ async function runDailySync(opts?: { only?: "sheet" | "drive" | "all" }) {
  * Antes solo devolvía status y el sync nunca corría.
  */
 export async function GET(req: NextRequest) {
-  const auth = authorizeCron(req);
-  if (!auth.ok) {
+  if (!authorizeCron(req)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
@@ -114,8 +94,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authorizeCron(req);
-  if (!auth.ok) {
+  if (!authorizeCron(req)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 

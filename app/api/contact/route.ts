@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readJson, writeJson } from "@/lib/server/db";
 import { notifyTeam } from "@/lib/server/notify";
 import { COMPANY } from "@/lib/company";
+import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -29,6 +30,9 @@ async function listMessages(): Promise<ContactMessage[]> {
 }
 
 export async function GET() {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   const list = await listMessages();
   return NextResponse.json({ messages: list, total: list.length });
 }

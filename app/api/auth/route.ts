@@ -35,7 +35,12 @@ export async function POST(request: Request) {
     }
 
     if (action === "change") {
-      const rl = await rateLimitAsync(clientKey(request, "auth-change"), 10, 60_000);
+      const rl = await rateLimitAsync(
+        clientKey(request, "auth-change"),
+        10,
+        60_000,
+        { failClosed: true },
+      );
       if (!rl.ok) {
         return NextResponse.json({ error: "Demasiados intentos. Espera un minuto." }, { status: 429 });
       }
@@ -82,8 +87,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, mustChange: false, username: newUsername.trim() });
     }
 
-    // login — límite estricto anti fuerza bruta
-    const rl = await rateLimitAsync(clientKey(request, "auth-login"), 8, 60_000);
+    // login — límite estricto anti fuerza bruta (fail-closed si KV cae en prod)
+    const rl = await rateLimitAsync(
+      clientKey(request, "auth-login"),
+      8,
+      60_000,
+      { failClosed: true },
+    );
     if (!rl.ok) {
       return NextResponse.json({ error: "Demasiados intentos. Espera un minuto." }, { status: 429 });
     }

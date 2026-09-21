@@ -261,17 +261,47 @@ export type CatalogPdfMeta = {
   origin?: string;
 };
 
+/** Rutas/hosts seguros para embeber en @react-pdf (anti-SSRF). */
+const PDF_ALLOWED_HOST_SUFFIXES = [
+  "blob.vercel-storage.com",
+  "public.blob.vercel-storage.com",
+  "lh3.googleusercontent.com",
+  "drive.google.com",
+  "googleusercontent.com",
+  "rgmotorschile.cl",
+] as const;
+
+function isPdfAllowedRemoteUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    return PDF_ALLOWED_HOST_SUFFIXES.some(
+      (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Rutas que @react-pdf no puede embeber (SVG, etc.). */
 export function isPdfSafeImagePath(path: string | undefined | null): boolean {
   if (!path) return false;
   if (/^data:image\/(jpeg|jpg|png|webp)/i.test(path)) return true;
   if (/\.svg(\?|$)/i.test(path)) return false;
   if (/placeholder/i.test(path)) return false;
-  return /\.(jpe?g|png|webp)(\?|$)/i.test(path) || path.startsWith("http");
+  if (/^https?:\/\//i.test(path)) {
+    return isPdfAllowedRemoteUrl(path);
+  }
+  return /\.(jpe?g|png|webp)(\?|$)/i.test(path);
 }
 
-function absUrl(origin: string | undefined, path: string) {
-  if (/^data:/i.test(path) || /^https?:\/\//i.test(path)) return path;
+function absUrl(origin: string | undefined, path: string): string | undefined {
+  if (/^data:/i.test(path)) return path;
+  if (/^https?:\/\//i.test(path)) {
+    return isPdfAllowedRemoteUrl(path) ? path : undefined;
+  }
   const resolved = asset(path);
   return origin ? `${origin}${resolved}` : resolved;
 }

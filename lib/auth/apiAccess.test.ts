@@ -38,9 +38,15 @@ describe("isPublicApi — política de acceso", () => {
     expect(isPublicApi("/api/vehicles", "GET", params)).toBe(false);
   });
 
-  it("permite cron sin cookie (auth propia del endpoint)", () => {
+  it("permite cron/webhook sin cookie (auth propia del endpoint)", () => {
     expect(isPublicApi("/api/cron/sync", "GET")).toBe(true);
+    expect(isPublicApi("/api/cron/sync", "POST")).toBe(true);
     expect(isPublicApi("/api/webhooks/inventory-sync", "POST")).toBe(true);
+    expect(isPublicApi("/api/webhooks/inventory-sync", "GET")).toBe(true);
+  });
+
+  it("bloquea POST /api/spin (solo admin)", () => {
+    expect(isPublicApi("/api/spin", "POST")).toBe(false);
   });
 
   it("protege APIs admin no listadas (ej. sync-sheet)", () => {

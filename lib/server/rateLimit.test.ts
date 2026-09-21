@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientKey, rateLimit } from "@/lib/server/rateLimit";
+import { clientIp, clientKey, rateLimit } from "@/lib/server/rateLimit";
 
 describe("rateLimit", () => {
   it("permite hasta el límite y luego bloquea", () => {
@@ -21,11 +21,24 @@ describe("rateLimit", () => {
     expect(rateLimit(key, 1, 15).ok).toBe(true);
   });
 
-  it("clientKey usa x-forwarded-for", () => {
+  it("clientIp prioriza cf-connecting-ip", () => {
+    const req = new Request("http://localhost/api/contact", {
+      headers: {
+        "cf-connecting-ip": "198.51.100.20",
+        "x-forwarded-for": "203.0.113.10, 10.0.0.1",
+        "x-real-ip": "192.0.2.1",
+      },
+    });
+    expect(clientIp(req)).toBe("198.51.100.20");
+    expect(clientKey(req, "contact")).toBe("contact:198.51.100.20");
+  });
+
+  it("clientIp usa el último hop de x-forwarded-for", () => {
     const req = new Request("http://localhost/api/contact", {
       headers: { "x-forwarded-for": "203.0.113.10, 10.0.0.1" },
     });
-    expect(clientKey(req, "contact")).toBe("contact:203.0.113.10");
+    expect(clientIp(req)).toBe("10.0.0.1");
+    expect(clientKey(req, "contact")).toBe("contact:10.0.0.1");
   });
 
   it("clientKey cae a unknown sin IP", () => {

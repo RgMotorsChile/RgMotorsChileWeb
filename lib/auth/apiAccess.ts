@@ -1,33 +1,8 @@
 /**
- * Política de acceso a APIs: qué es público vs qué exige sesión admin.
- * Extraído del middleware para poder testearlo sin NextRequest completo.
+ * Política de acceso a APIs: allowlist explícita de {ruta, métodos}.
+ * Todo lo no listado exige sesión admin en el middleware.
  */
 
-/** Prefijos donde POST crea leads/sesión (GET de listados NO es público). */
-const LEAD_OR_AUTH_PREFIXES = [
-  "/api/auth",
-  "/api/car-requests",
-  "/api/test-drives",
-  "/api/price-alerts",
-  "/api/trade-in",
-  "/api/contact",
-  "/api/credits",
-  "/api/reservations",
-  "/api/track",
-  "/api/simulations",
-] as const;
-
-/** GET de catálogo/ajustes públicos (sin listar borradores admin). */
-const PUBLIC_GET_PREFIXES = [
-  "/api/vehicles",
-  "/api/spin",
-  "/api/settings",
-  "/api/photos",
-  "/api/catalog",
-  "/api/health",
-] as const;
-
-/** Prefijos de leads cuyo GET lista PII y nunca debe ser público. */
 export const PII_LIST_PREFIXES = [
   "/api/car-requests",
   "/api/test-drives",
@@ -45,6 +20,68 @@ function matchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === p || pathname.startsWith(`${p}/`);
 }
 
+type PublicRule = {
+  methods: ReadonlySet<string>;
+  match: (pathname: string, searchParams?: URLSearchParams | null) => boolean;
+};
+
+/** Solo POST crea leads / sesión. */
+const LEAD_POST_PREFIXES = [
+  "/api/car-requests",
+  "/api/test-drives",
+  "/api/price-alerts",
+  "/api/trade-in",
+  "/api/contact",
+  "/api/credits",
+  "/api/reservations",
+  "/api/track",
+  "/api/simulations",
+] as const;
+
+const PUBLIC_GET_PREFIXES = [
+  "/api/vehicles",
+  "/api/spin",
+  "/api/settings",
+  "/api/photos",
+  "/api/catalog",
+  "/api/health",
+] as const;
+
+const PUBLIC_RULES: PublicRule[] = [
+  {
+    methods: new Set(["GET", "POST"]),
+    match: (p) => p.startsWith("/api/cron/"),
+  },
+  {
+    methods: new Set(["GET", "POST"]),
+    match: (p) => p.startsWith("/api/webhooks/inventory-sync"),
+  },
+  {
+    methods: new Set(["POST", "GET"]),
+    match: (p) => matchesPrefix(p, "/api/auth"),
+  },
+  {
+    methods: new Set(["POST"]),
+    match: (p) => LEAD_POST_PREFIXES.some((prefix) => matchesPrefix(p, prefix)),
+  },
+  {
+    methods: new Set(["GET"]),
+    match: (p, searchParams) => {
+      if (!PUBLIC_GET_PREFIXES.some((prefix) => matchesPrefix(p, prefix))) {
+        return false;
+      }
+      // Vista admin del catálogo
+      if (
+        matchesPrefix(p, "/api/vehicles") &&
+        searchParams?.get("admin") === "true"
+      ) {
+        return false;
+      }
+      return true;
+    },
+  },
+];
+
 /**
  * @returns true si la petición puede pasar sin cookie de admin.
  */
@@ -53,46 +90,8 @@ export function isPublicApi(
   method: string,
   searchParams?: URLSearchParams | null,
 ): boolean {
-  if (pathname.startsWith("/api/cron")) return true;
-  if (pathname.startsWith("/api/webhooks/inventory-sync")) return true;
-
-  if (LEAD_OR_AUTH_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
-    // Listados con PII: solo POST (crear) es público; GET/PATCH/PUT/DELETE requieren auth
-    if (method === "GET" && PII_LIST_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
-      return false;
-    }
-
-    if (
-      (method === "PATCH" || method === "PUT" || method === "DELETE") &&
-      (matchesPrefix(pathname, "/api/credits/") ||
-        matchesPrefix(pathname, "/api/reservations/") ||
-        matchesPrefix(pathname, "/api/vehicles/") ||
-        matchesPrefix(pathname, "/api/car-requests/") ||
-        matchesPrefix(pathname, "/api/test-drives/") ||
-        matchesPrefix(pathname, "/api/price-alerts/") ||
-        matchesPrefix(pathname, "/api/trade-in/"))
-    ) {
-      return false;
-    }
-
-    if (method === "PUT" && pathname.startsWith("/api/vehicles")) return false;
-    if (method === "POST" && pathname.startsWith("/api/vehicles")) return false;
-    return true;
-  }
-
-  if (
-    method === "GET" &&
-    PUBLIC_GET_PREFIXES.some((p) => matchesPrefix(pathname, p))
-  ) {
-    // ?admin=true en vehículos no es público (borradores / vista admin)
-    if (
-      pathname.startsWith("/api/vehicles") &&
-      searchParams?.get("admin") === "true"
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  return false;
+  const m = method.toUpperCase();
+  return PUBLIC_RULES.some(
+    (rule) => rule.methods.has(m) && rule.match(pathname, searchParams),
+  );
 }

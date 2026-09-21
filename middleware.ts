@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/auth/session";
 import { isPublicApi } from "@/lib/auth/apiAccess";
+import { isMachineAuthPath } from "@/lib/auth/machineAuth";
 import { applySecurityHeaders, rejectUntrustedOrigin } from "@/lib/server/security";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -10,11 +11,12 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const method = request.method;
 
-  // CSRF básico en mutaciones de API públicas (leads / auth)
+  // CSRF básico en mutaciones públicas. Cron/webhook usan Bearer (sin Origin).
   if (
     pathname.startsWith("/api/") &&
     MUTATING.has(method) &&
-    isPublicApi(pathname, method, request.nextUrl.searchParams)
+    isPublicApi(pathname, method, request.nextUrl.searchParams) &&
+    !isMachineAuthPath(pathname)
   ) {
     const blocked = rejectUntrustedOrigin(request);
     if (blocked) return applySecurityHeaders(blocked);

@@ -35,6 +35,7 @@ export function optionalValidRut(rut: string | undefined | null): string | null 
 /**
  * En producción exige Origin/Referer del mismo host (anti-CSRF básico para POST públicos).
  * En local/CI se relaja para no romper Playwright.
+ * Rutas máquina (cron/webhook con Bearer) no usan Origin: Apps Script no lo envía.
  */
 export function rejectUntrustedOrigin(req: NextRequest | Request): NextResponse | null {
   const enforce =
@@ -121,7 +122,16 @@ export async function guardPublicLeadPost(
   return { ok: true, body };
 }
 
+/** CSP + cabeceras — fuente única; vercel.json debe espejar script/style críticos. */
 export function securityHeaders(): Record<string, string> {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "https://www.rgmotorschile.cl";
+  let siteHost = "www.rgmotorschile.cl";
+  try {
+    siteHost = new URL(site).host;
+  } catch {
+    /* noop */
+  }
+
   const headers: Record<string, string> = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -129,14 +139,14 @@ export function securityHeaders(): Record<string, string> {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "X-DNS-Prefetch-Control": "on",
     "Cross-Origin-Opener-Policy": "same-origin",
-    // CSP básica: permite Next.js + imágenes remotas (Drive/Blob)
+    // Next App Router aún requiere inline para bootstrap; sin unsafe-eval.
     "Content-Security-Policy": [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
+      "img-src 'self' data: blob: https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://lh3.googleusercontent.com https://drive.google.com",
       "font-src 'self' data:",
-      "connect-src 'self' https:",
+      `connect-src 'self' https://${siteHost} https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com`,
       "frame-src 'self' https://maps.google.com https://www.google.com https://www.google.com/maps",
       "frame-ancestors 'none'",
       "base-uri 'self'",
