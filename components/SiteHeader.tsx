@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import Logo from "./Logo";
 import { COMPANY, whatsappLink } from "@/lib/company";
 import TradeInModal from "./TradeInModal";
@@ -17,38 +17,11 @@ const NAV_LINKS = [
 ];
 
 /** Píxeles de scroll para pasar a negro sólido en Inicio. */
-const HOME_SOLID_AFTER_PX = 24;
+const HOME_SOLID_AFTER_PX = 48;
 
 function getScrollY() {
+  if (typeof window === "undefined") return 0;
   return window.scrollY || document.documentElement.scrollTop || 0;
-}
-
-function subscribeScroll(onChange: () => void) {
-  window.addEventListener("scroll", onChange, { passive: true });
-  window.addEventListener("resize", onChange, { passive: true });
-  window.addEventListener("pageshow", onChange);
-  return () => {
-    window.removeEventListener("scroll", onChange);
-    window.removeEventListener("resize", onChange);
-    window.removeEventListener("pageshow", onChange);
-  };
-}
-
-function getScrolledSnapshot() {
-  return getScrollY() > HOME_SOLID_AFTER_PX;
-}
-
-/** SSR + primer paint: nunca “scrolleado” → transparente en Inicio. */
-function getScrolledServerSnapshot() {
-  return false;
-}
-
-function useScrolledPast() {
-  return useSyncExternalStore(
-    subscribeScroll,
-    getScrolledSnapshot,
-    getScrolledServerSnapshot,
-  );
 }
 
 function normalizePathname(value: string | null | undefined): string {
@@ -58,22 +31,70 @@ function normalizePathname(value: string | null | undefined): string {
 }
 
 /**
- * En Next 16, usePathname() en el layout cliente puede venir vacío/null en el SSR de `/`
- * (el HTML de prod salía sticky + negro con ningún nav activo). Tratar vacío como Inicio.
+ * En Next, usePathname() en el layout cliente puede venir vacío en el SSR de `/`.
+ * Tratar vacío como Inicio para no pintar el header negro en el primer HTML.
  */
 function isHomePath(pathname: string | null | undefined) {
   const normalized = normalizePathname(pathname);
   return !pathname || normalized === "" || normalized === "/";
 }
 
+/**
+ * En Inicio: transparente hasta que el usuario scrollee de verdad.
+ *
+ * No usamos useSyncExternalStore(getScrollSnapshot): al hydratar o al volver a `/`
+ * el navegador/Next puede dejar scrollY>0 (o resetear a 0 sin evento `scroll`) y el
+ * header quedaba negro con la página visualmente arriba.
+ */
+function useHomeSolidHeader(isHome: boolean) {
+  // Regla: primer paint en Inicio siempre transparente (nunca negro antes de scroll).
+  const [solid, setSolid] = useState(false);
+
+  useEffect(() => {
+    if (!isHome) {
+      setSolid(false);
+      return;
+    }
+
+    // Entrar a Inicio: transparente de inmediato (regla #1).
+    setSolid(false);
+
+    let cancelled = false;
+    const syncFromScroll = () => {
+      if (cancelled) return;
+      setSolid(getScrollY() > HOME_SOLID_AFTER_PX);
+    };
+
+    // Next puede resetear scrollY a 0 sin disparar `scroll`; re-sincronizar en varios ticks.
+    const timers = [0, 50, 120, 250, 500].map((ms) =>
+      window.setTimeout(syncFromScroll, ms),
+    );
+
+    window.addEventListener("scroll", syncFromScroll, { passive: true });
+    window.addEventListener("resize", syncFromScroll, { passive: true });
+    window.addEventListener("pageshow", syncFromScroll);
+
+    return () => {
+      cancelled = true;
+      for (const t of timers) window.clearTimeout(t);
+      window.removeEventListener("scroll", syncFromScroll);
+      window.removeEventListener("resize", syncFromScroll);
+      window.removeEventListener("pageshow", syncFromScroll);
+    };
+  }, [isHome]);
+
+  return isHome && solid;
+}
+
 export default function SiteHeader() {
   const pathname = usePathname();
-  const scrolledPast = useScrolledPast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tradeInOpen, setTradeInOpen] = useState(false);
   const [carRequestOpen, setCarRequestOpen] = useState(false);
 
   const path = normalizePathname(pathname) || "/";
+  const isHome = isHomePath(pathname);
+  const homeSolid = useHomeSolidHeader(isHome);
 
   const isActive = (href: string) => {
     const target = normalizePathname(href);
@@ -81,8 +102,6 @@ export default function SiteHeader() {
       ? isHomePath(pathname)
       : path === target || path.startsWith(`${target}/`);
   };
-
-  const isHome = isHomePath(pathname);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -94,7 +113,7 @@ export default function SiteHeader() {
   };
 
   // Inicio + arriba + menú cerrado → transparente sobre el hero.
-  const homeFloating = isHome && !scrolledPast && !mobileMenuOpen;
+  const homeFloating = isHome && !homeSolid && !mobileMenuOpen;
 
   return (
     <>
