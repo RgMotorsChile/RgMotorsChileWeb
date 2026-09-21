@@ -20,7 +20,7 @@ const NAV_LINKS = [
 const HOME_SOLID_AFTER_PX = 24;
 
 function getScrollY() {
-  return window.scrollY || document.documentElement.scrollTop || 0;
+  return window.scrollY;
 }
 
 function subscribeScroll(onChange: () => void) {
