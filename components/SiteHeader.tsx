@@ -40,14 +40,13 @@ function isHomePath(pathname: string | null | undefined) {
 }
 
 /**
- * En Inicio: transparente hasta que el usuario scrollee de verdad.
+ * En Inicio: transparente hasta un evento `scroll` real del usuario.
  *
- * No usamos useSyncExternalStore(getScrollSnapshot): al hydratar o al volver a `/`
- * el navegador/Next puede dejar scrollY>0 (o resetear a 0 sin evento `scroll`) y el
- * header quedaba negro con la página visualmente arriba.
+ * No sincronizar scrollY al montar (timers/pageshow): el navegador puede
+ * restaurar Y>0 un instante, pintar negro, y luego volver a 0 sin disparar
+ * `scroll` → header negro con la página arriba (bug reportado).
  */
 function useHomeSolidHeader(isHome: boolean) {
-  // Regla: primer paint en Inicio siempre transparente (nunca negro antes de scroll).
   const [solid, setSolid] = useState(false);
 
   useEffect(() => {
@@ -56,31 +55,14 @@ function useHomeSolidHeader(isHome: boolean) {
       return;
     }
 
-    // Entrar a Inicio: transparente de inmediato (regla #1).
     setSolid(false);
 
-    let cancelled = false;
-    const syncFromScroll = () => {
-      if (cancelled) return;
+    const onScroll = () => {
       setSolid(getScrollY() > HOME_SOLID_AFTER_PX);
     };
 
-    // Next puede resetear scrollY a 0 sin disparar `scroll`; re-sincronizar en varios ticks.
-    const timers = [0, 50, 120, 250, 500].map((ms) =>
-      window.setTimeout(syncFromScroll, ms),
-    );
-
-    window.addEventListener("scroll", syncFromScroll, { passive: true });
-    window.addEventListener("resize", syncFromScroll, { passive: true });
-    window.addEventListener("pageshow", syncFromScroll);
-
-    return () => {
-      cancelled = true;
-      for (const t of timers) window.clearTimeout(t);
-      window.removeEventListener("scroll", syncFromScroll);
-      window.removeEventListener("resize", syncFromScroll);
-      window.removeEventListener("pageshow", syncFromScroll);
-    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [isHome]);
 
   return isHome && solid;
