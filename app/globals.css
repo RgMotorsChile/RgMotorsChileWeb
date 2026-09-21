@@ -489,3 +489,29 @@ input[type="range"].apple-range::-moz-range-thumb {
 .animate-fade-up {
   animation: rg-fade-up 0.7s var(--rg-ease) both;
 }
+
+/**
+ * Header en Inicio: transparente por CSS (:has), sin depender de usePathname() en SSG.
+ * El HTML estático de `/` a veces no ve pathname === "/" y salía sticky+negro.
+ * data-solid="true" lo pone el cliente solo al salir del top (IntersectionObserver).
+ */
+body:has([data-page="home"]) .site-header {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  background-color: transparent !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body:has([data-page="home"]) .site-header[data-solid="true"] {
+  background-color: #06070a !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+body:has([data-page="home"]) .site-header[data-menu-open="true"] {
+  background-color: #06070a !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}

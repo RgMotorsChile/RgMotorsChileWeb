@@ -16,56 +16,65 @@ const NAV_LINKS = [
   { href: "/contacto", label: "Contacto" },
 ];
 
-/** Píxeles de scroll para pasar a negro sólido en Inicio. */
-const HOME_SOLID_AFTER_PX = 48;
-
-function getScrollY() {
-  if (typeof window === "undefined") return 0;
-  return window.scrollY || document.documentElement.scrollTop || 0;
-}
-
 function normalizePathname(value: string | null | undefined): string {
   if (!value) return "";
   if (value.length > 1 && value.endsWith("/")) return value.slice(0, -1);
   return value;
 }
 
-/**
- * En Next, usePathname() en el layout cliente puede venir vacío en el SSR de `/`.
- * Tratar vacío como Inicio para no pintar el header negro en el primer HTML.
- */
 function isHomePath(pathname: string | null | undefined) {
   const normalized = normalizePathname(pathname);
   return !pathname || normalized === "" || normalized === "/";
 }
 
 /**
- * En Inicio: transparente hasta un evento `scroll` real del usuario.
- *
- * No sincronizar scrollY al montar (timers/pageshow): el navegador puede
- * restaurar Y>0 un instante, pintar negro, y luego volver a 0 sin disparar
- * `scroll` → header negro con la página arriba (bug reportado).
+ * Negro sólido solo cuando el sentinel `#rg-home-top` deja de ser visible.
+ * El fondo transparente en Inicio lo fuerza CSS (`body:has([data-page="home"])`),
+ * porque el HTML estático de `/` a veces no veía pathname === "/".
  */
-function useHomeSolidHeader(isHome: boolean) {
-  const [solid, setSolid] = useState(false);
+function useHomeLeftTop(isHome: boolean) {
+  const [leftTop, setLeftTop] = useState(false);
 
   useEffect(() => {
     if (!isHome) {
-      setSolid(false);
+      setLeftTop(false);
       return;
     }
 
-    setSolid(false);
+    let io: IntersectionObserver | null = null;
+    let cancelled = false;
 
-    const onScroll = () => {
-      setSolid(getScrollY() > HOME_SOLID_AFTER_PX);
+    const attach = () => {
+      const el = document.getElementById("rg-home-top");
+      if (!el || cancelled) {
+        setLeftTop(false);
+        return false;
+      }
+      io = new IntersectionObserver(
+        ([entry]) => setLeftTop(!entry?.isIntersecting),
+        { threshold: 0 },
+      );
+      io.observe(el);
+      return true;
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    if (!attach()) {
+      // Sentinel monta con la page RSC un tick después del layout.
+      const t = window.setTimeout(() => attach(), 0);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(t);
+        io?.disconnect();
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      io?.disconnect();
+    };
   }, [isHome]);
 
-  return isHome && solid;
+  return leftTop;
 }
 
 export default function SiteHeader() {
@@ -76,7 +85,7 @@ export default function SiteHeader() {
 
   const path = normalizePathname(pathname) || "/";
   const isHome = isHomePath(pathname);
-  const homeSolid = useHomeSolidHeader(isHome);
+  const leftTop = useHomeLeftTop(isHome);
 
   const isActive = (href: string) => {
     const target = normalizePathname(href);
@@ -94,20 +103,12 @@ export default function SiteHeader() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Inicio + arriba + menú cerrado → transparente sobre el hero.
-  const homeFloating = isHome && !homeSolid && !mobileMenuOpen;
-
   return (
     <>
       <header
-        data-home-floating={homeFloating ? "true" : "false"}
-        className={`z-40 transition-[background-color,border-color,backdrop-filter] duration-300 ease-out ${
-          isHome ? "fixed inset-x-0 top-0" : "sticky top-0"
-        } ${
-          homeFloating
-            ? "border-b border-transparent bg-transparent shadow-none backdrop-blur-none"
-            : "border-b border-white/[0.08] bg-[#06070a]"
-        }`}
+        className="site-header z-40 sticky top-0 border-b border-white/[0.08] bg-[#06070a] transition-[background-color,border-color,backdrop-filter] duration-300 ease-out"
+        data-solid={leftTop ? "true" : "false"}
+        data-menu-open={mobileMenuOpen ? "true" : "false"}
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:gap-6 sm:px-6 sm:py-3.5">

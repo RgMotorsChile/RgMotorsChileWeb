@@ -22,7 +22,13 @@ export default async function Home() {
   const featured = pickFeaturedVehicles(vehicles, 6).map(stripPlateForPublic);
 
   return (
-    <main className="relative overflow-x-clip">
+    <main data-page="home" className="relative overflow-x-clip">
+      {/* Sentinel: IntersectionObserver del header (arriba = transparente). */}
+      <div
+        id="rg-home-top"
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 h-px w-px"
+      />
       {/* HERO — mockup cinematográfico + acabado */}
       <section className="relative isolate rg-hero-min overflow-hidden">
         <Image
