@@ -1,12 +1,20 @@
 /**
- * Guardas anti-wipe y reglas de inventario desde Sheets (solo RG MOTORS).
+ * Guardas anti-wipe y reglas de inventario desde Sheets.
+ * Multitenant: pestaña según tenant (RG MOTORS | UNIDADES CHILE).
  */
+import {
+  TENANT_SHEETS,
+  isSheetTabForTenant,
+} from "@/lib/tenants/sheetConfig";
 
-/** Única pestaña de stock que alimenta el sitio. */
-export const INVENTORY_SHEET_TAB = "RG MOTORS";
+/** @deprecated Prefer getTenantSheetConfig(slug).sheetTab */
+export const INVENTORY_SHEET_TAB = TENANT_SHEETS["rg-motors"]!.sheetTab;
 
-export function isInventorySheetTab(name: string): boolean {
-  return name.trim().toUpperCase() === INVENTORY_SHEET_TAB;
+export function isInventorySheetTab(
+  name: string,
+  tenantSlug: string = "rg-motors",
+): boolean {
+  return isSheetTabForTenant(name, tenantSlug);
 }
 
 /**

@@ -17,11 +17,15 @@
     "test:all": "npm run lint && npm run test && npm run test:e2e",
     "demo:frames": "node scripts/generate-demo-frames.mjs",
     "spin:video": "node scripts/video-to-spin.mjs",
-    "drive:oauth": "node scripts/google-drive-oauth-setup.mjs"
+    "drive:oauth": "node scripts/google-drive-oauth-setup.mjs",
+    "autofin:scrape": "node scripts/scrape-autofin-rate-matrix.mjs --product=2",
+    "autofin:generate": "node scripts/generate-autofin-rate-table.mjs",
+    "autofin:sync-ci": "node scripts/sync-autofin-rates-ci.mjs --ci"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.3",
     "@react-pdf/renderer": "^4.5.1",
+    "@supabase/supabase-js": "^2.117.0",
     "@vercel/blob": "^2.8.0",
     "@vercel/kv": "^3.0.0",
     "cross-spawn": "^7.0.6",

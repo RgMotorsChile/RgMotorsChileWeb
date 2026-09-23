@@ -9,7 +9,7 @@ Documento de alcance para práctica profesional y operación.
 |----------|-----------|
 | ¿Hay contrato WebPay / Transbank? | **No.** No hay cobro online. |
 | ¿La reserva web cobra? | **No.** Es solicitud (`Pendiente`); abono por WhatsApp/tienda. |
-| ¿Hay Supabase / SQL? | **No.** JSON local y/o Vercel KV. |
+| ¿Hay Supabase / SQL? | **Sí.** Catálogo en `catalog_vehicles` (tenant `rg-motors`). Leads/settings pueden seguir en KV. |
 | ¿360° es promesa comercial? | **No en este release** (código existe, flag apagado). |
 | ¿Email al equipo? | **Resend** si `RESEND_API_KEY`; si no, stub (log + JSON) |
 | ¿Listo para producción comercial dura? | **Hardening P0 en código** — falta configurar env Vercel + DNS (ver `docs/GO-LIVE-CHECKLIST.md`). |
@@ -18,7 +18,8 @@ Documento de alcance para práctica profesional y operación.
 
 ### Sitio público
 - Home, catálogo con filtros, ficha de vehículo, comparador.
-- Simulador de crédito **referencial** (lógica Autofin-like: pie ≥20%, plazo ≤48, cuota francesa).
+- Simulador de crédito **referencial** (lógica Autofin Trinidad: pie ≥20%, plazo ≤48, cuota francesa all-in).
+- Tasas tipadas en `lib/finance/autofin-rate-table.ts`. **CI semanal** (`.github/workflows/autofin-rates.yml`) detecta drift vs `spider/fee` (±1%) y abre PR; si Cloudflare bloquea, crea issue `autofin-rates`. Plan B: scrape local headed.
 - Disclaimers SERNAC / aviso de crédito (`/aviso-credito`).
 - Páginas legales: `/privacidad`, `/terminos`.
 - Formularios: contacto, solicitud de crédito, reserva, prueba de manejo, trade-in, alertas de precio.
@@ -30,8 +31,9 @@ Documento de alcance para práctica profesional y operación.
 - CRM de leads, inventario, settings, sync Google Sheets / Drive (según env y permisos de planillas).
 
 ### Persistencia
-- `lib/server/db.ts`: Vercel KV si hay `KV_REST_API_*`; si no, `data/` o `os.tmpdir()` en serverless.
-- **En producción Vercel se requiere KV** (o equivalente) para no perder leads e inventario.
+- **Catálogo vehículos:** Supabase (`catalog_vehicles`).
+- **Leads / mensajes / settings / telemetría:** `lib/server/db.ts` → Vercel KV si hay `KV_REST_API_*`; si no, `data/` o `os.tmpdir()`.
+- Inventario bodega (app aparte): Supabase tenant `rg-motors` — ver `SistemaInventario RgMotors/docs/SUPABASE-CUTOVER.md`.
 
 ## Qué NO está (y no se debe vender como hecho)
 
@@ -42,8 +44,8 @@ Documento de alcance para práctica profesional y operación.
 | Portal cliente `/cuenta` | Stub “próximamente” | Roadmap |
 | Tours 360° comerciales | Código técnico, no release | Roadmap |
 | Email/SMS transaccional | Stub | Conectar Resend/SMTP |
-| Base SQL (Postgres) | No | Opcional futuro |
-| App móvil nativa | No | Fuera de alcance |
+| Base SQL (Postgres) | **Sí (Supabase)** | Catálogo + inventario bodega |
+| App móvil nativa | Flutter inventario | Bodega (no vitrina cliente) |
 
 ## Pagos y WebPay (posición oficial del proyecto)
 

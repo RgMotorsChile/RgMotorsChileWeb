@@ -144,11 +144,17 @@ export interface SyncReport {
   skippedIncomplete?: number;
 }
 
-export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<SyncReport> {
+export async function syncFromLiveGoogleSheet(
+  customSheetId?: string,
+  opts?: { tenantSlug?: string },
+): Promise<SyncReport> {
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
   const sheetId = resolveSheetId(customSheetId);
   const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
 
-  console.log(`[GoogleSheetSync] Descargando inventario en vivo desde Google Sheets (${sheetId})...`);
+  console.log(
+    `[GoogleSheetSync] Descargando inventario (${sheetId}) tenant=${tenantSlug}…`,
+  );
 
   let res: { buffer: Buffer; statusCode: number };
   try {
@@ -214,7 +220,7 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
   }> = [];
 
   for (const name of workbook.SheetNames) {
-    if (!isInventorySheetTab(name)) continue;
+    if (!isInventorySheetTab(name, tenantSlug)) continue;
 
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
@@ -283,7 +289,10 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
   );
 
   // Load current inventory
-  const currentVehicles = await getVehicles();
+  const currentVehicles = await getVehicles({
+    bypassCache: true,
+    tenantSlug,
+  });
   const currentActive = currentVehicles.filter((v) => {
     const st = v.status || "Disponible";
     return st !== "Vendido" && st !== "Borrador" && st !== "En preparación";
@@ -467,13 +476,13 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
   });
 
   // Persistencia + invalidación de caché (no reportar éxito si KV falla)
-  const saved = await replaceAllVehicles(updatedActiveList);
+  const saved = await replaceAllVehicles(updatedActiveList, { tenantSlug });
   if (!saved.success) {
     return {
       success: false,
       message:
         saved.error ||
-        "Sync Sheets calculó el inventario pero no se pudo persistir en KV.",
+        "Sync Sheets calculó el inventario pero no se pudo persistir.",
       totalActive: updatedActiveList.length,
       newVehicles: newCount,
       soldVehicles: soldCount,
@@ -487,7 +496,7 @@ export async function syncFromLiveGoogleSheet(customSheetId?: string): Promise<S
 
   return {
     success: true,
-    message: `Sincronización RG MOTORS: ${updatedActiveList.length} listos para vitrina, ${newCount} nuevos, ${soldCount} vendidos archivados, ${updatedCount} actualizados, ${skippedIncomplete} omitidos (preparación/sin precio/km).${wipeGuard.skipArchive ? ` Nota: ${wipeGuard.reason}` : ""}`,
+    message: `Sincronización ${tenantSlug}: ${updatedActiveList.length} listos para vitrina, ${newCount} nuevos, ${soldCount} vendidos archivados, ${updatedCount} actualizados, ${skippedIncomplete} omitidos (preparación/sin precio/km).${wipeGuard.skipArchive ? ` Nota: ${wipeGuard.reason}` : ""}`,
     totalActive: updatedActiveList.length,
     newVehicles: newCount,
     soldVehicles: soldCount,

@@ -1,11 +1,10 @@
-import { readJson, writeJson } from "./db";
 import { Vehicle, vehicles as initialVehicles } from "@/lib/vehicles";
 import { withFrontCover } from "@/lib/vehicles/frontCoverMap";
 import { enrichVehicleTechSpec } from "@/lib/vehicles/techSpecs";
 import { cacheGet, cacheInvalidate, cacheSet } from "./memoryCache";
 import { logStorageHealthOnce } from "./storageHealth";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 
-const FILENAME = "vehicles.json";
 const CACHE_KEY = "vehicles:list";
 /** Caché corta: lecturas de vitrina. Escrituras siempre bypasan caché. */
 const CACHE_TTL_MS = 60_000;
@@ -31,19 +30,36 @@ function normalizeVehicle(vehicle: Vehicle): Vehicle {
 
 export async function getVehicles(opts?: {
   bypassCache?: boolean;
+  tenantSlug?: string;
 }): Promise<Vehicle[]> {
   logStorageHealthOnce();
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
+  const cacheKey =
+    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
+
   if (!opts?.bypassCache) {
-    const cached = cacheGet<Vehicle[]>(CACHE_KEY);
+    const cached = cacheGet<Vehicle[]>(cacheKey);
     if (cached) return cached;
   }
 
-  const list = await readJson<Vehicle[]>(FILENAME, initialVehicles);
-  const safeList = Array.isArray(list) ? list : initialVehicles;
-  if (!Array.isArray(list)) {
-    console.error("[vehiclesStore] vehicles.json no es un array — usando fallback.");
+  // Fuente de verdad: Supabase. Sin fallback KV (evita stock stale).
+  if (isSupabaseConfigured()) {
+    try {
+      const { getCatalogVehiclesFromSupabase } =
+        await import("@/lib/server/catalogSupabase");
+      const remote = await getCatalogVehiclesFromSupabase(tenantSlug);
+      const cleaned = (remote ?? []).map(normalizeVehicle);
+      cacheSet(cacheKey, cleaned, CACHE_TTL_MS);
+      return cleaned;
+    } catch (err) {
+      console.error("[vehiclesStore] Supabase falló:", err);
+      return [];
+    }
   }
-  const cleaned = safeList.map(normalizeVehicle);
+
+  // Solo local/dev sin Supabase: seed estático RG.
+  if (tenantSlug !== "rg-motors") return [];
+  const cleaned = initialVehicles.map(normalizeVehicle);
   cacheSet(CACHE_KEY, cleaned, CACHE_TTL_MS);
   return cleaned;
 }
@@ -59,40 +75,69 @@ export async function getVehicleBySlug(
 /** Reemplaza el inventario completo (import Excel / sync). */
 export async function replaceAllVehicles(
   vehicles: Vehicle[],
+  opts?: { tenantSlug?: string },
 ): Promise<{ success: boolean; count: number; error?: string }> {
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
   const normalized = vehicles.map(normalizeVehicle);
-  const ok = await writeJson(FILENAME, normalized);
+
+  try {
+    const { upsertCatalogVehiclesToSupabase } =
+      await import("@/lib/server/catalogSupabase");
+    const remote = await upsertCatalogVehiclesToSupabase(normalized, tenantSlug);
+    if (!remote.ok) {
+      return {
+        success: false,
+        count: 0,
+        error: remote.error || "No se pudo guardar en Supabase",
+      };
+    }
+  } catch (err) {
+    console.warn("[vehiclesStore] Supabase upsert falló:", err);
+    return {
+      success: false,
+      count: 0,
+      error: "Supabase no disponible",
+    };
+  }
+
+  const cacheKey =
+    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
   cacheInvalidate("vehicles:");
-  if (!ok) return { success: false, count: 0, error: "Error al guardar el inventario." };
-  cacheSet(CACHE_KEY, normalized, CACHE_TTL_MS);
+  cacheSet(cacheKey, normalized, CACHE_TTL_MS);
+
   return { success: true, count: normalized.length };
 }
 
 export async function saveVehicle(
   vehicle: Vehicle,
 ): Promise<{ success: boolean; vehicle?: Vehicle; error?: string }> {
-  // Siempre leer fresco: subidas secuenciales no deben pisarse por caché stale
   const list = await getVehicles({ bypassCache: true });
   const normalized = normalizeVehicle(vehicle);
   const next = list.slice();
   const existingIdx = next.findIndex((v) => v.slug === normalized.slug);
 
   if (existingIdx >= 0) {
-    // Merge explícito: no perder gallery/image si normalize no los toca
     next[existingIdx] = { ...next[existingIdx], ...normalized };
   } else {
     next.unshift(normalized);
   }
 
-  const ok = await writeJson(FILENAME, next);
-  cacheInvalidate("vehicles:");
-  if (!ok) {
-    return {
-      success: false,
-      error:
-        "No se pudo guardar el inventario (KV). La foto puede haberse subido; reintenta o revisa BLOB/KV.",
-    };
+  try {
+    const { upsertCatalogVehiclesToSupabase } =
+      await import("@/lib/server/catalogSupabase");
+    const remote = await upsertCatalogVehiclesToSupabase([normalized], "rg-motors");
+    if (!remote.ok) {
+      return {
+        success: false,
+        error: remote.error || "No se pudo guardar en Supabase",
+      };
+    }
+  } catch (err) {
+    console.warn("[vehiclesStore] saveVehicle Supabase:", err);
+    return { success: false, error: "Supabase no disponible" };
   }
+
+  cacheInvalidate("vehicles:");
   cacheSet(CACHE_KEY, next.map(normalizeVehicle), CACHE_TTL_MS);
   return { success: true, vehicle: normalized };
 }
@@ -105,8 +150,20 @@ export async function deleteVehicle(
   if (filtered.length === list.length) {
     return { success: false, error: "Vehículo no encontrado." };
   }
-  const ok = await writeJson(FILENAME, filtered);
+
+  try {
+    const { deleteCatalogVehicleFromSupabase } =
+      await import("@/lib/server/catalogSupabase");
+    const remote = await deleteCatalogVehicleFromSupabase(slug, "rg-motors");
+    if (!remote.ok) {
+      return { success: false, error: remote.error || "No se pudo borrar en Supabase" };
+    }
+  } catch (err) {
+    console.warn("[vehiclesStore] deleteVehicle Supabase:", err);
+    return { success: false, error: "Supabase no disponible" };
+  }
+
   cacheInvalidate("vehicles:");
-  if (!ok) return { success: false, error: "Error al eliminar del almacenamiento." };
+  cacheSet(CACHE_KEY, filtered, CACHE_TTL_MS);
   return { success: true };
 }
