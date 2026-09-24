@@ -104,6 +104,12 @@ export default function AdminPage() {
             >
               ← Volver al sitio público
             </Link>
+            <a
+              href="https://unidades-chile-web.vercel.app/admin"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/5 hover:text-white transition"
+            >
+              Panel Unidades Chile
+            </a>
             <button
               onClick={handleLogout}
               className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-red-400/80 hover:text-red-300 transition"
