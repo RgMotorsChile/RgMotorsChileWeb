@@ -38,9 +38,17 @@ export const metadata: Metadata = {
     "Puerto Montt",
     "Chile",
   ],
+  verification: {
+    google: "z1N9PtHMM1li_Sl2q1YPE9bfWwGy8Sl44nxpp-EkV9w",
+  },
+  robots: { index: true, follow: true },
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48.png", type: "image/png", sizes: "48x48" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "RG Motors — Vehículos Seleccionados en Puerto Montt",
@@ -48,7 +56,13 @@ export const metadata: Metadata = {
       "Automotora en Puerto Montt. Catálogo con fotografías reales e financiamiento Autofin referencial.",
     type: "website",
     locale: "es_CL",
-    images: [{ url: "/logo.png", width: 512, height: 512, alt: "RG Motors" }],
+    images: [
+      { url: "/og-image.png", width: 1200, height: 630, alt: "RG Motors" },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/og-image.png"],
   },
 };
 
