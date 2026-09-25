@@ -84,6 +84,17 @@ describe("evaluateSheetWipeGuard", () => {
     expect(r.skipArchive).toBe(true);
   });
 
+  it("permite achicar si la hoja es un subconjunto claro del stock", () => {
+    const r = evaluateSheetWipeGuard({
+      sheetActiveCount: 20,
+      currentActiveCount: 32,
+      wouldArchiveCount: 12,
+      sheetOverlapCount: 20,
+    });
+    expect(r.abortAll).toBe(false);
+    expect(r.skipArchive).toBe(false);
+  });
+
   it("permite archivo normal con caída chica", () => {
     const r = evaluateSheetWipeGuard({
       sheetActiveCount: 28,

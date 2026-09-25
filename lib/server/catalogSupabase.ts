@@ -145,6 +145,50 @@ export async function upsertCatalogVehiclesToSupabase(
   }
 }
 
+/** Reemplaza el catálogo del tenant: upsert + borra slugs que ya no vienen. */
+export async function replaceCatalogVehiclesInSupabase(
+  vehicles: Vehicle[],
+  tenantSlug: string = RG_MOTORS_TENANT_SLUG,
+): Promise<{ ok: boolean; count: number; deleted?: number; error?: string }> {
+  const upserted = await upsertCatalogVehiclesToSupabase(vehicles, tenantSlug);
+  if (!upserted.ok) return upserted;
+  if (!isSupabaseConfigured()) {
+    return { ok: false, count: 0, error: "Supabase no configurado" };
+  }
+  try {
+    const sb = createServerSupabase();
+    const { data: tenant, error: tErr } = await sb
+      .from("tenants")
+      .select("id")
+      .eq("slug", tenantSlug)
+      .maybeSingle();
+    if (tErr || !tenant) {
+      return { ok: false, count: 0, error: tErr?.message || "Tenant no encontrado" };
+    }
+    const keep = new Set(vehicles.map((v) => v.slug));
+    const { data: existing, error: listErr } = await sb
+      .from("catalog_vehicles")
+      .select("slug")
+      .eq("tenant_id", tenant.id);
+    if (listErr) return { ok: false, count: upserted.count, error: listErr.message };
+    const extras = (existing || [])
+      .map((r) => String((r as { slug?: string }).slug || ""))
+      .filter((slug) => slug && !keep.has(slug));
+    if (extras.length) {
+      const { error: delErr } = await sb
+        .from("catalog_vehicles")
+        .delete()
+        .eq("tenant_id", tenant.id)
+        .in("slug", extras);
+      if (delErr) return { ok: false, count: upserted.count, error: delErr.message };
+    }
+    return { ok: true, count: upserted.count, deleted: extras.length };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, count: upserted.count, error: msg };
+  }
+}
+
 /** Borra un vehículo del catálogo por slug. */
 export async function deleteCatalogVehicleFromSupabase(
   slug: string,

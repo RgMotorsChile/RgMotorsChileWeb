@@ -81,9 +81,9 @@ export async function replaceAllVehicles(
   const normalized = vehicles.map(normalizeVehicle);
 
   try {
-    const { upsertCatalogVehiclesToSupabase } =
+    const { replaceCatalogVehiclesInSupabase } =
       await import("@/lib/server/catalogSupabase");
-    const remote = await upsertCatalogVehiclesToSupabase(normalized, tenantSlug);
+    const remote = await replaceCatalogVehiclesInSupabase(normalized, tenantSlug);
     if (!remote.ok) {
       return {
         success: false,

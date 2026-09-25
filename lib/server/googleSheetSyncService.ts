@@ -319,10 +319,14 @@ export async function syncFromLiveGoogleSheet(
     }
   }
 
+  const sheetOverlap = sheetReadyRows.filter((s) =>
+    currentPlateMap.has(s.plate),
+  ).length;
   const wipeGuard = evaluateSheetWipeGuard({
     sheetActiveCount: sheetReadyRows.length,
     currentActiveCount: currentActive.length,
     wouldArchiveCount: wouldArchive,
+    sheetOverlapCount: sheetOverlap,
   });
 
   if (wipeGuard.abortAll) {
@@ -442,11 +446,13 @@ export async function syncFromLiveGoogleSheet(
         st !== "Borrador" &&
         st !== "En preparación"
       ) {
-        await archiveSoldVehicle(
-          existing,
-          existing.price,
-          "Vehículo retirado de inventario activo (Vendido/Entregado)",
-        );
+        if (tenantSlug === "rg-motors") {
+          await archiveSoldVehicle(
+            existing,
+            existing.price,
+            "Vehículo retirado de inventario activo (Vendido/Entregado)",
+          );
+        }
         soldCount++;
       }
     }
