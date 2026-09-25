@@ -110,8 +110,10 @@ type FolderCandidate = {
 export async function syncDrivePhotosViaOAuth(opts?: {
   maxVehicles?: number;
   folderId?: string;
+  tenantSlug?: string;
 }): Promise<SyncResult> {
-  const existingList = await getVehicles();
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
+  const existingList = await getVehicles({ tenantSlug, bypassCache: true });
 
   if (!isGoogleDriveOAuthConfigured()) {
     const msg =
@@ -281,7 +283,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       gallery: orderedGallery,
       image: cover || orderedGallery[0],
     };
-    await saveVehicle(vehicle);
+    await saveVehicle(vehicle, { tenantSlug });
     synced += 1;
     // Checkpoint por vehículo: si el cron corta a los 60s, no se pierde el progreso.
     state.lastRunAt = new Date().toISOString();
@@ -300,14 +302,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
       : "";
 
-  const updatedList = await getVehicles();
+  const updatedList = await getVehicles({ tenantSlug, bypassCache: true });
   return {
     success: true,
     totalFolders: folders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
     message:
-      `Drive OAuth→Blob: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
+      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
       `(${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
       pendingNote,
     vehicles: updatedList,

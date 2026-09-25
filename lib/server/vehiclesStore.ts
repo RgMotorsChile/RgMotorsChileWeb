@@ -110,8 +110,10 @@ export async function replaceAllVehicles(
 
 export async function saveVehicle(
   vehicle: Vehicle,
+  opts?: { tenantSlug?: string },
 ): Promise<{ success: boolean; vehicle?: Vehicle; error?: string }> {
-  const list = await getVehicles({ bypassCache: true });
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
+  const list = await getVehicles({ bypassCache: true, tenantSlug });
   const normalized = normalizeVehicle(vehicle);
   const next = list.slice();
   const existingIdx = next.findIndex((v) => v.slug === normalized.slug);
@@ -125,7 +127,7 @@ export async function saveVehicle(
   try {
     const { upsertCatalogVehiclesToSupabase } =
       await import("@/lib/server/catalogSupabase");
-    const remote = await upsertCatalogVehiclesToSupabase([normalized], "rg-motors");
+    const remote = await upsertCatalogVehiclesToSupabase([normalized], tenantSlug);
     if (!remote.ok) {
       return {
         success: false,
@@ -137,8 +139,10 @@ export async function saveVehicle(
     return { success: false, error: "Supabase no disponible" };
   }
 
+  const cacheKey =
+    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
   cacheInvalidate("vehicles:");
-  cacheSet(CACHE_KEY, next.map(normalizeVehicle), CACHE_TTL_MS);
+  cacheSet(cacheKey, next.map(normalizeVehicle), CACHE_TTL_MS);
   return { success: true, vehicle: normalized };
 }
 
