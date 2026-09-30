@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getVehicle } from "@/lib/vehicles";
+import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import TestDriveForm from "@/components/TestDriveForm";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +13,9 @@ export default async function PruebaManejoPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const v = (await getVehicleBySlug(slug)) || getVehicle(slug);
-  if (!v) notFound();
+  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
+  if (!raw) notFound();
+  const v = stripPlateForPublic(raw);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">

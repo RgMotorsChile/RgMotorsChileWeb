@@ -14,6 +14,17 @@ test.describe("Sitio público", () => {
     );
   });
 
+  test("el listado abre el detalle de un vehículo", async ({ page }) => {
+    await page.goto("/catalogo");
+    const card = page.locator('a[href^="/vehiculo/"]').first();
+    await expect(card).toBeVisible();
+    await card.click();
+    await expect(page).toHaveURL(/\/vehiculo\/.+/);
+    await expect(page.getByRole("main")).toContainText(
+      /ficha técnica|precio|disponible|km/i,
+    );
+  });
+
   test("simulador de crédito carga sin pasarela de pago", async ({ page }) => {
     await page.goto("/simulador");
     await expect(page.getByRole("main")).toContainText(/crédito|simul|cuota|pie|plazo/i);

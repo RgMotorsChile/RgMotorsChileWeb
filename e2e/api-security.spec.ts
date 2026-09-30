@@ -11,6 +11,15 @@ test.describe("APIs — seguridad y catálogo", () => {
     expect(body.total).toBeGreaterThan(0);
     for (const v of body.vehicles) {
       expect(v.status === "Borrador").toBe(false);
+      expect(v).not.toHaveProperty("plate");
+      expect(v).not.toHaveProperty("listPrice");
+      expect(v).not.toHaveProperty("supplier");
+      expect(v).not.toHaveProperty("techReview");
+      expect(v).not.toHaveProperty("circPermit");
+      expect(v).not.toHaveProperty("coverLocked");
+      expect(v).not.toHaveProperty("payload");
+      expect(v).not.toHaveProperty("owners");
+      expect(v).not.toHaveProperty("ownersCount");
     }
   });
 

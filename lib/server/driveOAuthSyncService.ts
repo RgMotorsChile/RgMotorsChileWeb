@@ -113,7 +113,11 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   tenantSlug?: string;
 }): Promise<SyncResult> {
   const tenantSlug = opts?.tenantSlug || "rg-motors";
-  const existingList = await getVehicles({ tenantSlug, bypassCache: true });
+  const existingList = await getVehicles({
+    tenantSlug,
+    bypassCache: true,
+    scope: "staff",
+  });
 
   if (!isGoogleDriveOAuthConfigured()) {
     const msg =
@@ -302,7 +306,11 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
       : "";
 
-  const updatedList = await getVehicles({ tenantSlug, bypassCache: true });
+  const updatedList = await getVehicles({
+    tenantSlug,
+    bypassCache: true,
+    scope: "staff",
+  });
   return {
     success: true,
     totalFolders: folders.length,

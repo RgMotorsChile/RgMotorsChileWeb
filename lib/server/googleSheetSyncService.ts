@@ -292,6 +292,7 @@ export async function syncFromLiveGoogleSheet(
   const currentVehicles = await getVehicles({
     bypassCache: true,
     tenantSlug,
+    scope: "staff",
   });
   const currentActive = currentVehicles.filter((v) => {
     const st = v.status || "Disponible";

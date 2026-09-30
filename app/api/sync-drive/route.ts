@@ -24,7 +24,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   try {
-    const list = await getVehicles();
+    const list = await getVehicles({ scope: "staff" });
     return NextResponse.json({
       connectedFolders: DEFAULT_DRIVE_URLS,
       driveFolderId: getDrivePhotosFolderId(),
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(bytes);
       const rows = await parseExcelStockBuffer(buffer);
 
-      const existingVehicles = await getVehicles();
+      const existingVehicles = await getVehicles({ scope: "staff" });
       const existingMap = new Map(existingVehicles.map(v => [v.plate?.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(), v]));
 
       let imported = 0;
