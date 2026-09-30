@@ -62,7 +62,7 @@ export function catalogSelectList(scope: CatalogReadScope): string {
 }
 
 function rowToVehicle(row: Record<string, unknown>, scope: CatalogReadScope): Vehicle {
-  const vehicle = {
+  const vehicle: Vehicle = {
     slug: String(row.slug),
     brand: String(row.brand),
     model: String(row.model),
@@ -99,7 +99,7 @@ function rowToVehicle(row: Record<string, unknown>, scope: CatalogReadScope): Ve
     if (row.circ_permit) vehicle.circPermit = String(row.circ_permit);
   }
 
-  return vehicle as Vehicle;
+  return vehicle;
 }
 
 export async function getCatalogVehiclesFromSupabase(

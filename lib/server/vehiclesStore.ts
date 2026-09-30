@@ -5,6 +5,7 @@ import { cacheGet, cacheInvalidate, cacheSet } from "./memoryCache";
 import { logStorageHealthOnce } from "./storageHealth";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { CatalogReadScope } from "@/lib/server/catalogSupabase";
+import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 
 const CACHE_KEY = "vehicles:list";
 /** Caché corta: lecturas de vitrina. Escrituras siempre bypasan caché. */
@@ -67,10 +68,15 @@ export async function getVehicles(opts?: {
   }
 
   // Solo local/dev sin Supabase: seed estático RG.
+  // El scope público sale sin patente ni columnas de patio, igual que el select explícito.
   if (tenantSlug !== "rg-motors") return [];
   const cleaned = initialVehicles.map(normalizeVehicle);
-  cacheSet(cacheKey, cleaned, CACHE_TTL_MS);
-  return cleaned;
+  const scoped =
+    scope === "public"
+      ? cleaned.map((vehicle) => stripPlateForPublic(vehicle))
+      : cleaned;
+  cacheSet(cacheKey, scoped, CACHE_TTL_MS);
+  return scoped;
 }
 
 export async function getVehicleBySlug(

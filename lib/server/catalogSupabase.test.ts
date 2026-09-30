@@ -16,6 +16,7 @@ const HIDDEN_FROM_PUBLIC = [
   "list_price",
   "plate",
   "plate_norm",
+  "owners",
   "tenant_id",
 ] as const;
 

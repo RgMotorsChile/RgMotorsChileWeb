@@ -32,6 +32,37 @@ test.describe("Sitio público", () => {
     }
   });
 
+  test("catálogo y ficha no publican campos internos", async ({ page }) => {
+    const forbidden = [
+      "listPrice",
+      "techReview",
+      "circPermit",
+      "coverLocked",
+      "ownersCount",
+      '"supplier"',
+      '"owners"',
+      '"plate"',
+      '"payload"',
+    ];
+    await page.goto("/");
+    const homeHtml = await page.content();
+    for (const key of forbidden) {
+      expect(homeHtml, `/ ${key}`).not.toContain(key);
+    }
+    await page.goto("/catalogo");
+    const catalogHtml = await page.content();
+    for (const key of forbidden) {
+      expect(catalogHtml, `/catalogo ${key}`).not.toContain(key);
+    }
+    const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
+    expect(href).toBeTruthy();
+    await page.goto(href!);
+    const detailHtml = await page.content();
+    for (const key of forbidden) {
+      expect(detailHtml, key).not.toContain(key);
+    }
+  });
+
   test("simulador de crédito carga sin pasarela de pago", async ({ page }) => {
     await page.goto("/simulador");
     await expect(page.getByRole("main")).toContainText(/crédito|simul|cuota|pie|plazo/i);
