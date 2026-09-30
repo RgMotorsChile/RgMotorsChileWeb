@@ -15,14 +15,21 @@ test.describe("Sitio público", () => {
   });
 
   test("el listado abre el detalle de un vehículo", async ({ page }) => {
+    const shot = process.env.E2E_SCREENSHOT_DIR;
     await page.goto("/catalogo");
     const card = page.locator('a[href^="/vehiculo/"]').first();
     await expect(card).toBeVisible();
+    if (shot) {
+      await page.screenshot({ path: `${shot}/catalogo-listado.png`, fullPage: true });
+    }
     await card.click();
     await expect(page).toHaveURL(/\/vehiculo\/.+/);
     await expect(page.getByRole("main")).toContainText(
       /ficha técnica|precio|disponible|km/i,
     );
+    if (shot) {
+      await page.screenshot({ path: `${shot}/vehiculo-detalle.png`, fullPage: true });
+    }
   });
 
   test("simulador de crédito carga sin pasarela de pago", async ({ page }) => {

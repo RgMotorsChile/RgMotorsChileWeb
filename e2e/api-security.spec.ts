@@ -50,7 +50,9 @@ test.describe("APIs — seguridad y catálogo", () => {
     const res = await request.get("/api/health");
     expect([200, 503]).toContain(res.status());
     const body = await res.json();
-    expect(body.checks).toBeTruthy();
+    expect(typeof body.ok).toBe("boolean");
+    expect(["ok", "degraded"]).toContain(body.status);
+    expect(body.checks).toBeUndefined();
   });
 
   test("GET /api/vehicles/[slug] de borrador no es público", async ({
