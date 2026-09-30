@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
     }
 
-    let list = await getVehicles({ bypassCache: isAdmin });
+    let list = await getVehicles({
+      bypassCache: isAdmin,
+      scope: isAdmin ? "staff" : "public",
+    });
 
     const featured = searchParams.get("featured");
     if (featured === "true") {

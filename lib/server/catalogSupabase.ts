@@ -8,16 +8,67 @@ import {
   RG_MOTORS_TENANT_SLUG,
 } from "@/lib/supabase/client";
 
-function rowToVehicle(row: Record<string, unknown>): Vehicle {
-  return {
+/** `public`: lo que renderiza la vitrina. `staff`: panel, fotos y sync. */
+export type CatalogReadScope = "public" | "staff";
+
+/**
+ * Columnas que la UI pública usa (cards, ficha, PDF, filtros).
+ * No incluye patente, precio de lista, payload ni datos de patio/proveedor.
+ */
+export const PUBLIC_CATALOG_COLUMNS = [
+  "slug",
+  "brand",
+  "model",
+  "version",
+  "year",
+  "price",
+  "km",
+  "fuel",
+  "transmission",
+  "body_type",
+  "location",
+  "image",
+  "gallery",
+  "spin",
+  "engine",
+  "power",
+  "traction",
+  "doors",
+  "featured",
+  "status",
+  "has_real_photos",
+  "highlights",
+] as const;
+
+/**
+ * Lectura de staff. Sigue siendo explícita: no pide `payload`, `id`,
+ * `tenant_id` ni `plate_norm`. Incluye columnas que el panel y los jobs
+ * necesitan para no pisarlas en el upsert.
+ */
+export const STAFF_CATALOG_COLUMNS = [
+  ...PUBLIC_CATALOG_COLUMNS,
+  "plate",
+  "owners",
+  "list_price",
+  "cover_locked",
+  "supplier",
+  "tech_review",
+  "circ_permit",
+] as const;
+
+export function catalogSelectList(scope: CatalogReadScope): string {
+  const cols = scope === "staff" ? STAFF_CATALOG_COLUMNS : PUBLIC_CATALOG_COLUMNS;
+  return cols.join(",");
+}
+
+function rowToVehicle(row: Record<string, unknown>, scope: CatalogReadScope): Vehicle {
+  const vehicle: Vehicle = {
     slug: String(row.slug),
-    plate: row.plate ? String(row.plate) : undefined,
     brand: String(row.brand),
     model: String(row.model),
     version: String(row.version || ""),
     year: Number(row.year) || 0,
     price: Number(row.price) || 0,
-    listPrice: row.list_price != null ? Number(row.list_price) : undefined,
     km: Number(row.km) || 0,
     fuel: String(row.fuel || ""),
     transmission: String(row.transmission || ""),
@@ -34,18 +85,26 @@ function rowToVehicle(row: Record<string, unknown>): Vehicle {
     featured: Boolean(row.featured),
     status: (row.status as Vehicle["status"]) || "Disponible",
     hasRealPhotos: Boolean(row.has_real_photos),
-    coverLocked: Boolean(row.cover_locked),
-    supplier: row.supplier ? String(row.supplier) : undefined,
-    techReview: row.tech_review ? String(row.tech_review) : undefined,
-    circPermit: row.circ_permit ? String(row.circ_permit) : undefined,
     highlights: Array.isArray(row.highlights)
       ? (row.highlights as string[])
       : undefined,
   };
+
+  if (scope === "staff") {
+    if (row.plate) vehicle.plate = String(row.plate);
+    if (row.list_price != null) vehicle.listPrice = Number(row.list_price);
+    vehicle.coverLocked = Boolean(row.cover_locked);
+    if (row.supplier) vehicle.supplier = String(row.supplier);
+    if (row.tech_review) vehicle.techReview = String(row.tech_review);
+    if (row.circ_permit) vehicle.circPermit = String(row.circ_permit);
+  }
+
+  return vehicle;
 }
 
 export async function getCatalogVehiclesFromSupabase(
   tenantSlug: string = RG_MOTORS_TENANT_SLUG,
+  scope: CatalogReadScope = "public",
 ): Promise<Vehicle[] | null> {
   if (!isSupabaseConfigured()) return null;
   try {
@@ -59,12 +118,14 @@ export async function getCatalogVehiclesFromSupabase(
 
     const { data, error } = await sb
       .from("catalog_vehicles")
-      .select("*")
+      .select(catalogSelectList(scope))
       .eq("tenant_id", tenant.id)
       .order("featured", { ascending: false })
       .order("updated_at", { ascending: false });
     if (error || !data) return null;
-    return data.map((r) => rowToVehicle(r as Record<string, unknown>));
+    return data.map((r) =>
+      rowToVehicle(r as unknown as Record<string, unknown>, scope),
+    );
   } catch (err) {
     console.warn("[catalogSupabase] lectura falló:", err);
     return null;

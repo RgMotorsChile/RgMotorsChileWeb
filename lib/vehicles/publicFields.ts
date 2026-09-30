@@ -29,12 +29,36 @@ export type VehicleCardDTO = Pick<
   plate?: undefined;
 };
 
-/** Quita la patente del payload público (admin sí la ve vía ?admin=true). */
-export function stripPlateForPublic<T extends { plate?: string }>(
+type HiddenFromPublic = {
+  plate?: string;
+  /** Precio de lista: la vitrina muestra solo `price`. */
+  listPrice?: number;
+  coverLocked?: boolean;
+  supplier?: string;
+  techReview?: string;
+  circPermit?: string;
+  payload?: unknown;
+};
+
+/**
+ * Payload de vitrina. Quita patente y columnas internas
+ * (proveedor, revisión técnica, permiso, portada bloqueada, precio lista, payload).
+ * El admin autenticado sigue recibiendo el vehículo completo vía `?admin=true`.
+ */
+export function stripPlateForPublic<T extends HiddenFromPublic>(
   vehicle: T,
-): Omit<T, "plate"> & { plate?: undefined } {
-  const { plate: _plate, ...rest } = vehicle;
-  return { ...rest, plate: undefined };
+): Omit<T, keyof HiddenFromPublic> {
+  const {
+    plate: _plate,
+    listPrice: _listPrice,
+    coverLocked: _coverLocked,
+    supplier: _supplier,
+    techReview: _techReview,
+    circPermit: _circPermit,
+    payload: _payload,
+    ...rest
+  } = vehicle;
+  return rest;
 }
 
 export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {

@@ -4,6 +4,7 @@ import { enrichVehicleTechSpec } from "@/lib/vehicles/techSpecs";
 import { cacheGet, cacheInvalidate, cacheSet } from "./memoryCache";
 import { logStorageHealthOnce } from "./storageHealth";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { CatalogReadScope } from "@/lib/server/catalogSupabase";
 
 const CACHE_KEY = "vehicles:list";
 /** Caché corta: lecturas de vitrina. Escrituras siempre bypasan caché. */
@@ -28,14 +29,22 @@ function normalizeVehicle(vehicle: Vehicle): Vehicle {
   return withFrontCover(cleaned);
 }
 
+function listCacheKey(tenantSlug: string, scope: CatalogReadScope): string {
+  const base =
+    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
+  return scope === "staff" ? `${base}:staff` : base;
+}
+
 export async function getVehicles(opts?: {
   bypassCache?: boolean;
   tenantSlug?: string;
+  /** `public` omite columnas internas. Jobs y admin usan `staff`. */
+  scope?: CatalogReadScope;
 }): Promise<Vehicle[]> {
   logStorageHealthOnce();
   const tenantSlug = opts?.tenantSlug || "rg-motors";
-  const cacheKey =
-    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
+  const scope = opts?.scope ?? "public";
+  const cacheKey = listCacheKey(tenantSlug, scope);
 
   if (!opts?.bypassCache) {
     const cached = cacheGet<Vehicle[]>(cacheKey);
@@ -47,7 +56,7 @@ export async function getVehicles(opts?: {
     try {
       const { getCatalogVehiclesFromSupabase } =
         await import("@/lib/server/catalogSupabase");
-      const remote = await getCatalogVehiclesFromSupabase(tenantSlug);
+      const remote = await getCatalogVehiclesFromSupabase(tenantSlug, scope);
       const cleaned = (remote ?? []).map(normalizeVehicle);
       cacheSet(cacheKey, cleaned, CACHE_TTL_MS);
       return cleaned;
@@ -60,13 +69,13 @@ export async function getVehicles(opts?: {
   // Solo local/dev sin Supabase: seed estático RG.
   if (tenantSlug !== "rg-motors") return [];
   const cleaned = initialVehicles.map(normalizeVehicle);
-  cacheSet(CACHE_KEY, cleaned, CACHE_TTL_MS);
+  cacheSet(cacheKey, cleaned, CACHE_TTL_MS);
   return cleaned;
 }
 
 export async function getVehicleBySlug(
   slug: string,
-  opts?: { bypassCache?: boolean },
+  opts?: { bypassCache?: boolean; scope?: CatalogReadScope },
 ): Promise<Vehicle | null> {
   const list = await getVehicles(opts);
   return list.find((v) => v.slug === slug) ?? null;
@@ -100,18 +109,22 @@ export async function replaceAllVehicles(
     };
   }
 
-  const cacheKey =
-    tenantSlug === "rg-motors" ? CACHE_KEY : `vehicles:list:${tenantSlug}`;
   cacheInvalidate("vehicles:");
-  cacheSet(cacheKey, normalized, CACHE_TTL_MS);
+  cacheSet(listCacheKey(tenantSlug, "staff"), normalized, CACHE_TTL_MS);
 
   return { success: true, count: normalized.length };
 }
 
 export async function saveVehicle(
   vehicle: Vehicle,
+  opts?: { tenantSlug?: string },
 ): Promise<{ success: boolean; vehicle?: Vehicle; error?: string }> {
-  const list = await getVehicles({ bypassCache: true });
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
+  const list = await getVehicles({
+    bypassCache: true,
+    scope: "staff",
+    tenantSlug,
+  });
   const normalized = normalizeVehicle(vehicle);
   const next = list.slice();
   const existingIdx = next.findIndex((v) => v.slug === normalized.slug);
@@ -125,7 +138,7 @@ export async function saveVehicle(
   try {
     const { upsertCatalogVehiclesToSupabase } =
       await import("@/lib/server/catalogSupabase");
-    const remote = await upsertCatalogVehiclesToSupabase([normalized], "rg-motors");
+    const remote = await upsertCatalogVehiclesToSupabase([normalized], tenantSlug);
     if (!remote.ok) {
       return {
         success: false,
@@ -138,14 +151,18 @@ export async function saveVehicle(
   }
 
   cacheInvalidate("vehicles:");
-  cacheSet(CACHE_KEY, next.map(normalizeVehicle), CACHE_TTL_MS);
+  cacheSet(
+    listCacheKey(tenantSlug, "staff"),
+    next.map(normalizeVehicle),
+    CACHE_TTL_MS,
+  );
   return { success: true, vehicle: normalized };
 }
 
 export async function deleteVehicle(
   slug: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const list = await getVehicles({ bypassCache: true });
+  const list = await getVehicles({ bypassCache: true, scope: "staff" });
   const filtered = list.filter((v) => v.slug !== slug);
   if (filtered.length === list.length) {
     return { success: false, error: "Vehículo no encontrado." };
@@ -164,6 +181,6 @@ export async function deleteVehicle(
   }
 
   cacheInvalidate("vehicles:");
-  cacheSet(CACHE_KEY, filtered, CACHE_TTL_MS);
+  cacheSet(listCacheKey("rg-motors", "staff"), filtered, CACHE_TTL_MS);
   return { success: true };
 }

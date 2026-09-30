@@ -111,7 +111,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   maxVehicles?: number;
   folderId?: string;
 }): Promise<SyncResult> {
-  const existingList = await getVehicles();
+  const existingList = await getVehicles({ scope: "staff" });
 
   if (!isGoogleDriveOAuthConfigured()) {
     const msg =
@@ -300,7 +300,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
       : "";
 
-  const updatedList = await getVehicles();
+  const updatedList = await getVehicles({ scope: "staff" });
   return {
     success: true,
     totalFolders: folders.length,
