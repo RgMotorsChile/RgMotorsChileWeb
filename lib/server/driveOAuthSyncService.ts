@@ -5,6 +5,7 @@ import {
 } from "@/lib/vehicles/frontCoverMap";
 import { readJson, writeJson } from "@/lib/server/db";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
+import { blobStillExists } from "@/lib/server/verifyPhotos";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import {
@@ -202,6 +203,22 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }
 
     const limited = images.slice(0, MAX_PHOTOS_PER_VEHICLE);
+    // Un blob cacheado puede haberse borrado (p. ej. venta → borrado de fotos → unidad
+    // de vuelta en stock). Si ya no existe, se olvida el caché para volver a subirlo
+    // desde Drive en vez de seguir publicando una URL 404.
+    const staleChecks = await Promise.all(
+      limited.map(async (img) => {
+        const cachedUrl = state.files[img.id]?.blobUrl;
+        if (!cachedUrl) return false;
+        return !(await blobStillExists(cachedUrl));
+      }),
+    );
+    limited.forEach((img, i) => {
+      if (staleChecks[i]) {
+        console.warn(`[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`);
+        delete state.files[img.id];
+      }
+    });
     const needsWork =
       !vehicle.hasRealPhotos ||
       limited.some((img) => driveFileNeedsSync(img, state.files[img.id]));

@@ -64,7 +64,7 @@ export default async function Home() {
               Camionetas y autos con fotos reales de patio.
               <span className="hidden sm:inline">
                 <br />
-                Visítalos en Puerto Montt y simula tu cuota con Autofin.
+                Visítalos en Puerto Montt o consigna el tuyo con nosotros.
               </span>
               <span className="sm:hidden"> Visítalos en Puerto Montt.</span>
             </p>
@@ -77,10 +77,10 @@ export default async function Home() {
                 Ver catálogo
               </Link>
               <Link
-                href="/simulador"
+                href="/consigna"
                 className="rg-btn-ghost-light inline-flex min-h-12 items-center justify-center rounded-xl px-7 py-3.5 text-[15px] font-bold sm:min-h-11 sm:min-w-[9.5rem] sm:rounded-lg"
               >
-                Simular cuota
+                Consigna tu auto
               </Link>
             </div>
           </div>
@@ -156,7 +156,7 @@ export default async function Home() {
               <Step n="2" title="Revisa en detalle" text="Galería, 360° cuando está disponible e información técnica." />
             </RevealOnScroll>
             <RevealOnScroll delay={140}>
-              <Step n="3" title="Simula tu cuota" text="Elige pie y plazo. Te contactamos en horario hábil el mismo día." />
+              <Step n="3" title="Consulta por WhatsApp" text="Te respondemos en horario hábil el mismo día, con disponibilidad y precio." />
             </RevealOnScroll>
             <RevealOnScroll delay={180}>
               <Step n="4" title="Visita el showroom" text="Coordinamos entrega o visita al patio en Puerto Montt." />

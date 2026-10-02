@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 
+const page_base = () =>
+  process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+
 test.describe("Sitio público", () => {
   test("carga la home y muestra marca RG Motors", async ({ page }) => {
     await page.goto("/");
@@ -63,10 +66,44 @@ test.describe("Sitio público", () => {
     }
   });
 
-  test("simulador de crédito carga sin pasarela de pago", async ({ page }) => {
+  test("simulador retirado: redirige a Consigna tu vehículo", async ({ page }) => {
     await page.goto("/simulador");
-    await expect(page.getByRole("main")).toContainText(/crédito|simul|cuota|pie|plazo/i);
+    await expect(page).toHaveURL(/\/consigna$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/consigna/i);
+    await expect(page.locator("form")).toContainText(/marca/i);
     await expect(page.locator("body")).not.toContainText(/webpay|transbank/i);
+  });
+
+  test("ficha: fotos estables, sin simulador y sin desborde", async ({ page }) => {
+    await page.goto("/catalogo");
+    const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
+    await page.goto(href!);
+    const main = page.getByRole("main");
+    await expect(main).not.toContainText(/simula|\/mes/i);
+    await expect(main).toContainText(/consigna tu vehículo/i);
+    // Foto real o placeholder, nunca ambos; una vez cargada la página no cambia.
+    await page.waitForLoadState("load");
+    await page.waitForTimeout(1500);
+    const states: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const pending = await page.locator('[data-testid="photos-pending"]').count();
+      const photos = await main.locator('img[alt*="Foto"]').count();
+      states.push(`${pending}/${photos > 0 ? 1 : 0}`);
+      await page.waitForTimeout(250);
+    }
+    expect(new Set(states).size, states.join(" ")).toBe(1);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test("consigna valida datos en el servidor", async ({ request }) => {
+    const res = await request.post("/api/consigna", {
+      data: { name: "x" },
+      headers: { origin: new URL(page_base()).origin },
+    });
+    expect(res.status()).toBe(400);
   });
 
   test("páginas legales existen", async ({ page }) => {

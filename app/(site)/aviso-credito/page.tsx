@@ -1,6 +1,5 @@
 import { COMPANY } from "@/lib/company";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Aviso de Crédito | RG Motors",
@@ -20,10 +19,9 @@ export default function AvisoCreditoPage() {
 
       <article className="apple-glass-card space-y-6 rounded-3xl p-6 text-sm leading-relaxed text-white/70 sm:p-8">
         <section className="space-y-2">
-          <h2 className="text-base font-bold text-white">1. Simulador propio RG Motors</h2>
+          <h2 className="text-base font-bold text-white">1. Estimaciones de cuota RG Motors</h2>
           <p>
-            En <Link href="/simulador" className="text-brand-300 hover:underline">/simulador</Link>{" "}
-            ofrecemos una estimación referencial de cuota. El crédito lo otorga{" "}
+            Cuando un asesor de RG Motors entrega una estimación de cuota, es referencial. El crédito lo otorga{" "}
             <strong className="text-white">Autofin</strong>; RG Motors comercializa el vehículo.
             La proyección considera parámetros habituales del mercado Autofin (pie desde 20%,
             hasta 48 cuotas, tasa referencial de usados, seguros típicos en la cuota y
@@ -79,11 +77,7 @@ export default function AvisoCreditoPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-white">5. Más información</h2>
           <p>
-            Simulador:{" "}
-            <Link href="/simulador" className="text-brand-300 hover:underline">
-              /simulador
-            </Link>
-            . Contacto:{" "}
+            Contacto:{" "}
             <a href={`mailto:${COMPANY.email}`} className="text-brand-300 hover:underline">
               {COMPANY.email}
             </a>

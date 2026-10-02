@@ -1,23 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import {
-  getVehicle,
-  vehicles,
-  formatCLP,
-  specsOf,
-  estimateMonthly,
-  spinFramesOf,
-} from "@/lib/vehicles";
+import { formatCLP, spinFramesOf, type Vehicle } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
+import { getSettings } from "@/lib/server/settingsStore";
+import { verifiedGallery } from "@/lib/server/verifyPhotos";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { whatsappLink } from "@/lib/company";
 import { asset } from "@/lib/asset";
 import VehicleViewer from "@/components/VehicleViewer";
-import CuotaSimulator from "@/components/CuotaSimulator";
-import VehicleActionButtons from "@/components/VehicleActionButtons";
 import MobileVehicleStickyBar from "@/components/MobileVehicleStickyBar";
+import ConsignaSection from "@/components/ConsignaSection";
 
 export const revalidate = 120;
+
+async function loadVehicle(slug: string) {
+  const raw = await getVehicleBySlug(slug);
+  if (!raw || raw.status === "Borrador") return null;
+  return stripPlateForPublic(raw);
+}
 
 export async function generateMetadata({
   params,
@@ -25,12 +26,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const v = (await getVehicleBySlug(slug)) || getVehicle(slug);
-  if (!v) return { title: "Vehículo no encontrado | RG Motors" };
+  const v = await loadVehicle(slug);
+  if (!v) return { title: "Vehículo no encontrado | RG Motors", robots: { index: false } };
 
   return {
     title: `${v.brand} ${v.model} ${v.year} — ${formatCLP(v.price)} | RG Motors`,
-    description: `${v.brand} ${v.model} ${v.version} año ${v.year} con ${v.km.toLocaleString("es-CL")} km. Inspección de 150 puntos, fotografías reales y simulación de crédito online.`,
+    description: `${v.brand} ${v.model} ${v.version} año ${v.year} con ${v.km.toLocaleString("es-CL")} km en Puerto Montt. Inspección de 150 puntos y fotografías reales.`,
+    alternates: { canonical: `https://www.rgmotorschile.cl/vehiculo/${v.slug}` },
     openGraph: {
       title: `${v.brand} ${v.model} ${v.year} | RG Motors`,
       description: `Precio: ${formatCLP(v.price)} · ${v.km.toLocaleString("es-CL")} km · ${v.fuel} · ${v.transmission}`,
@@ -39,140 +41,160 @@ export async function generateMetadata({
   };
 }
 
+function known(value: string | number | undefined | null): value is string | number {
+  if (value === undefined || value === null) return false;
+  const s = String(value).trim();
+  return s !== "" && s !== "—" && !/por confirmar/i.test(s);
+}
+
+function keySpecs(v: Vehicle): { label: string; value: string }[] {
+  const rows: Array<[string, string | number | undefined]> = [
+    ["Año", v.year],
+    ["Kilometraje", `${v.km.toLocaleString("es-CL")} km`],
+    ["Transmisión", v.transmission],
+    ["Combustible", v.fuel],
+    ["Tracción", v.traction],
+    ["Motor", v.engine],
+    ["Potencia", v.power],
+    ["Carrocería", v.bodyType],
+  ];
+  return rows.filter(([, val]) => known(val)).map(([label, val]) => ({ label, value: String(val) }));
+}
+
 export default async function VehiclePage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
-  if (!raw) notFound();
-  const v = stripPlateForPublic(raw);
+  const v = await loadVehicle(slug);
+  if (!v) notFound();
 
-  const allVehicles = await getVehicles().catch(() => vehicles);
-  const publicVehicles = allVehicles
-    .filter((item) => {
-      const status = item.status || "Disponible";
-      return status !== "Borrador" && status !== "Vendido";
+  const [allVehicles, settings, gallery] = await Promise.all([
+    getVehicles().catch(() => [] as Vehicle[]),
+    getSettings().catch(() => null),
+    verifiedGallery(v.image, v.gallery),
+  ]);
+  const spinFrames = settings?.preferences?.showSpin360 ? spinFramesOf(v).map((f) => asset(f)) : [];
+  const similar = allVehicles
+    .filter((x) => {
+      const status = x.status || "Disponible";
+      return x.slug !== v.slug && x.bodyType === v.bodyType && x.hasRealPhotos && status !== "Borrador" && status !== "Vendido";
     })
+    .slice(0, 3)
     .map(stripPlateForPublic);
-  const monthly = estimateMonthly(v.price);
+
+  const specs = keySpecs(v);
+  const highlights = (v.highlights || []).filter(Boolean).slice(0, 4);
+  const sold = v.status === "Vendido";
+  const reserved = v.status === "En reserva";
+  const waMessage = `Hola RG Motors, me interesa el ${v.brand} ${v.model} ${v.year} publicado en ${formatCLP(v.price)}. ¿Está disponible?`;
 
   return (
-    <main className="mx-auto w-full max-w-7xl overflow-x-clip px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 lg:pb-8 space-y-6 sm:space-y-8">
-      {/* Top Header & Breadcrumbs */}
-      <div className="flex min-w-0 flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:pb-6">
-        <div className="min-w-0 flex-1">
-          <nav className="mb-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/50 backdrop-blur-md sm:px-4">
-            <Link href="/" className="hover:text-white transition-colors">Inicio</Link>
-            <span>›</span>
-            <Link href="/catalogo" className="hover:text-white transition-colors">Catálogo</Link>
-            <span>›</span>
-            <span className="truncate text-white/90 font-semibold">{v.brand} {v.model}</span>
-          </nav>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
-            {v.brand} {v.model}{" "}
-            <span className="text-lg font-normal text-white/50 sm:text-2xl">· {v.year}</span>
+    <main className="mx-auto w-full max-w-6xl overflow-x-clip px-4 pb-28 pt-6 sm:px-6 sm:pt-8 lg:pb-12">
+      <nav aria-label="Ruta" className="mb-5 flex min-w-0 items-center gap-2 text-xs text-white/45">
+        <Link href="/catalogo" className="shrink-0 transition-colors hover:text-white">← Catálogo</Link>
+        <span aria-hidden>/</span>
+        <span className="truncate text-white/70">{v.brand} {v.model}</span>
+      </nav>
+
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:gap-10">
+        <div className="min-w-0">
+          <VehicleViewer gallery={gallery} name={`${v.brand} ${v.model} ${v.year}`} spinFrames={spinFrames} />
+        </div>
+
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <span
+            className={`inline-block rounded-full border px-3 py-1 text-[11px] font-semibold ${
+              sold
+                ? "border-red-400/30 bg-red-400/10 text-red-300"
+                : reserved
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                : "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+            }`}
+          >
+            {sold ? "Vendido" : reserved ? "En reserva" : "Disponible"}
+          </span>
+          <h1 className="mt-3 break-words text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+            {v.brand} {v.model}
           </h1>
-          <p className="mt-1 truncate text-xs text-white/50">{v.version} · {v.location}</p>
-        </div>
-
-        <div className="shrink-0 text-left sm:text-right">
-          <p className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
-            {formatCLP(v.price)}
+          <p className="mt-1 break-words text-sm text-white/50">
+            {v.year} · {v.km.toLocaleString("es-CL")} km · {v.location}
           </p>
-          <p className="mt-1 text-xs text-white/50">
-            Desde <span className="font-semibold text-brand-300">{formatCLP(monthly)}</span>/mes
-          </p>
-        </div>
-      </div>
+          <p className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">{formatCLP(v.price)}</p>
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-8 lg:items-start">
-        {/* Left Column */}
-        <div className="min-w-0 space-y-6 sm:space-y-8">
-          <VehicleViewer
-            image={asset(v.image)}
-            gallery={v.gallery?.map(g => asset(g))}
-            name={`${v.brand} ${v.model}`}
-            slug={v.slug}
-            spinFrames={spinFramesOf(v)}
-          />
-
-          <section className="apple-glass-card rounded-2xl p-4 space-y-4 sm:rounded-3xl sm:p-6">
-            <h2 className="border-b border-white/10 pb-3 text-base font-bold tracking-tight text-white">
-              Ficha Técnica Certificada
-            </h2>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
-              {specsOf(v).map((s) => (
-                <div key={s.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 backdrop-blur-md sm:p-3.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">{s.label}</p>
-                  <p className="mt-1 text-xs font-bold text-white break-words">{s.value}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column */}
-        <div className="min-w-0 space-y-5 sm:space-y-6 lg:sticky lg:top-24">
-          <div className="apple-glass-card space-y-5 rounded-2xl border-brand-500/30 bg-gradient-to-br from-brand-500/10 via-ink-950 to-black p-4 shadow-glow sm:rounded-3xl sm:p-6">
-            <div>
-              <span className={`inline-block rounded-full border px-3 py-1 text-[11px] font-bold ${
-                v.status === "En reserva"
-                  ? "border-amber-400/30 bg-amber-400/15 text-amber-400"
-                  : v.status === "Vendido"
-                  ? "border-red-400/30 bg-red-400/15 text-red-400"
-                  : "border-emerald-400/30 bg-emerald-400/15 text-emerald-400"
-              }`}>
-                {v.status === "En reserva"
-                  ? "● En proceso de reserva"
-                  : v.status === "Vendido"
-                  ? "● Vehículo vendido"
-                  : "✓ Disponible para entrega inmediata"}
-              </span>
-              <h3 className="mt-3 text-base font-bold tracking-tight text-white sm:text-lg">Consultar o financiar</h3>
-              <p className="mt-1 text-xs text-white/55">
-                WhatsApp, simulación Autofin y tasación de tu auto en parte de pago.
-              </p>
-            </div>
-
-            <VehicleActionButtons vehicle={v} />
-
-            <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-4 text-center text-[11px] text-white/60">
-              <p>🔧 Inspección 150 puntos</p>
-              <p>📄 Documentación al día</p>
-            </div>
+          <div className="mt-6 space-y-2.5">
+            <a
+              href={whatsappLink(waMessage)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-12 w-full items-center justify-center rounded-full bg-[#25D366] px-4 text-center text-[15px] font-bold text-white transition hover:bg-[#20bd5a]"
+            >
+              Consultar por WhatsApp
+            </a>
+            {!sold && (
+              <Link
+                href={`/prueba-manejo/${v.slug}`}
+                prefetch={false}
+                className="flex min-h-12 w-full items-center justify-center rounded-full border border-white/15 px-4 text-center text-sm font-semibold text-white/90 transition hover:border-white/35"
+              >
+                Agendar prueba de manejo
+              </Link>
+            )}
           </div>
+          <p className="mt-3 text-center text-[11px] text-white/40">Inspección 150 puntos · Documentación al día</p>
+        </aside>
+      </div>
 
-          <CuotaSimulator price={v.price} vehicleYear={v.year} vehicleSlug={v.slug} />
+      <div className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:gap-10">
+        <section className="min-w-0" aria-labelledby="ficha">
+          <h2 id="ficha" className="text-base font-bold text-white">Ficha</h2>
+          <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-4">
+            {specs.map((s) => (
+              <div key={s.label} className="min-w-0 bg-[#0b0d12] px-4 py-3">
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{s.label}</dt>
+                <dd className="mt-1 break-words text-sm font-semibold text-white">{s.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {highlights.length > 0 && (
+            <ul className="mt-5 space-y-2 text-sm text-white/65">
+              {highlights.map((h) => (
+                <li key={h} className="flex gap-2 break-words">
+                  <span className="text-brand-300" aria-hidden>✓</span>
+                  <span className="min-w-0">{h}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <div className="min-w-0">
+          <ConsignaSection compact />
         </div>
       </div>
 
-      {/* Similar vehicles */}
-      <section className="mt-12 border-t border-white/[0.08] pt-8">
-        <h2 className="mb-6 text-lg font-bold tracking-tight text-white">Vehículos similares disponibles</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {publicVehicles
-            .filter((x) => x.slug !== v.slug && x.bodyType === v.bodyType)
-            .slice(0, 3)
-            .map((x) => (
+      {similar.length > 0 && (
+        <section className="mt-12 border-t border-white/[0.08] pt-8" aria-labelledby="similares">
+          <h2 id="similares" className="mb-4 text-base font-bold text-white">También te puede interesar</h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {similar.map((x) => (
               <Link
                 key={x.slug}
                 href={`/vehiculo/${x.slug}`}
-                className="apple-glass-card group flex items-center gap-4 rounded-3xl p-3.5 transition-all duration-300 hover:-translate-y-1"
+                className="group flex min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 transition hover:border-white/25"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={asset(x.image)} alt={x.model} className="h-16 w-24 rounded-2xl object-cover" />
-                <div>
-                  <p className="text-xs font-bold text-white group-hover:text-brand-300 transition-colors">
-                    {x.brand} {x.model}
-                  </p>
-                  <p className="text-xs font-semibold text-brand-300 mt-0.5">{formatCLP(x.price)}</p>
+                <img src={asset(x.image)} alt="" loading="lazy" width={96} height={64} className="h-16 w-24 shrink-0 rounded-xl object-cover" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white group-hover:text-brand-300">{x.brand} {x.model}</p>
+                  <p className="text-xs text-white/50">{x.year} · {formatCLP(x.price)}</p>
                 </div>
               </Link>
             ))}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       <MobileVehicleStickyBar vehicle={v} />
     </main>

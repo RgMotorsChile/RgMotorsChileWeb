@@ -57,6 +57,8 @@ const nextConfig = {
   async redirects() {
     if (isGhPages) return [];
     return [
+      // La simulación de crédito se retiró del sitio: se reemplaza por consignación.
+      { source: "/simulador", destination: "/consigna", permanent: true },
       {
         source: "/:path*",
         has: [{ type: "host", value: "rgmotorschile.cl" }],
