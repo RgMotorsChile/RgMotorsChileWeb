@@ -7,6 +7,7 @@ import {
   pickFeaturedVehicles,
 } from "@/lib/vehicles/publicCatalog";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { withVerifiedCover } from "@/lib/server/verifyPhotos";
 import VehicleCard from "@/components/VehicleCard";
 import RevealOnScroll from "@/components/RevealOnScroll";
 import AppleCareTrustSection from "@/components/AppleCareTrustSection";
@@ -18,8 +19,10 @@ export const revalidate = 120;
 
 export default async function Home() {
   const vehicles = await getVehicles();
-  const publicVehicles = filterPublicCatalog(vehicles).map(stripPlateForPublic);
-  const featured = pickFeaturedVehicles(vehicles, 6).map(stripPlateForPublic);
+  const [publicVehicles, featured] = await Promise.all([
+    Promise.all(filterPublicCatalog(vehicles).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
+    Promise.all(pickFeaturedVehicles(vehicles, 6).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
+  ]);
 
   return (
     <main data-page="home" className="relative overflow-x-clip">

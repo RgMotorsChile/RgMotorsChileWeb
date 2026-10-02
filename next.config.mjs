@@ -38,6 +38,8 @@ const nextConfig = {
     : {
         images: {
           formats: ["image/avif", "image/webp"],
+          // Calidades usadas por <Image> (hero/ficha 85, tarjetas 82); sin esto Next avisa y degrada.
+          qualities: [75, 82, 85],
           remotePatterns: [
             { protocol: "https", hostname: "drive.google.com" },
             { protocol: "https", hostname: "lh3.googleusercontent.com" },

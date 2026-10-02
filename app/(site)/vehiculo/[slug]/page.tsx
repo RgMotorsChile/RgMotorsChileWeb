@@ -28,6 +28,8 @@ export async function generateMetadata({
   const { slug } = await params;
   const v = await loadVehicle(slug);
   if (!v) return { title: "Vehículo no encontrado | RG Motors", robots: { index: false } };
+  // og:image solo con una foto que exista (antes podía apuntar a un blob 404).
+  const [cover] = await verifiedGallery(v.image, v.gallery);
 
   return {
     title: `${v.brand} ${v.model} ${v.year} — ${formatCLP(v.price)} | RG Motors`,
@@ -36,7 +38,7 @@ export async function generateMetadata({
     openGraph: {
       title: `${v.brand} ${v.model} ${v.year} | RG Motors`,
       description: `Precio: ${formatCLP(v.price)} · ${v.km.toLocaleString("es-CL")} km · ${v.fuel} · ${v.transmission}`,
-      images: [asset(v.image)],
+      images: [cover ? asset(cover) : "/og-image.png"],
     },
   };
 }
@@ -196,7 +198,7 @@ export default async function VehiclePage({
         </section>
       )}
 
-      <MobileVehicleStickyBar vehicle={v} />
+      <MobileVehicleStickyBar vehicle={{ ...v, image: gallery[0] ?? "", gallery }} />
     </main>
   );
 }

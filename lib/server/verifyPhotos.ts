@@ -65,3 +65,15 @@ export async function blobStillExists(url: string): Promise<boolean> {
   cache.delete(url);
   return urlExists(url);
 }
+
+/**
+ * Para tarjetas/listados: asegura que la portada exista. Si la portada responde 404
+ * (blob borrado), se verifica la galería completa y se usa la primera foto viva; si no
+ * queda ninguna, image="" y la tarjeta muestra el placeholder de forma estable.
+ */
+export async function withVerifiedCover<T extends { image?: string; gallery?: string[] }>(v: T): Promise<T> {
+  const cover = v.image && !isPlaceholderPhoto(v.image) ? v.image : undefined;
+  if (cover && (await urlExists(cover))) return v;
+  const gallery = await verifiedGallery(v.image, v.gallery);
+  return { ...v, image: gallery[0] ?? "", gallery };
+}
