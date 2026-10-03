@@ -4,7 +4,7 @@ import { Metadata } from "next";
 import { formatCLP, spinFramesOf, type Vehicle } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getSettings } from "@/lib/server/settingsStore";
-import { verifiedGallery } from "@/lib/server/verifyPhotos";
+import { verifiedGallery, withVerifiedCover } from "@/lib/server/verifyPhotos";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import { whatsappLink } from "@/lib/company";
 import { asset } from "@/lib/asset";
@@ -78,13 +78,20 @@ export default async function VehiclePage({
     verifiedGallery(v.image, v.gallery),
   ]);
   const spinFrames = settings?.preferences?.showSpin360 ? spinFramesOf(v).map((f) => asset(f)) : [];
-  const similar = allVehicles
-    .filter((x) => {
-      const status = x.status || "Disponible";
-      return x.slug !== v.slug && x.bodyType === v.bodyType && x.hasRealPhotos && status !== "Borrador" && status !== "Vendido";
-    })
-    .slice(0, 3)
-    .map(stripPlateForPublic);
+  // Similares: solo con portada viva (antes podía salir un blob 404 en la miniatura).
+  const similar = (
+    await Promise.all(
+      allVehicles
+        .filter((x) => {
+          const status = x.status || "Disponible";
+          return x.slug !== v.slug && x.bodyType === v.bodyType && x.hasRealPhotos && status !== "Borrador" && status !== "Vendido";
+        })
+        .slice(0, 6)
+        .map((x) => withVerifiedCover(stripPlateForPublic(x))),
+    )
+  )
+    .filter((x) => Boolean(x.image))
+    .slice(0, 3);
 
   const specs = keySpecs(v);
   const highlights = (v.highlights || []).filter(Boolean).slice(0, 4);
