@@ -1,5 +1,6 @@
 import { COMPANY } from "@/lib/company";
 import { readJson, writeJson } from "@/lib/server/db";
+import { isValidEmail as isValidLeadEmail } from "@/lib/server/leadEmail";
 
 export type NotificationEvent = {
   id: string;
@@ -90,6 +91,9 @@ export async function sendEmail(opts: {
       console.warn("[RG NOTIFY] Resend error:", res.status, detail.slice(0, 300));
       return false;
     }
+    // Solo el id de Resend (sin destinatario) para rastrear la entrega en el panel.
+    const sent = (await res.json().catch(() => null)) as { id?: string } | null;
+    console.info("[RG NOTIFY] Resend id:", sent?.id ?? "?", "·", opts.subject.slice(0, 60));
     return true;
   } catch (err) {
     console.warn("[RG NOTIFY] Resend falló:", err);
@@ -118,12 +122,15 @@ export async function notifyTeam(event: {
   html?: string;
   /** Correo del visitante: el equipo responde directo al cliente. */
   replyTo?: string;
+  /** Asunto y texto plano ya armados (plantillas de leads). */
+  subject?: string;
+  text?: string;
 }): Promise<NotificationEvent> {
   const to = process.env.NOTIFY_EMAIL?.trim() || COMPANY.email;
   const emailed = await sendEmail({
     to,
-    subject: `[RG Motors] ${event.title}`,
-    text: `${event.body}\n\nTipo: ${event.type}\nFecha: ${new Date().toISOString()}`,
+    subject: event.subject || `[RG Motors] ${event.title}`,
+    text: event.text || `${event.body}\n\nTipo: ${event.type}\nFecha: ${new Date().toISOString()}`,
     html: event.html,
     replyTo: event.replyTo,
   });
@@ -302,4 +309,26 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Confirmación automática al visitante. Nunca lanza ni bloquea el aviso al equipo:
+ * si el correo no es válido o Resend falla, solo se registra en el log.
+ */
+export async function sendVisitorConfirmation(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<boolean> {
+  try {
+    if (!isValidLeadEmail(opts.to)) return false;
+    const replyTo = process.env.NOTIFY_EMAIL?.trim() || COMPANY.email;
+    const ok = await sendEmail({ ...opts, replyTo });
+    if (!ok) console.warn("[RG NOTIFY] Confirmación al visitante no enviada.");
+    return ok;
+  } catch (err) {
+    console.warn("[RG NOTIFY] Confirmación al visitante falló:", err instanceof Error ? err.message : err);
+    return false;
+  }
 }

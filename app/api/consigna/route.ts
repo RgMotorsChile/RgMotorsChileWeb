@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addTradeInRequest } from "@/lib/server/tradeInStore";
-import { buildLeadEmailHtml, notifyTeam } from "@/lib/server/notify";
+import { notifyTeam, sendVisitorConfirmation } from "@/lib/server/notify";
+import { teamEmail, visitorEmail } from "@/lib/server/leadEmail";
+import { RG_EMAIL_BRAND } from "@/lib/server/emailBrand";
 import {
   guardPublicLeadPost,
   isValidChilePhone,
@@ -71,6 +73,17 @@ export async function POST(req: NextRequest) {
     });
 
     const kmLabel = km ? `${km.toLocaleString("es-CL")} km` : "—";
+    const lead = {
+      kind: "consigna" as const,
+      name,
+      email,
+      phone,
+      message,
+      vehicle: { brand, model, year, km: km || undefined },
+      id: item.id,
+      receivedAt: new Date(),
+    };
+    const team = teamEmail(RG_EMAIL_BRAND, lead);
     const notification = await notifyTeam({
       type: "consigna",
       title: `Consignación: ${brand} ${model} ${year} · ${name}`,
@@ -83,17 +96,9 @@ export async function POST(req: NextRequest) {
         `Mensaje: ${message || "—"}`,
         `ID: ${item.id}`,
       ].join("\n"),
-      html: buildLeadEmailHtml("Nueva solicitud de consignación", [
-        ["Nombre", name],
-        ["Teléfono", phone],
-        ["Correo", email],
-        ["Marca", brand],
-        ["Modelo", model],
-        ["Año", year],
-        ["Kilometraje", kmLabel],
-        ["Mensaje", message],
-        ["ID", item.id],
-      ]),
+      subject: team.subject,
+      text: team.text,
+      html: team.html,
       replyTo: email,
       meta: { id: item.id, brand, model, year },
     });
@@ -111,6 +116,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await sendVisitorConfirmation({ to: email, ...visitorEmail(RG_EMAIL_BRAND, lead) });
     return NextResponse.json({ success: true, emailed: true, id: item.id });
   } catch (err) {
     console.error("[consigna] error:", err instanceof Error ? err.message : err);
