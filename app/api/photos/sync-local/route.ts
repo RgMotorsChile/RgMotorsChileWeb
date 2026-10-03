@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: 0, message: "No se encontraron subcarpetas en uploads." });
     }
 
-    const allVehicles = await getVehicles();
+    const allVehicles = await getVehicles({ scope: "staff" });
     let updatedCount = 0;
 
     for (const folderName of subDirs) {

@@ -9,6 +9,7 @@ describe("isPublicApi — política de acceso", () => {
     expect(isPublicApi("/api/test-drives", "POST")).toBe(true);
     expect(isPublicApi("/api/credits", "POST")).toBe(true);
     expect(isPublicApi("/api/simulations", "POST")).toBe(true);
+    expect(isPublicApi("/api/consigna", "POST")).toBe(true);
   });
 
   it("bloquea GET de listados con PII (requieren admin)", () => {

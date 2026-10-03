@@ -34,8 +34,8 @@ export default function SiteFooter() {
               </Link>
             </li>
             <li>
-              <Link href="/simulador" className="transition-colors hover:text-white">
-                Simular crédito online
+              <Link href="/consigna" className="transition-colors hover:text-white">
+                Consigna tu vehículo
               </Link>
             </li>
           </ul>

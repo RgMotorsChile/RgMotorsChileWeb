@@ -114,12 +114,18 @@ export async function notifyTeam(event: {
   title: string;
   body: string;
   meta?: Record<string, unknown>;
+  /** HTML ya sanitizado (usar buildLeadEmailHtml). */
+  html?: string;
+  /** Correo del visitante: el equipo responde directo al cliente. */
+  replyTo?: string;
 }): Promise<NotificationEvent> {
   const to = process.env.NOTIFY_EMAIL?.trim() || COMPANY.email;
   const emailed = await sendEmail({
     to,
     subject: `[RG Motors] ${event.title}`,
     text: `${event.body}\n\nTipo: ${event.type}\nFecha: ${new Date().toISOString()}`,
+    html: event.html,
+    replyTo: event.replyTo,
   });
 
   const entry: NotificationEvent = {
@@ -265,10 +271,35 @@ export function buildTestDriveEmails(data: {
   return { teamBody, customerBody, customerHtml };
 }
 
+/**
+ * Correo HTML para leads del sitio (contacto, consignación).
+ * Todos los valores pasan por escapeHtml: nada del visitante llega crudo al HTML.
+ */
+export function buildLeadEmailHtml(
+  title: string,
+  rows: Array<[label: string, value: string | number | undefined | null]>,
+): string {
+  const body = rows
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:8px 12px 8px 0;color:#666;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td>` +
+        `<td style="padding:8px 0;font-weight:600;white-space:pre-wrap">${escapeHtml(
+          value === undefined || value === null || value === "" ? "—" : String(value),
+        )}</td></tr>`,
+    )
+    .join("");
+  return `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#111">
+<h2 style="color:#173A79;margin:0 0 12px">${escapeHtml(title)}</h2>
+<table style="width:100%;border-collapse:collapse;font-size:14px">${body}</table>
+<p style="color:#888;font-size:12px;margin-top:20px">Enviado desde ${escapeHtml(COMPANY.website)}. Responde este correo para contestarle al cliente.</p>
+</div>`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

@@ -23,7 +23,10 @@ export async function POST(
 
   const { slug } = await params;
   try {
-    const vehicle = await getVehicleBySlug(slug, { bypassCache: true });
+    const vehicle = await getVehicleBySlug(slug, {
+      bypassCache: true,
+      scope: "staff",
+    });
     if (!vehicle) {
       return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
     }

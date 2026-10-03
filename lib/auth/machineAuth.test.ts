@@ -4,6 +4,12 @@ import {
   isMachineAuthPath,
 } from "@/lib/auth/machineAuth";
 
+function setNodeEnv(value: string | undefined) {
+  const env = process.env as { NODE_ENV?: string };
+  if (value === undefined) delete env.NODE_ENV;
+  else env.NODE_ENV = value;
+}
+
 describe("machineAuth", () => {
   const prevCron = process.env.CRON_SECRET;
   const prevVercelEnv = process.env.VERCEL_ENV;
@@ -13,7 +19,7 @@ describe("machineAuth", () => {
   beforeEach(() => {
     process.env.CRON_SECRET = "test-cron-secret-16chars";
     process.env.VERCEL_ENV = "production";
-    process.env.NODE_ENV = "production";
+    setNodeEnv("production");
     process.env.VERCEL = "1";
   });
 
@@ -22,8 +28,7 @@ describe("machineAuth", () => {
     else process.env.CRON_SECRET = prevCron;
     if (prevVercelEnv === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = prevVercelEnv;
-    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = prevNodeEnv;
+    setNodeEnv(prevNodeEnv);
     if (prevVercel === undefined) delete process.env.VERCEL;
     else process.env.VERCEL = prevVercel;
   });

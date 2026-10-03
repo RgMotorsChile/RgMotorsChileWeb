@@ -11,6 +11,15 @@ test.describe("APIs — seguridad y catálogo", () => {
     expect(body.total).toBeGreaterThan(0);
     for (const v of body.vehicles) {
       expect(v.status === "Borrador").toBe(false);
+      expect(v).not.toHaveProperty("plate");
+      expect(v).not.toHaveProperty("listPrice");
+      expect(v).not.toHaveProperty("supplier");
+      expect(v).not.toHaveProperty("techReview");
+      expect(v).not.toHaveProperty("circPermit");
+      expect(v).not.toHaveProperty("coverLocked");
+      expect(v).not.toHaveProperty("payload");
+      expect(v).not.toHaveProperty("owners");
+      expect(v).not.toHaveProperty("ownersCount");
     }
   });
 
@@ -41,7 +50,9 @@ test.describe("APIs — seguridad y catálogo", () => {
     const res = await request.get("/api/health");
     expect([200, 503]).toContain(res.status());
     const body = await res.json();
-    expect(body.checks).toBeTruthy();
+    expect(typeof body.ok).toBe("boolean");
+    expect(["ok", "degraded"]).toContain(body.status);
+    expect(body.checks).toBeUndefined();
   });
 
   test("GET /api/vehicles/[slug] de borrador no es público", async ({

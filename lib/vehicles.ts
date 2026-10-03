@@ -28,7 +28,8 @@ export interface Vehicle {
   power: string;
   traction: string;
   doors: number;
-  owners: number;
+  /** No se envía en la vitrina pública. */
+  owners?: number;
   featured?: boolean;
   status?: "Disponible" | "En reserva" | "Vendido" | "Borrador" | "En preparación";
   hasRealPhotos?: boolean;

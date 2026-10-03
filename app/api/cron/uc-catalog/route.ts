@@ -32,7 +32,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Slug inválido." }, { status: 400 });
   }
 
-  const list = await getVehicles({ bypassCache: true, tenantSlug: TENANT });
+  const list = await getVehicles({
+    bypassCache: true,
+    tenantSlug: TENANT,
+    scope: "staff",
+  });
   const current = list.find((v) => v.slug === slug);
   if (!current) {
     return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
