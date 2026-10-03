@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readJson, writeJson } from "@/lib/server/db";
-import { buildLeadEmailHtml, notifyTeam } from "@/lib/server/notify";
+import { notifyTeam, sendVisitorConfirmation } from "@/lib/server/notify";
+import { teamEmail, visitorEmail } from "@/lib/server/leadEmail";
+import { RG_EMAIL_BRAND } from "@/lib/server/emailBrand";
 import { COMPANY } from "@/lib/company";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import {
@@ -79,20 +81,29 @@ export async function POST(req: NextRequest) {
     list.unshift(entry);
     await writeJson(FILENAME, list.slice(0, 1000));
 
+    const lead = {
+      kind: "contact" as const,
+      name,
+      email,
+      phone,
+      message: entry.message,
+      id: entry.id,
+      receivedAt: new Date(entry.createdAt),
+    };
+    const team = teamEmail(RG_EMAIL_BRAND, lead);
     const notification = await notifyTeam({
       type: "contact",
       title: `Nuevo contacto web: ${name}`,
       body: `${message}\n\nTel: ${phone}\nEmail: ${email}\nDestino equipo: ${COMPANY.email}`,
-      html: buildLeadEmailHtml("Nuevo contacto desde el sitio", [
-        ["Nombre", name],
-        ["Teléfono", phone],
-        ["Correo", email],
-        ["Mensaje", message.slice(0, 2000)],
-      ]),
+      subject: team.subject,
+      text: team.text,
+      html: team.html,
       replyTo: email,
       meta: { id: entry.id, phone, email },
     });
     const emailed = notification.channel === "email";
+    // Confirmación al visitante solo si el aviso al equipo salió (no promete algo que no llegó).
+    if (emailed) await sendVisitorConfirmation({ to: email, ...visitorEmail(RG_EMAIL_BRAND, lead) });
 
     // Sin correo saliente no confirmamos éxito: el cliente ve el respaldo por WhatsApp.
     if (!emailed) {
