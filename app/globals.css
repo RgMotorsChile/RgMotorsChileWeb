@@ -420,8 +420,8 @@ input[type="range"].apple-range::-moz-range-thumb {
 }
 
 .rg-hero-media {
-  animation: rg-kenburns 28s var(--rg-ease) both;
-  will-change: transform;
+  /* Ken Burns solo en lg+ (ver media query abajo); en movil/tablet la imagen va en flujo */
+  will-change: auto;
 }
 .rg-hero-vignette {
   animation: rg-fade-in 1.1s var(--rg-ease) both;
@@ -446,14 +446,22 @@ input[type="range"].apple-range::-moz-range-thumb {
   animation-delay: 0.68s;
 }
 
-/* Móvil: menos motion (batería + menos crop raro en pantallas altas) */
+/* Móvil: sin Ken Burns ni scale (evita recortar la camioneta bajo el título) */
 @media (max-width: 639px) {
   .rg-hero-media {
     animation: none;
-    transform: scale(1.04);
+    transform: none;
   }
   .reveal-on-scroll {
     transform: translateY(12px);
+  }
+}
+
+/* Desktop Ken Burns solo desde lg (imagen absolute cover) */
+@media (min-width: 1024px) {
+  .rg-hero-media {
+    animation: rg-kenburns 28s var(--rg-ease) both;
+    will-change: transform;
   }
 }
 

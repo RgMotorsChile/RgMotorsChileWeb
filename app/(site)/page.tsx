@@ -29,23 +29,39 @@ export default async function Home() {
         aria-hidden
         className="pointer-events-none absolute left-0 top-0 h-px w-px"
       />
-      {/* HERO — mockup cinematográfico + acabado */}
-      <section className="relative isolate rg-hero-min overflow-hidden">
-        <Image
-          src={asset("/hero-l200-puerto-montt.png")}
-          alt="Stock RG Motors Puerto Montt"
-          fill
-          priority
-          quality={85}
-          sizes="100vw"
-          className="rg-hero-media object-cover object-[72%_42%] sm:object-[78%_center]"
-        />
-        {/* Más oscuro a la izquierda/abajo: el auto queda libre a la derecha */}
-        <div className="rg-hero-vignette absolute inset-0 bg-[linear-gradient(105deg,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.78)_28%,rgba(0,0,0,0.35)_48%,rgba(0,0,0,0.08)_62%,transparent_78%)] sm:bg-[linear-gradient(105deg,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.72)_22%,rgba(0,0,0,0.28)_42%,rgba(0,0,0,0.05)_58%,transparent_72%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.35)_0%,transparent_16%,transparent_48%,rgba(6,7,10,0.97)_100%)]" />
-        <div className="rg-grain" aria-hidden />
+      {/* HERO — camioneta visible en móvil (patrón Unidades Chile) + cinematic desktop */}
+      <section className="relative isolate overflow-x-clip bg-[#06070a] lg:min-h-[100svh]">
+        {/* Mobile: imagen en flujo (object-contain). Desktop: absoluta a la derecha (object-cover). */}
+        <div className="relative aspect-[16/9] max-h-[62svh] w-full lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:aspect-auto lg:h-full lg:max-h-none lg:w-[78%]">
+          <Image
+            src={asset("/hero-l200-puerto-montt.png")}
+            alt="Stock RG Motors Puerto Montt"
+            fill
+            priority
+            quality={85}
+            sizes="(max-width: 1023px) 100vw, 78vw"
+            className="rg-hero-media object-contain object-center lg:object-cover lg:object-[78%_center]"
+          />
+        </div>
 
-        <div className="relative mx-auto flex rg-hero-min max-w-7xl flex-col justify-end px-4 pb-[max(8.75rem,calc(env(safe-area-inset-bottom)+7.25rem))] pt-[max(6.25rem,calc(env(safe-area-inset-top)+4.75rem))] sm:px-8 sm:pb-32 sm:pt-[max(7rem,calc(env(safe-area-inset-top)+5.5rem))] lg:px-10 lg:pb-36">
+        {/* Fade inferior móvil: une imagen con el bloque de título debajo */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 aspect-[16/9] max-h-[62svh] w-full bg-gradient-to-b from-transparent from-55% to-[#06070a] lg:hidden"
+          aria-hidden
+        />
+
+        {/* Vignettes solo desktop: texto a la izquierda, camioneta libre a la derecha */}
+        <div
+          className="rg-hero-vignette absolute inset-0 hidden bg-[linear-gradient(105deg,rgba(0,0,0,0.88)_0%,rgba(0,0,0,0.72)_22%,rgba(0,0,0,0.28)_42%,rgba(0,0,0,0.05)_58%,transparent_72%)] lg:block"
+          aria-hidden
+        />
+        <div
+          className="absolute inset-0 hidden bg-[linear-gradient(180deg,rgba(0,0,0,0.35)_0%,transparent_16%,transparent_48%,rgba(6,7,10,0.97)_100%)] lg:block"
+          aria-hidden
+        />
+        <div className="rg-grain hidden lg:block" aria-hidden />
+
+        <div className="relative mx-auto flex max-w-7xl flex-col px-4 pb-10 pt-2 sm:px-8 sm:pb-12 sm:pt-4 lg:min-h-[100svh] lg:justify-center lg:px-10 lg:pb-36 lg:pt-[max(7rem,calc(env(safe-area-inset-top)+5.5rem))]">
           <div className="rg-stagger w-full max-w-[22rem] sm:max-w-[28rem]">
             <p className="font-display text-base font-semibold uppercase tracking-[0.14em] text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.85)] sm:text-xl">
               RG Motors
@@ -86,7 +102,10 @@ export default async function Home() {
           </div>
         </div>
 
-        <HeroExploreHint />
+        {/* Hint de scroll solo en desktop full-bleed */}
+        <div className="hidden lg:block">
+          <HeroExploreHint />
+        </div>
       </section>
 
       <TrustMarquee />
