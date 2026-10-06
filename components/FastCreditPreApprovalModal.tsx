@@ -6,6 +6,7 @@ import { formatCLP, vehicles as staticVehicles, Vehicle } from "@/lib/vehicles";
 import { formatRut, validateRut, evaluateCreditCapacity } from "@/lib/rut";
 import { asset } from "@/lib/asset";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";
 import LegalConsentCheckbox from "@/components/LegalConsentCheckbox";
 
@@ -141,6 +142,7 @@ export default function FastCreditPreApprovalModal({
         maxMonthlyQuota: evaluation.maxMonthlyQuota,
         id: data.credit.id,
       });
+      trackEvent("generate_lead", { form_name: "credito" });
       setStep(2);
     } catch {
       setSubmitError("Error de conexión. Intenta nuevamente.");

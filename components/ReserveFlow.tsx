@@ -5,6 +5,7 @@ import Link from "next/link";
 import { asset } from "@/lib/asset";
 import { Vehicle, formatCLP } from "@/lib/vehicles";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";
 import LegalConsentCheckbox from "@/components/LegalConsentCheckbox";
 
@@ -61,6 +62,7 @@ export default function ReserveFlow({ vehicle: v }: { vehicle: Vehicle }) {
         return;
       }
 
+      trackEvent("generate_lead", { form_name: "reserva", item_id: v.slug });
       setStatus("done");
     } catch {
       setErrorMsg("Error de conexión. Intenta nuevamente.");

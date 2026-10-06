@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { asset } from "@/lib/asset";
 import { vehicles as staticVehicles, formatCLP } from "@/lib/vehicles";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import { COMPANY } from "@/lib/company";
 import {
   EXECUTIVE_SUGGESTIONS,
@@ -301,6 +302,7 @@ export default function ChatWidget() {
       models: cars.map((c) => c.slug),
       messages: 1,
     });
+    trackEvent("whatsapp_click", { link_location: "chat" });
     window.open(whatsappHref(msg), "_blank", "noopener,noreferrer");
   };
 

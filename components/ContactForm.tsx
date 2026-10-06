@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { COMPANY, whatsappLink } from "@/lib/company";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import LegalConsentCheckbox from "@/components/LegalConsentCheckbox";
 
 export default function ContactForm() {
@@ -75,6 +76,7 @@ export default function ContactForm() {
             setError(data.error || "No se pudo enviar. Intenta de nuevo.");
             return;
           }
+          trackEvent("generate_lead", { form_name: "contacto" });
           setSent(true);
         } catch {
           setError("Error de conexión. Intenta nuevamente o escríbenos por WhatsApp.");

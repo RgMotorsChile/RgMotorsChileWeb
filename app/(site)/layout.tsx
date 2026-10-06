@@ -2,6 +2,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
 import CookieConsent from "@/components/CookieConsent";
+import GoogleAnalyticsConsent from "@/components/GoogleAnalyticsConsent";
 
 export default function SiteLayout({
   children,
@@ -15,6 +16,7 @@ export default function SiteLayout({
       <SiteFooter />
       <ChatWidget />
       <CookieConsent />
+      <GoogleAnalyticsConsent />
     </div>
   );
 }

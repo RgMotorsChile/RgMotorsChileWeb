@@ -16,6 +16,7 @@ import VehicleViewer from "@/components/VehicleViewer";
 import CuotaSimulator from "@/components/CuotaSimulator";
 import VehicleActionButtons from "@/components/VehicleActionButtons";
 import MobileVehicleStickyBar from "@/components/MobileVehicleStickyBar";
+import TrackVehicleView from "@/components/TrackVehicleView";
 
 export const revalidate = 120;
 
@@ -175,6 +176,14 @@ export default async function VehiclePage({
       </section>
 
       <MobileVehicleStickyBar vehicle={v} />
+      <TrackVehicleView
+        slug={v.slug}
+        brand={v.brand}
+        model={v.model}
+        year={v.year}
+        price={v.price}
+        bodyType={v.bodyType}
+      />
     </main>
   );
 }

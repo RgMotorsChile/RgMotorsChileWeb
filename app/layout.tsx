@@ -9,6 +9,9 @@ const manrope = Manrope({
   display: "swap",
 });
 
+/** Valor "content" de la meta google-site-verification (Search Console). */
+const googleSiteVerification = process.env.NEXT_PUBLIC_GSC_VERIFICATION?.trim();
+
 const oswald = Oswald({
   subsets: ["latin"],
   variable: "--font-display",
@@ -38,6 +41,9 @@ export const metadata: Metadata = {
     "Puerto Montt",
     "Chile",
   ],
+  ...(googleSiteVerification && {
+    verification: { google: googleSiteVerification },
+  }),
   icons: {
     icon: "/logo.png",
     apple: "/logo.png",
