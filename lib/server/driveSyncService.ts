@@ -242,7 +242,7 @@ export async function parseExcelStockBuffer(buffer: Buffer): Promise<any[]> {
         listPrice,
         km,
         supplier: String(r[9] || "").trim(),
-        location: String(r[12] || "Puerto Montt · Av. El Tepual (Ex Banco de Chile)").trim(),
+        location: String(r[12] || "Puerto Montt · Av. Cardonal (Ex Banco de Chile)").trim(),
       });
     }
   }

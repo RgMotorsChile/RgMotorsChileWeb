@@ -31,15 +31,15 @@ export default async function Home() {
       />
       {/* HERO — camioneta visible en móvil (patrón Unidades Chile) + cinematic desktop */}
       <section className="relative isolate overflow-x-clip bg-[#06070a] lg:min-h-[100svh]">
-        {/* Mobile: imagen en flujo (object-contain). Desktop: absoluta a la derecha (object-cover). */}
-        <div className="relative aspect-[16/9] max-h-[62svh] w-full lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:aspect-auto lg:h-full lg:max-h-none lg:w-[78%]">
+        {/* Mobile: imagen en flujo (object-contain). Desktop: full-bleed a todo el ancho (object-cover), como antes de #6. */}
+        <div className="relative aspect-[16/9] max-h-[62svh] w-full lg:absolute lg:inset-0 lg:aspect-auto lg:h-full lg:max-h-none lg:w-full">
           <Image
             src={asset("/hero-l200-puerto-montt.png")}
             alt="Stock RG Motors Puerto Montt"
             fill
             priority
             quality={85}
-            sizes="(max-width: 1023px) 100vw, 78vw"
+            sizes="100vw"
             className="rg-hero-media object-contain object-center lg:object-cover lg:object-[78%_center]"
           />
         </div>
@@ -67,7 +67,7 @@ export default async function Home() {
               RG Motors
             </p>
             <p className="mt-1 text-[11px] font-medium tracking-wide text-white/65 sm:text-[13px]">
-              Puerto Montt · Showroom Av. El Tepual
+              Puerto Montt · Showroom Av. Cardonal
             </p>
 
             <h1 className="font-display mt-3 text-[clamp(1.7rem,7.2vw,2rem)] font-semibold leading-[1.12] tracking-wide text-white drop-shadow-[0_6px_32px_rgba(0,0,0,0.9)] sm:mt-4 sm:text-[2.55rem] sm:leading-[1.1] lg:text-[2.85rem]">

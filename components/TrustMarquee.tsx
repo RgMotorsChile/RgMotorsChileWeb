@@ -223,7 +223,7 @@ const TRUST_ITEMS: TrustItem[] = [
   },
   {
     label: "Showroom Puerto Montt",
-    detail: "Av. El Tepual · visita y retiro",
+    detail: "Av. Cardonal · visita y retiro",
     mark: (
       <TrustIcon>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>

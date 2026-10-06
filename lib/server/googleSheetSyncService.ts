@@ -409,7 +409,7 @@ export async function syncFromLiveGoogleSheet(
         fuel: "Por confirmar",
         transmission: "Por confirmar",
         bodyType: guessBodyTypeFromModel(item.model),
-        location: "Puerto Montt · Av. El Tepual",
+        location: "Puerto Montt · Av. Cardonal",
         image: "/images/placeholder-pending-car.svg",
         gallery: [],
         hasRealPhotos: false,

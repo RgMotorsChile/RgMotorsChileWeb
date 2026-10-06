@@ -402,7 +402,7 @@ function VehiclePage({
               : [
                   "Unidad del inventario actual RG Motors",
                   "Financiamiento Autofin referencial",
-                  "Visita el showroom en Av. El Tepual",
+                  "Visita el showroom en Av. Cardonal",
                 ]
             ).map((h: string) => (
               <View key={h} style={s.hlItem}>
@@ -465,7 +465,7 @@ export function CatalogPdfDoc({
           <View style={s.coverTrust}>
             <Text style={s.coverTrustItem}>✓ Fotos reales de patio</Text>
             <Text style={s.coverTrustItem}>✓ Crédito Autofin</Text>
-            <Text style={s.coverTrustItem}>✓ Av. El Tepual</Text>
+            <Text style={s.coverTrustItem}>✓ Av. Cardonal</Text>
           </View>
         </View>
         <Text style={s.coverFoot}>

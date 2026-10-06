@@ -19,8 +19,17 @@ function stripWarrantyClaims(vehicle: Vehicle): Vehicle {
   return { ...vehicle, highlights: cleaned };
 }
 
+/** Dirección legada en datos de stock: el showroom está en Av. Cardonal. */
+const LEGACY_ADDRESS_RE = /Av\.\s*El\s+Tepual/i;
+
 function normalizeVehicle(vehicle: Vehicle): Vehicle {
   let cleaned = stripWarrantyClaims(vehicle);
+  if (cleaned.location && LEGACY_ADDRESS_RE.test(cleaned.location)) {
+    cleaned = {
+      ...cleaned,
+      location: cleaned.location.replace(LEGACY_ADDRESS_RE, "Av. Cardonal"),
+    };
+  }
   if (cleaned.bodyType === "Pickup") {
     cleaned = { ...cleaned, bodyType: "Camioneta" };
   }

@@ -17,7 +17,7 @@ const PILLARS = [
   {
     n: "03",
     title: "Entrega en patio",
-    desc: "Visita, prueba de manejo y retiro en Av. El Tepual, Puerto Montt, con asesoría de punta a punta.",
+    desc: "Visita, prueba de manejo y retiro en Av. Cardonal, Puerto Montt, con asesoría de punta a punta.",
   },
 ];
 

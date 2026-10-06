@@ -8,7 +8,7 @@ import { getTrafficSource } from "@/lib/trafficTracking";
 import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";
 
-const BRANCHES = ["Showroom Av. El Tepual (Puerto Montt)"];
+const BRANCHES = ["Showroom Av. Cardonal (Puerto Montt)"];
 const TIMES = ["10:00", "11:30", "12:30", "15:00", "16:30", "17:30"];
 
 function daysOfMonth() {

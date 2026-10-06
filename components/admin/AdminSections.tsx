@@ -1889,7 +1889,7 @@ export function TestDrivesSection() {
             className="rounded-xl border border-white/15 bg-ink-950 px-3 py-2 text-xs font-medium text-white outline-none focus:border-brand-500"
           >
             <option value="all">Todas las sucursales</option>
-            <option value="Showroom Av. El Tepual (Puerto Montt)">Showroom Av. El Tepual</option>
+            <option value="Showroom Av. Cardonal (Puerto Montt)">Showroom Av. Cardonal</option>
           </select>
 
           <select
