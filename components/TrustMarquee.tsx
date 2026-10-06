@@ -48,64 +48,6 @@ function TrustIcon({ children }: { children: ReactNode }) {
   );
 }
 
-function AutofinMark() {
-  return (
-    <MarkSlot>
-      <svg
-        viewBox="0 0 196 48"
-        className="h-[22px] w-auto max-w-[152px] overflow-visible"
-        role="img"
-        aria-label="AUTOFIN"
-      >
-        {/* tip dorado sobre la A */}
-        <circle cx="17" cy="8.5" r="3.4" fill={G} />
-        {/* A */}
-        <path
-          d="M5 38 L17 12 L29 38"
-          stroke="#EDE8DC"
-          strokeWidth="4.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        {/* U */}
-        <path
-          d="M39 13.5 v14.5 c0 4.2 2.8 6.6 6.8 6.6 s6.8-2.4 6.8-6.6 V13.5"
-          stroke="#EDE8DC"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        {/* T */}
-        <path d="M63 13.5 h19.5 M72.75 13.5 v24" stroke="#EDE8DC" strokeWidth="4.2" strokeLinecap="round" />
-        {/* O */}
-        <circle cx="100" cy="25.5" r="10.6" stroke="#EDE8DC" strokeWidth="4.2" fill="none" />
-        {/* F completa: tallo hasta abajo + dos barras */}
-        <path
-          d="M118 13.5 v24 M118 13.5 h17 M118 25.5 h13"
-          stroke="#EDE8DC"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        {/* I */}
-        <path d="M147 13.5 v24" stroke="#EDE8DC" strokeWidth="4.2" strokeLinecap="round" />
-        {/* N */}
-        <path
-          d="M160 37.5 V13.5 L176.5 37.5 V13.5"
-          stroke="#EDE8DC"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      </svg>
-    </MarkSlot>
-  );
-}
-
 function AutofactMark() {
   const fill = "#3D8FCB";
   return (
@@ -181,11 +123,6 @@ function AutofactMark() {
 }
 
 const TRUST_ITEMS: TrustItem[] = [
-  {
-    label: "Financiamiento Autofin",
-    detail: "Crédito automotriz",
-    mark: <AutofinMark />,
-  },
   {
     label: "Informe Autofact",
     detail: "Historial y dominio al día",

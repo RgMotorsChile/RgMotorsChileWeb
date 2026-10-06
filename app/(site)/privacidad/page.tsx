@@ -68,7 +68,7 @@ export default function PrivacidadPage() {
           <h2 className="text-base font-bold text-white">4. Encargados y transferencias</h2>
           <p>
             Podemos compartir datos estrictamente necesarios con entidades financieras
-            asociadas (por ejemplo Autofin) cuando solicitas una evaluación de crédito, y con
+            asociadas cuando solicitas una evaluación de crédito, y con
             proveedores técnicos que alojan u operan el sitio (hosting, infraestructura cloud),
             bajo deber de confidencialidad y solo para las finalidades indicadas.
           </p>

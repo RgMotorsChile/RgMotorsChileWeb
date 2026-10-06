@@ -76,8 +76,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -117,8 +116,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -147,8 +145,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -176,8 +173,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -216,8 +212,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -257,8 +252,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": true,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -296,8 +290,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -325,8 +318,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -365,8 +357,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -405,8 +396,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -447,8 +437,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -476,8 +465,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -504,8 +492,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -546,8 +533,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -574,8 +560,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -603,8 +588,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -645,8 +629,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -683,8 +666,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -723,8 +705,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -765,8 +746,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -806,8 +786,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -846,8 +825,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -887,8 +865,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -928,8 +905,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -969,8 +945,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1011,8 +986,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1041,8 +1015,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1080,8 +1053,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1120,8 +1092,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1163,8 +1134,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1193,8 +1163,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1223,8 +1192,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1265,8 +1233,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1302,8 +1269,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1342,8 +1308,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1384,8 +1349,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   },
   {
@@ -1424,8 +1388,7 @@ export const initialVehicles: Vehicle[] = [
     "featured": false,
     "highlights": [
       "Unidad del inventario actual RG Motors",
-      "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial"
+      "Fotos reales de patio cuando estén disponibles"
     ]
   }
 ];

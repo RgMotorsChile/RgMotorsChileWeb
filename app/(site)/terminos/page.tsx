@@ -82,7 +82,7 @@ export default function TerminosPage() {
           <h2 className="text-base font-bold text-white">6. Financiamiento</h2>
           <p>
             {COMPANY.name} comercializa el vehículo. El crédito, si se otorga, es evaluado y
-            otorgado por Autofin u otra entidad financiera. Cualquier estimación de cuota es
+            otorgado por una entidad financiera. Cualquier estimación de cuota es
             referencial. Ver{" "}
             <Link href="/aviso-credito" className="text-brand-300 hover:underline">
               Aviso de Crédito
@@ -105,7 +105,7 @@ export default function TerminosPage() {
           <p>
             Marcas, textos, diseño y fotografías del sitio pertenecen a {COMPANY.name} o a
             sus licenciantes. Queda prohibida su reproducción no autorizada con fines
-            comerciales. Marcas de terceros (fabricantes, Autofin, Autofact, etc.) pertenecen
+            comerciales. Marcas de terceros (fabricantes, Autofact, etc.) pertenecen
             a sus respectivos titulares.
           </p>
         </section>

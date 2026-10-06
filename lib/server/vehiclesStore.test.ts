@@ -26,4 +26,10 @@ describe("vehiclesStore", () => {
     expect(list.every((v) => v.bodyType !== "Pickup")).toBe(true);
     expect(list.some((v) => v.bodyType === "Camioneta")).toBe(true);
   });
+
+  it("no publica menciones a la financiera en los destacados", async () => {
+    const list = await getVehicles();
+    const texts = list.flatMap((v) => v.highlights ?? []);
+    expect(texts.some((h) => /autofin/i.test(h))).toBe(false);
+  });
 });

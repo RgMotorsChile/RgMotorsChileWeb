@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Aviso de Crédito | RG Motors",
   description:
-    "Aviso legal sobre financiamiento automotriz y estimaciones de cuota referenciales (Autofin / SERNAC).",
+    "Aviso legal sobre financiamiento automotriz y estimaciones de cuota referenciales (SERNAC).",
 };
 
 export default function AvisoCreditoPage() {
@@ -22,9 +22,9 @@ export default function AvisoCreditoPage() {
           <h2 className="text-base font-bold text-white">1. Estimaciones de cuota</h2>
           <p>
             Cuando un asesor de RG Motors entrega una estimación de cuota, es referencial. El
-            crédito lo otorga <strong className="text-white">Autofin</strong>; RG Motors
+            crédito lo otorga una <strong className="text-white">entidad financiera</strong>; RG Motors
             comercializa el vehículo. No constituye oferta vinculante ni pre-aprobación. Las
-            condiciones definitivas las confirma Autofin.
+            condiciones definitivas las confirma la entidad financiera.
           </p>
         </section>
 
@@ -32,8 +32,8 @@ export default function AvisoCreditoPage() {
           <h2 className="text-base font-bold text-white">2. Evaluación de la financiera</h2>
           <p>
             La tasa, el pie mínimo, el plazo, los gastos operacionales y la aprobación
-            final dependen de la evaluación comercial y crediticia de Autofin (u otra
-            entidad), del historial del solicitante y de las condiciones vigentes al
+            final dependen de la evaluación comercial y crediticia de la entidad financiera,
+            del historial del solicitante y de las condiciones vigentes al
             momento de la operación.
           </p>
         </section>

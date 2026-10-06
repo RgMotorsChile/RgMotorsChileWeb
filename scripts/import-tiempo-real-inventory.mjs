@@ -237,7 +237,6 @@ function buildVehicles() {
         highlights: [
           "Unidad del inventario actual RG Motors",
           "Fotos reales de patio cuando estén disponibles",
-          "Financiamiento Autofin referencial",
         ],
         _sheet: name.trim(),
       });

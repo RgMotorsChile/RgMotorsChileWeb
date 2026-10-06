@@ -9,11 +9,15 @@ const CACHE_KEY = "vehicles:list";
 /** Caché corta: lecturas de vitrina. Escrituras siempre bypasan caché. */
 const CACHE_TTL_MS = 60_000;
 
-/** RG Motors no ofrece garantía en usados: filtrar textos heredados. */
-function stripWarrantyClaims(vehicle: Vehicle): Vehicle {
+/**
+ * Textos heredados que ya no se publican: RG Motors no ofrece garantía en usados
+ * y ya no menciona a la financiera (Autofin) en el sitio. Se filtran en lectura.
+ */
+function stripLegacyHighlights(vehicle: Vehicle): Vehicle {
   if (!vehicle.highlights?.length) return vehicle;
   const cleaned = vehicle.highlights.filter(
-    (h) => !/garant[ií]a/i.test(h) || /no ofrece garantía/i.test(h),
+    (h) =>
+      (!/garant[ií]a/i.test(h) || /no ofrece garantía/i.test(h)) && !/autofin/i.test(h),
   );
   if (cleaned.length === vehicle.highlights.length) return vehicle;
   return { ...vehicle, highlights: cleaned };
@@ -23,7 +27,7 @@ function stripWarrantyClaims(vehicle: Vehicle): Vehicle {
 const LEGACY_ADDRESS_RE = /Av\.\s*El\s+Tepual/i;
 
 function normalizeVehicle(vehicle: Vehicle): Vehicle {
-  let cleaned = stripWarrantyClaims(vehicle);
+  let cleaned = stripLegacyHighlights(vehicle);
   if (cleaned.location && LEGACY_ADDRESS_RE.test(cleaned.location)) {
     cleaned = {
       ...cleaned,
