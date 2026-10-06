@@ -9,7 +9,6 @@ import {
   segments,
   topLeads,
   demandVsStock,
-  financing,
   channels,
   salesTrend,
   recommendations,
@@ -21,7 +20,7 @@ import {
   formatCLPShort,
   type CrmLeadInput,
 } from "@/lib/analytics";
-import { HBarChart, Donut, LineForecast, Funnel, Gauge, KpiCard } from "./charts";
+import { HBarChart, Donut, LineForecast, Funnel, KpiCard } from "./charts";
 import { ChannelBadge } from "./AdminSections";
 
 type CapturedLead = {
@@ -54,14 +53,12 @@ export default function AnalyticsDashboard() {
     async function load() {
       setLoading(true);
       try {
-        const [trackRes, contactRes, tdRes, resRes, creditRes, simRes, vehRes] =
+        const [trackRes, contactRes, tdRes, resRes, vehRes] =
           await Promise.all([
             fetch("/api/track"),
             fetch("/api/contact"),
             fetch("/api/test-drives"),
             fetch("/api/reservations"),
-            fetch("/api/credits"),
-            fetch("/api/simulations"),
             fetch("/api/vehicles?admin=true"),
           ]);
 
@@ -69,8 +66,6 @@ export default function AnalyticsDashboard() {
         const contactJson = contactRes.ok ? await contactRes.json() : { messages: [] };
         const tdJson = tdRes.ok ? await tdRes.json() : { testDrives: [] };
         const resJson = resRes.ok ? await resRes.json() : { reservations: [] };
-        const creditJson = creditRes.ok ? await creditRes.json() : { applications: [] };
-        const simJson = simRes.ok ? await simRes.json() : { simulations: [] };
         const vehJson = vehRes.ok ? await vehRes.json() : { vehicles: [] };
 
         const chatLeads: CapturedLead[] = trackJson.leads ?? [];
@@ -143,45 +138,6 @@ export default function AnalyticsDashboard() {
             trafficSource: r.trafficSource,
             kind: "reservation" as const,
           })),
-          ...(creditJson.applications ?? creditJson.credits ?? []).map((c: {
-            id: string;
-            clientName?: string;
-            phone?: string;
-            email?: string;
-            date?: string;
-            trafficSource?: { source?: string };
-          }) => ({
-            id: c.id,
-            name: c.clientName,
-            phone: c.phone,
-            email: c.email,
-            createdAt: c.date,
-            financing: true,
-            trafficSource: c.trafficSource,
-            kind: "credit" as const,
-          })),
-          ...(simJson.simulations ?? [])
-            .filter((e: { eventType?: string }) => e.eventType === "lead_submit")
-            .map((e: {
-              id: string;
-              clientName?: string;
-              phone?: string;
-              email?: string;
-              createdAt?: string;
-              vehiclePrice?: number;
-              trafficSource?: { source?: string };
-              vehicleSlug?: string;
-            }) => ({
-              id: e.id,
-              name: e.clientName,
-              phone: e.phone,
-              email: e.email,
-              createdAt: e.createdAt,
-              budget: e.vehiclePrice,
-              models: e.vehicleSlug ? [e.vehicleSlug] : [],
-              trafficSource: e.trafficSource,
-              kind: "simulation" as const,
-            })),
         ];
 
         if (!cancelled) {
@@ -210,7 +166,6 @@ export default function AnalyticsDashboard() {
   const segs = useMemo(() => segments(leads), [leads]);
   const tops = useMemo(() => topLeads(leads, 10), [leads]);
   const dvs = useMemo(() => demandVsStock(leads), [leads]);
-  const fin = useMemo(() => financing(leads), [leads]);
   const chs = useMemo(() => channels(leads), [leads]);
   const trend = useMemo(() => salesTrend(leads), [leads]);
   const recs = useMemo(() => recommendations(leads), [leads]);
@@ -260,7 +215,7 @@ export default function AnalyticsDashboard() {
       {!loading && leads.length === 0 ? (
         <div className="rounded-2xl border border-white/10 bg-ink-800/50 px-4 py-3 text-sm text-white/60">
           Todavía no hay leads reales suficientes. Los gráficos se irán llenando con contactos,
-          chat, reservas, créditos y test drives del sitio.
+          chat, reservas y test drives del sitio.
         </div>
       ) : null}
 
@@ -324,10 +279,9 @@ export default function AnalyticsDashboard() {
       {/* PESTAÑA 1: RENDIMIENTO COMERCIAL & VENTAS */}
       {analyticsTab === "rendimiento" && (
         <div className="space-y-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <KpiCard icon="📅" value={String(kpis.leads30d)} label="Leads últimos 30 días" />
             <KpiCard icon="🏷️" value={formatCLPShort(kpis.avgTicket)} label="Ticket promedio" accent="#2DD4BF" />
-            <KpiCard icon="💳" value={`${kpis.creditRate}%`} label="Simula crédito" accent="#FACC15" />
             <KpiCard icon="⭐" value={String(kpis.avgScore)} label="Score promedio de lead" accent="#49A7FF" />
           </div>
 
@@ -345,21 +299,10 @@ export default function AnalyticsDashboard() {
             </Card>
           </div>
 
-          {/* Embudo + Financiamiento */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card title="Embudo de conversión">
-              <Funnel stages={fun} />
-            </Card>
-            <Card title="Apetito de financiamiento">
-              <div className="flex items-center justify-around">
-                <Gauge value={fin.wantsPct} label="Pide crédito" suffix="%" color="#FACC15" />
-                <Gauge value={fin.approvalRate} label="Aprobación est." suffix="%" color="#22C55E" />
-              </div>
-              <div className="mt-3">
-                <HBarChart data={fin.terms.map((t) => ({ label: t.label, value: t.pct }))} unit="%" color="#2D8CFF" />
-              </div>
-            </Card>
-          </div>
+          {/* Embudo */}
+          <Card title="Embudo de conversión">
+            <Funnel stages={fun} />
+          </Card>
         </div>
       )}
 
@@ -558,7 +501,7 @@ export default function AnalyticsDashboard() {
                       </td>
                       <td className="py-3">
                         <span className="font-bold text-amber-400">🔥 {item.waitlistBuyers} clientes</span>
-                        <p className="text-[10px] text-white/40">con pre-aprobación</p>
+                        <p className="text-[10px] text-white/40">en lista de espera</p>
                       </td>
                       <td className="py-3">
                         <span className="font-semibold text-white">{item.searchVolume30d}</span>

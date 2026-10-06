@@ -40,7 +40,6 @@ export type Lead = {
   budget: number; // CLP
   wantsFinancing: boolean;
   views: number;
-  creditSims: number;
   testDrive: boolean;
   reserved: boolean;
   purchased: boolean;
@@ -93,7 +92,7 @@ export type CrmLeadInput = {
   models?: string[];
   messages?: number;
   trafficSource?: { source?: string } | null;
-  kind?: "chat" | "contact" | "test-drive" | "reservation" | "credit" | "simulation";
+  kind?: "chat" | "contact" | "test-drive" | "reservation";
 };
 
 /** Convierte eventos CRM reales al modelo Lead del dashboard (sin inventar). */
@@ -114,12 +113,8 @@ export function mapCrmToLead(input: CrmLeadInput, now = Date.now()): Lead {
     interestBody: normalizeBody(input.bodyType),
     interestBrand: brandFromModel,
     budget: Number(input.budget) > 0 ? Number(input.budget) : 12_000_000,
-    wantsFinancing:
-      Boolean(input.financing) ||
-      input.kind === "credit" ||
-      input.kind === "simulation",
+    wantsFinancing: Boolean(input.financing),
     views: Math.max(1, Number(input.messages) || 1),
-    creditSims: input.kind === "credit" || input.kind === "simulation" ? 1 : 0,
     testDrive: input.kind === "test-drive",
     reserved: input.kind === "reservation",
     purchased: false,
@@ -141,7 +136,6 @@ export function generateLeads(): Lead[] {
 export function leadScore(l: Omit<Lead, "score" | "segment">): number {
   let s = 0;
   s += Math.min(l.views, 12) * 2.2; // interés / navegación
-  s += l.creditSims * 7; // intención de compra financiada
   s += l.testDrive ? 16 : 0; // paso fuerte
   s += l.reserved ? 22 : 0; // muy fuerte
   s += l.purchased ? 10 : 0;
@@ -190,7 +184,6 @@ export type Kpis = {
   hotLeads: number;
   conversion: number; // % leads que compran
   reservationRate: number; // % que reserva
-  creditRate: number; // % que simula crédito
   avgTicket: number;
   revenue: number;
   avgScore: number;
@@ -206,7 +199,6 @@ export function computeKpis(leads: Lead[]): Kpis {
       hotLeads: 0,
       conversion: 0,
       reservationRate: 0,
-      creditRate: 0,
       avgTicket: 0,
       revenue: 0,
       avgScore: 0,
@@ -225,7 +217,6 @@ export function computeKpis(leads: Lead[]): Kpis {
     hotLeads: leads.filter((l) => scoreBand(l.score) === "hot").length,
     conversion: pct(purchased.length, total),
     reservationRate: pct(leads.filter((l) => l.reserved).length, total),
-    creditRate: pct(leads.filter((l) => l.creditSims > 0).length, total),
     avgTicket: purchased.length ? Math.round(revenue / purchased.length) : 0,
     revenue,
     avgScore: Math.round(leads.reduce((a, l) => a + l.score, 0) / total),
@@ -246,7 +237,6 @@ export function funnel(leads: Lead[]) {
   const total = leads.length;
   const stages = [
     { label: "Visitaron fichas", value: total },
-    { label: "Simularon crédito", value: leads.filter((l) => l.creditSims > 0).length },
     { label: "Agendaron prueba", value: leads.filter((l) => l.testDrive).length },
     { label: "Reservaron", value: leads.filter((l) => l.reserved).length },
     { label: "Compraron", value: leads.filter((l) => l.purchased).length },
@@ -292,7 +282,6 @@ function reasonFor(l: Lead): string {
   const bits: string[] = [];
   if (l.reserved) bits.push("reservó");
   if (l.testDrive) bits.push("agendó prueba");
-  if (l.creditSims > 0) bits.push(`${l.creditSims} simulación${l.creditSims > 1 ? "es" : ""} de crédito`);
   if (l.lastActivityDaysAgo <= 7) bits.push("activo esta semana");
   if (bits.length === 0) bits.push(`${l.views} vistas de fichas`);
   return bits.slice(0, 2).join(" · ");
@@ -321,14 +310,6 @@ export function financing(leads: Lead[]) {
   const wants = leads.filter((l) => l.wantsFinancing);
   return {
     wantsPct: pct(wants.length, leads.length),
-    approvalRate: 0, // sin datos reales de aprobación
-    avgDown: 20,
-    terms: [
-      { label: "24 cuotas", pct: 0 },
-      { label: "36 cuotas", pct: 0 },
-      { label: "48 cuotas", pct: 0 },
-      { label: "60 cuotas", pct: 0 },
-    ],
   };
 }
 

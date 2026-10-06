@@ -4,11 +4,9 @@ import { getVehicles } from "@/lib/server/vehiclesStore";
 import { getSoldVehicles } from "@/lib/server/soldVehiclesStore";
 import { getReservations } from "@/lib/server/reservationsStore";
 import { getTestDrives } from "@/lib/server/testDrivesStore";
-import { getCreditApplications } from "@/lib/server/creditsStore";
 import { getTradeInRequests } from "@/lib/server/tradeInStore";
 import { getCarRequests } from "@/lib/server/carRequestsStore";
 import { getPriceAlerts } from "@/lib/server/priceAlertsStore";
-import { getSimulationEvents } from "@/lib/server/simulationsStore";
 import {
   assertProductionStorage,
   isBlobReady,
@@ -89,11 +87,9 @@ export async function buildTelemetryReport() {
     sold,
     reservations,
     testDrives,
-    credits,
     tradeIns,
     carRequests,
     priceAlerts,
-    simulations,
     contacts,
     notifications,
     leads,
@@ -103,11 +99,9 @@ export async function buildTelemetryReport() {
     getSoldVehicles(),
     getReservations(),
     getTestDrives(),
-    getCreditApplications(),
     getTradeInRequests(),
     getCarRequests(),
     getPriceAlerts(),
-    getSimulationEvents(),
     readJson<ContactLike[]>("contact-messages.json", []),
     readJson<NotificationEvent[]>("notifications.json", []),
     readJson<ContactLike[]>("leads.json", []),
@@ -142,7 +136,6 @@ export async function buildTelemetryReport() {
   const soldThisMonth = sold.filter((s) => inPeriod(s.soldAt, "month")).length;
   const soldThisYear = sold.filter((s) => inPeriod(s.soldAt, "year")).length;
 
-  const simLeads = simulations.filter((s) => s.eventType === "lead_submit");
   const pendingRes = reservations.filter((r) => r.status === "Pendiente").length;
   const pendingTd = testDrives.filter(
     (t) => t.status === "Pendiente" || t.status === "Confirmada",
@@ -153,11 +146,9 @@ export async function buildTelemetryReport() {
     chatLeads: periodCounts(leads, (l) => l.createdAt),
     testDrives: periodCounts(testDrives, (t) => t.createdAt),
     reservations: periodCounts(reservations, (r) => r.date),
-    credits: periodCounts(credits, (c) => c.date),
     tradeIns: periodCounts(tradeIns, (t) => t.date),
     carRequests: periodCounts(carRequests, (c) => c.date),
     priceAlerts: periodCounts(priceAlerts, (p) => p.date),
-    simulationLeads: periodCounts(simLeads, (s) => s.createdAt),
   };
 
   const interestThisMonth =
@@ -165,30 +156,24 @@ export async function buildTelemetryReport() {
     businessSignals.chatLeads.month +
     businessSignals.testDrives.month +
     businessSignals.reservations.month +
-    businessSignals.credits.month +
     businessSignals.tradeIns.month +
     businessSignals.carRequests.month +
-    businessSignals.priceAlerts.month +
-    businessSignals.simulationLeads.month;
+    businessSignals.priceAlerts.month;
 
   const interestToday =
     businessSignals.contacts.today +
     businessSignals.chatLeads.today +
     businessSignals.testDrives.today +
     businessSignals.reservations.today +
-    businessSignals.credits.today +
     businessSignals.tradeIns.today +
     businessSignals.carRequests.today +
-    businessSignals.priceAlerts.today +
-    businessSignals.simulationLeads.today;
+    businessSignals.priceAlerts.today;
 
   const channelItems = [
     ...contacts,
     ...leads,
     ...testDrives,
     ...reservations,
-    ...credits,
-    ...simLeads,
   ];
   const channels = countBySource(channelItems);
 

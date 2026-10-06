@@ -29,6 +29,11 @@ const nextConfig = {
       "node_modules/@napi-rs/canvas-win32-x64-msvc/**/*",
     ],
   },
+  // El simulador de crédito se retiró: enlaces antiguos e indexados van al catálogo.
+  async redirects() {
+    if (isGhPages) return [];
+    return [{ source: "/simulador", destination: "/catalogo", permanent: true }];
+  },
   // Permite HMR cuando Playwright abre el origen por 127.0.0.1
   allowedDevOrigins: ["127.0.0.1"],
   ...(isGhPages

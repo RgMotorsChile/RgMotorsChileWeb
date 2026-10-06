@@ -18,11 +18,10 @@ Documento de alcance para práctica profesional y operación.
 
 ### Sitio público
 - Home, catálogo con filtros, ficha de vehículo, comparador.
-- Simulador de crédito **referencial** (lógica Autofin Trinidad: pie ≥20%, plazo ≤48, cuota francesa all-in).
-- Tasas tipadas en `lib/finance/autofin-rate-table.ts`. **CI semanal** (`.github/workflows/autofin-rates.yml`) detecta drift vs `spider/fee` (±1%) y abre PR; si Cloudflare bloquea, crea issue `autofin-rates`. Plan B: scrape local headed.
+- Simulador de crédito: **retirado** (octubre 2026). `/simulador` redirige a `/catalogo`.
 - Disclaimers SERNAC / aviso de crédito (`/aviso-credito`).
 - Páginas legales: `/privacidad`, `/terminos`.
-- Formularios: contacto, solicitud de crédito, reserva, prueba de manejo, trade-in, alertas de precio.
+- Formularios: contacto, reserva, prueba de manejo, trade-in, alertas de precio.
 - WhatsApp y datos de sucursal (`lib/company.ts`).
 
 ### Admin

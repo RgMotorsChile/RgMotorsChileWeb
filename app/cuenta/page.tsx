@@ -31,7 +31,7 @@ export default function CuentaPage() {
           <p className="text-sm leading-relaxed text-white/60">
             El portal de cliente aún no está activo. Mientras tanto, puedes revisar el
             catálogo, contactarnos o escribirnos por WhatsApp para seguimiento de
-            reservas, créditos o consultas.
+            reservas o consultas.
           </p>
 
           <div className="flex flex-col gap-3 pt-2">

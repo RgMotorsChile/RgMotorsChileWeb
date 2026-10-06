@@ -1,4 +1,4 @@
-import { COMPANY, autofinSimulatorUrl, whatsappLink } from "@/lib/company";
+import { COMPANY, whatsappLink } from "@/lib/company";
 
 export type ChatVehicle = {
   slug: string;
@@ -206,9 +206,8 @@ export function answerAsExecutive(
 
   if (/\b(financi|credito|crédito|cuota|\bpie\b|autofin)\b/.test(q)) {
     intents.push("financiamiento");
-    const sim = autofinSimulatorUrl();
     return {
-      text: `Sí, trabajamos con financiamiento (incluye Autofin). Puedes simular cuotas aquí: ${sim}\nSi me indicas presupuesto o pie, te muestro autos que encajen. También puedo pasarte con un ejecutivo por WhatsApp.`,
+      text: `Sí, trabajamos con financiamiento (incluye Autofin). Un ejecutivo te entrega las condiciones por WhatsApp.\nSi me indicas presupuesto o pie, te muestro autos que encajen.`,
       intents,
       financing: true,
       showContact: true,

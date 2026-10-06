@@ -13,11 +13,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { asset } from "@/lib/asset";
-import {
-  estimateMonthly,
-  formatCLP,
-  type Vehicle,
-} from "@/lib/vehicles";
+import { formatCLP, type Vehicle } from "@/lib/vehicles";
 
 const C = {
   bg: "#090909",
@@ -204,8 +200,7 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   priceLabel: { fontSize: 8, color: C.muted, marginBottom: 3 },
-  price: { fontSize: 18, fontWeight: 700, color: C.brandGlow, marginBottom: 2 },
-  monthly: { fontSize: 9, color: C.soft, marginBottom: 8 },
+  price: { fontSize: 18, fontWeight: 700, color: C.brandGlow, marginBottom: 8 },
   badgeRow: { flexDirection: "row", gap: 5, flexWrap: "wrap" },
   badge: {
     backgroundColor: "rgba(0,108,255,0.15)",
@@ -340,7 +335,6 @@ function VehiclePage({
   heroSrc?: string;
 }) {
   const specs = pdfSpecs(v);
-  const monthly = estimateMonthly(v.price || 0);
 
   return (
     <Page size="A4" style={s.page}>
@@ -386,9 +380,6 @@ function VehiclePage({
           <View style={s.priceBox}>
             <Text style={s.priceLabel}>Precio</Text>
             <Text style={s.price}>{formatCLP(v.price || 0)}</Text>
-            <Text style={s.monthly}>
-              o {formatCLP(monthly)}/mes (pie 20% · 48 cuotas)
-            </Text>
             <View style={s.badgeRow}>
               {v.featured ? <Text style={s.badgeFeat}>Destacado</Text> : null}
               <Text style={s.badge}>Patio Puerto Montt</Text>
@@ -401,7 +392,7 @@ function VehiclePage({
               ? v.highlights
               : [
                   "Unidad del inventario actual RG Motors",
-                  "Financiamiento Autofin referencial",
+                  "Inspección de 150 puntos",
                   "Visita el showroom en Av. Cardonal",
                 ]
             ).map((h: string) => (

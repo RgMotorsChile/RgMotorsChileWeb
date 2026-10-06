@@ -143,9 +143,9 @@ export default function AdminPage() {
                     telemetria:
                       "Visitas, impacto comercial, estado de la base de datos y avisos — en lenguaje claro",
                     inventario: "Administración integral de vehículos, fichas técnicas y fotos",
-                    crm: "Gestión unificada de prospectos, pruebas de manejo, reservas y créditos",
+                    crm: "Gestión unificada de prospectos, pruebas de manejo, reservas y tasaciones",
                     analitica: "Proyecciones de ventas, radar de compra inteligente y atribución multicanal",
-                    config: "Parámetros del negocio, financiamiento, canales de contacto y datos de sucursal",
+                    config: "Parámetros del negocio, canales de contacto y datos de sucursal",
                   }[active]
                 }
               </p>

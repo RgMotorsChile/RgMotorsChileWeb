@@ -5,7 +5,7 @@
 # RG Motors — Plataforma de Autos Usados
 
 **Plataforma web de automotora para Chile (Puerto Montt).**  
-Catálogo, simulación de crédito referencial Autofin, solicitud de reserva **sin pago online**,
+Catálogo, solicitud de reserva **sin pago online**,
 comparador y panel admin.
 
 <br/>
@@ -72,8 +72,8 @@ npm run build && npm start
 
 Cobertura orientada a **nota de práctica / hardening**:
 
-- Unit: RUT, Autofin, sesión admin, política de API (PII), rate limit, credenciales fuertes, company, vehiclesStore.
-- E2E: home, catálogo, simulador (sin WebPay), legales, redirect admin, GET PII → 401, catálogo API público.
+- Unit: RUT, sesión admin, política de API (PII), rate limit, credenciales fuertes, company, vehiclesStore.
+- E2E: home, catálogo, redirect de /simulador retirado, legales, redirect admin, GET PII → 401, catálogo API público.
 
 CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre lint + vitest + playwright en `main`.
 
@@ -83,7 +83,6 @@ CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre lint + vitest +
 
 | Función | Descripción |
 |---------|-------------|
-| Crédito referencial | Simulador Autofin-like (pie/plazo/CAE) + envío al equipo |
 | Solicitud de reserva | Sin pago online |
 | Prueba de manejo | Agenda por sucursal |
 | Catálogo / comparador | Filtros y ficha |
@@ -106,7 +105,6 @@ app/(site)/     # Público (+ legales)
 app/admin/      # Panel
 app/api/        # REST (leads, auth, vehicles, cron…)
 lib/auth/       # Sesión + política de API
-lib/finance/    # Motor Autofin
 lib/server/     # Stores + db + notify
 docs/           # Alcance y roadmap
 e2e/            # Playwright

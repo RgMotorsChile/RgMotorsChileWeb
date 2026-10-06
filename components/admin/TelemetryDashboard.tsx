@@ -372,20 +372,6 @@ export default function TelemetryDashboard() {
             year={s.reservations.year}
           />
           <SignalRow
-            label="Créditos / preaprobaciones"
-            help="Interés en financiamiento"
-            today={s.credits.today}
-            month={s.credits.month}
-            year={s.credits.year}
-          />
-          <SignalRow
-            label="Simulaciones con contacto"
-            help="Usaron el simulador y dejaron datos"
-            today={s.simulationLeads.today}
-            month={s.simulationLeads.month}
-            year={s.simulationLeads.year}
-          />
-          <SignalRow
             label="Tasaciones (trade-in)"
             help="Quieren dejar su auto a cuenta"
             today={s.tradeIns.today}
@@ -506,7 +492,7 @@ export default function TelemetryDashboard() {
           <div>
             <h3 className="text-lg font-bold text-white">Actividad reciente</h3>
             <p className="text-xs text-white/45">
-              Últimos avisos al equipo (leads, reservas, créditos…).
+              Últimos avisos al equipo (leads, reservas, tasaciones…).
             </p>
           </div>
         </div>

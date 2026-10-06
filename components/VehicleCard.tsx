@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Vehicle, formatCLP, estimateMonthly } from "@/lib/vehicles";
+import { Vehicle, formatCLP } from "@/lib/vehicles";
 import SafeImage from "@/components/SafeImage";
 
 type CardVehicle = Vehicle & {
@@ -93,21 +93,6 @@ export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
             </p>
             <p className="truncate text-[15px] font-extrabold tracking-tight text-white sm:text-xl">
               {formatCLP(card.price)}
-            </p>
-          </div>
-          <div className="hidden shrink-0 text-right sm:block">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-white/35">
-              Desde
-            </p>
-            <p className="text-sm font-semibold text-brand-300">
-              {formatCLP(estimateMonthly(card.price))}
-              <span className="text-xs font-medium text-white/40">/mes</span>
-            </p>
-          </div>
-          <div className="shrink-0 text-right sm:hidden">
-            <p className="text-[12px] font-semibold text-brand-300">
-              {formatCLP(estimateMonthly(card.price))}
-              <span className="text-[10px] font-medium text-white/40">/mes</span>
             </p>
           </div>
         </div>

@@ -1,11 +1,10 @@
 import { COMPANY } from "@/lib/company";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Aviso de Crédito | RG Motors",
   description:
-    "Descargo legal sobre simulaciones de crédito automotriz referenciales (Autofin / SERNAC).",
+    "Aviso legal sobre financiamiento automotriz y estimaciones de cuota referenciales (Autofin / SERNAC).",
 };
 
 export default function AvisoCreditoPage() {
@@ -14,28 +13,18 @@ export default function AvisoCreditoPage() {
       <div className="mb-8 border-b border-white/[0.08] pb-6">
         <h1 className="text-3xl font-extrabold tracking-tight text-white">Aviso de Crédito</h1>
         <p className="mt-2 text-sm text-white/50">
-          Simulaciones referenciales · Ley N° 19.496 (SERNAC)
+          Financiamiento automotriz · Ley N° 19.496 (SERNAC)
         </p>
       </div>
 
       <article className="apple-glass-card space-y-6 rounded-3xl p-6 text-sm leading-relaxed text-white/70 sm:p-8">
         <section className="space-y-2">
-          <h2 className="text-base font-bold text-white">1. Simulador propio RG Motors</h2>
+          <h2 className="text-base font-bold text-white">1. Estimaciones de cuota</h2>
           <p>
-            En <Link href="/simulador" className="text-brand-300 hover:underline">/simulador</Link>{" "}
-            ofrecemos una estimación referencial de cuota. El crédito lo otorga{" "}
-            <strong className="text-white">Autofin</strong>; RG Motors comercializa el vehículo.
-            La proyección considera parámetros habituales del mercado Autofin (pie desde 20%,
-            hasta 48 cuotas, tasa referencial de usados, seguros típicos en la cuota y
-            amortización fija).
-          </p>
-          <p>
-            Ofrecemos la cuota del <strong className="text-white">escenario normal</strong>{" "}
-            Autofin (Auto Plan Usados, con seguros típicos incluidos). No publicamos tasas
-            preferentes de campaña: así la referencia web es realista. En sucursal, según tu
-            evaluación, la cuota <strong className="text-white">puede mantenerse o mejorar</strong>.
-            No constituye oferta vinculante ni pre-aprobación. Las condiciones definitivas las
-            confirma Autofin.
+            Cuando un asesor de RG Motors entrega una estimación de cuota, es referencial. El
+            crédito lo otorga <strong className="text-white">Autofin</strong>; RG Motors
+            comercializa el vehículo. No constituye oferta vinculante ni pre-aprobación. Las
+            condiciones definitivas las confirma Autofin.
           </p>
         </section>
 
@@ -79,15 +68,11 @@ export default function AvisoCreditoPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-white">5. Más información</h2>
           <p>
-            Simulador:{" "}
-            <Link href="/simulador" className="text-brand-300 hover:underline">
-              /simulador
-            </Link>
-            . Contacto:{" "}
+            Contacto:{" "}
             <a href={`mailto:${COMPANY.email}`} className="text-brand-300 hover:underline">
               {COMPANY.email}
             </a>
-            . Última actualización: septiembre 2026.
+            . Última actualización: octubre 2026.
           </p>
         </section>
       </article>

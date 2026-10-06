@@ -1,6 +1,5 @@
 import { readJson, writeJson } from "./db";
 import { COMPANY } from "@/lib/company";
-import { AUTOFIN_DEFAULT_MONTHLY_RATE } from "@/lib/finance/autofin";
 
 export type SystemSettings = {
   company: {
@@ -18,17 +17,9 @@ export type SystemSettings = {
   preferences: {
     showSpin360: boolean;
     enableChatbot: boolean;
-    showCuotaSimulator: boolean;
     enableOnlineReservation: boolean;
     aiStudioMode: boolean;
     reserveAmount: number;
-    defaultDownPct: number;
-    defaultTermMonths: number;
-    /**
-     * Override opcional. 0 = usar tabla Autofin por tramo.
-     * Solo sube la cuota si es mayor a la tasa del tramo.
-     */
-    monthlyInterestRate: number;
   };
 };
 
@@ -48,13 +39,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   preferences: {
     showSpin360: false,
     enableChatbot: true,
-    showCuotaSimulator: true,
     enableOnlineReservation: true,
     aiStudioMode: false,
     reserveAmount: 200000,
-    defaultDownPct: 20,
-    defaultTermMonths: 48,
-    monthlyInterestRate: 0,
   },
 };
 
@@ -109,19 +96,11 @@ function sanitizeCompany(
 }
 
 function normalizeSettings(raw: SystemSettings): SystemSettings {
-  const rate = Number(raw.preferences?.monthlyInterestRate);
-  // Tasas legadas (1.85/1.9/2.5/3.21 fijo) → 0 (tabla por tramo).
-  // Solo se conservan overrides claramente al alza (> mediana matriz + margen).
-  let fixedRate = 0;
-  if (Number.isFinite(rate) && rate >= AUTOFIN_DEFAULT_MONTHLY_RATE + 0.001) {
-    fixedRate = rate;
-  }
   return {
     ...raw,
     preferences: {
       ...DEFAULT_SETTINGS.preferences,
       ...raw.preferences,
-      monthlyInterestRate: fixedRate,
     },
     company: sanitizeCompany({ ...DEFAULT_SETTINGS.company, ...raw.company }),
   };
@@ -130,15 +109,12 @@ function normalizeSettings(raw: SystemSettings): SystemSettings {
 export async function getSettings(): Promise<SystemSettings> {
   const raw = await readJson<SystemSettings>(FILENAME, DEFAULT_SETTINGS);
   const normalized = normalizeSettings(raw);
-  const rateChanged =
-    Number(raw.preferences?.monthlyInterestRate) !==
-    normalized.preferences.monthlyInterestRate;
   const contactChanged =
     (raw.company?.email || "") !== normalized.company.email ||
     (raw.company?.phoneDisplay || "") !== normalized.company.phoneDisplay ||
     (raw.company?.whatsapp || "") !== normalized.company.whatsapp ||
     (raw.company?.website || "") !== normalized.company.website;
-  if (rateChanged || contactChanged) {
+  if (contactChanged) {
     await writeJson(FILENAME, normalized).catch(() => false);
   }
   return normalized;

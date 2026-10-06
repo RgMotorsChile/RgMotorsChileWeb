@@ -18,7 +18,7 @@ Priorizado para práctica profesional (nota máxima) y para una eventual operaci
 
 ## Fase 0 — Hecho (baseline actual)
 
-- [x] Catálogo, ficha, comparador, simulador Autofin referencial
+- [x] Catálogo, ficha, comparador (simulador de crédito retirado en oct 2026)
 - [x] Solicitud de reserva **sin** pasarela de pago
 - [x] Admin con auth middleware + must-change de credenciales
 - [x] Persistencia JSON / Vercel KV (opcional)
@@ -99,7 +99,7 @@ Hasta entonces el copy oficial sigue siendo: *“solicitud de reserva; abono se 
 ## Orden sugerido para la defensa de práctica
 
 1. Presentar `docs/ESTADO-Y-ALCANCE.md` (honestidad de alcance = madurez).
-2. Demostrar catálogo + simulador + admin + tests (`npm run test:all`).
+2. Demostrar catálogo + admin + tests (`npm run test:all`).
 3. Mostrar este roadmap: P0 → P2, con **WebPay explícitamente diferido** por falta de contrato.
 4. Si hay tiempo: cerrar Fase 1 (hardening) — es lo que más sube la nota técnica.
 

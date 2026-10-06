@@ -17,10 +17,7 @@
     "test:all": "npm run lint && npm run test && npm run test:e2e",
     "demo:frames": "node scripts/generate-demo-frames.mjs",
     "spin:video": "node scripts/video-to-spin.mjs",
-    "drive:oauth": "node scripts/google-drive-oauth-setup.mjs",
-    "autofin:scrape": "node scripts/scrape-autofin-rate-matrix.mjs --product=2",
-    "autofin:generate": "node scripts/generate-autofin-rate-table.mjs",
-    "autofin:sync-ci": "node scripts/sync-autofin-rates-ci.mjs --ci"
+    "drive:oauth": "node scripts/google-drive-oauth-setup.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.3",
