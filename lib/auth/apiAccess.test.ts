@@ -7,6 +7,7 @@ describe("isPublicApi — política de acceso", () => {
     expect(isPublicApi("/api/reservations", "POST")).toBe(true);
     expect(isPublicApi("/api/car-requests", "POST")).toBe(true);
     expect(isPublicApi("/api/test-drives", "POST")).toBe(true);
+    expect(isPublicApi("/api/consigna", "POST")).toBe(true);
   });
 
   it("las APIs retiradas del simulador de crédito ya no son públicas", () => {

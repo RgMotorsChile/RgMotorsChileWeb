@@ -87,7 +87,7 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
   }
 
   const allFolders: { name: string; id: string }[] = [];
-  const existingList = await getVehicles();
+  const existingList = await getVehicles({ scope: "staff" });
 
   // Fallback legacy (scrape HTML): solo útil si la carpeta es pública.
   console.warn(
@@ -158,7 +158,7 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
     synced += 1;
   }
 
-  const updatedList = await getVehicles();
+  const updatedList = await getVehicles({ scope: "staff" });
 
   return {
     success: true,

@@ -1,5 +1,6 @@
 import { COMPANY } from "@/lib/company";
 import { readJson, writeJson } from "@/lib/server/db";
+import { isValidEmail as isValidLeadEmail } from "@/lib/server/leadEmail";
 
 export type NotificationEvent = {
   id: string;
@@ -90,6 +91,9 @@ export async function sendEmail(opts: {
       console.warn("[RG NOTIFY] Resend error:", res.status, detail.slice(0, 300));
       return false;
     }
+    // Solo el id de Resend (sin destinatario) para rastrear la entrega en el panel.
+    const sent = (await res.json().catch(() => null)) as { id?: string } | null;
+    console.info("[RG NOTIFY] Resend id:", sent?.id ?? "?", "·", opts.subject.slice(0, 60));
     return true;
   } catch (err) {
     console.warn("[RG NOTIFY] Resend falló:", err);
@@ -114,12 +118,21 @@ export async function notifyTeam(event: {
   title: string;
   body: string;
   meta?: Record<string, unknown>;
+  /** HTML ya sanitizado (usar buildLeadEmailHtml). */
+  html?: string;
+  /** Correo del visitante: el equipo responde directo al cliente. */
+  replyTo?: string;
+  /** Asunto y texto plano ya armados (plantillas de leads). */
+  subject?: string;
+  text?: string;
 }): Promise<NotificationEvent> {
   const to = process.env.NOTIFY_EMAIL?.trim() || COMPANY.email;
   const emailed = await sendEmail({
     to,
-    subject: `[RG Motors] ${event.title}`,
-    text: `${event.body}\n\nTipo: ${event.type}\nFecha: ${new Date().toISOString()}`,
+    subject: event.subject || `[RG Motors] ${event.title}`,
+    text: event.text || `${event.body}\n\nTipo: ${event.type}\nFecha: ${new Date().toISOString()}`,
+    html: event.html,
+    replyTo: event.replyTo,
   });
 
   const entry: NotificationEvent = {
@@ -265,10 +278,57 @@ export function buildTestDriveEmails(data: {
   return { teamBody, customerBody, customerHtml };
 }
 
+/**
+ * Correo HTML para leads del sitio (contacto, consignación).
+ * Todos los valores pasan por escapeHtml: nada del visitante llega crudo al HTML.
+ */
+export function buildLeadEmailHtml(
+  title: string,
+  rows: Array<[label: string, value: string | number | undefined | null]>,
+): string {
+  const body = rows
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:8px 12px 8px 0;color:#666;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td>` +
+        `<td style="padding:8px 0;font-weight:600;white-space:pre-wrap">${escapeHtml(
+          value === undefined || value === null || value === "" ? "—" : String(value),
+        )}</td></tr>`,
+    )
+    .join("");
+  return `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#111">
+<h2 style="color:#173A79;margin:0 0 12px">${escapeHtml(title)}</h2>
+<table style="width:100%;border-collapse:collapse;font-size:14px">${body}</table>
+<p style="color:#888;font-size:12px;margin-top:20px">Enviado desde ${escapeHtml(COMPANY.website)}. Responde este correo para contestarle al cliente.</p>
+</div>`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Confirmación automática al visitante. Nunca lanza ni bloquea el aviso al equipo:
+ * si el correo no es válido o Resend falla, solo se registra en el log.
+ */
+export async function sendVisitorConfirmation(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<boolean> {
+  try {
+    if (!isValidLeadEmail(opts.to)) return false;
+    const replyTo = process.env.NOTIFY_EMAIL?.trim() || COMPANY.email;
+    const ok = await sendEmail({ ...opts, replyTo });
+    if (!ok) console.warn("[RG NOTIFY] Confirmación al visitante no enviada.");
+    return ok;
+  } catch (err) {
+    console.warn("[RG NOTIFY] Confirmación al visitante falló:", err instanceof Error ? err.message : err);
+    return false;
+  }
 }

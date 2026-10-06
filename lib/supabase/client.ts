@@ -20,22 +20,23 @@ export function createBrowserSupabase(): SupabaseClient {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-/** Server: prefer service role para sync/migraciones; si no, anon. */
+/**
+ * Cliente de servidor. Exige service role.
+ * No cae a la anon key: en la base compartida anon no puede escribir
+ * `catalog_vehicles` (migración 20260930145942) y un fallback silencioso
+ * haría que lecturas/escrituras corran con el rol equivocado.
+ */
 export function createServerSupabase(): SupabaseClient {
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) {
-    throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY");
   }
   return createClient(SUPABASE_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
+/** True solo si el servidor puede usar service role. La anon key es del browser. */
 export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    SUPABASE_URL &&
-      (process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY),
-  );
+  return Boolean(SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
 }

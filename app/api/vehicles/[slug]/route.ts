@@ -13,12 +13,14 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const v = await getVehicleBySlug(slug);
+  const isAdmin = await requireAdminSession();
+  const v = await getVehicleBySlug(slug, {
+    scope: isAdmin ? "staff" : "public",
+  });
   if (!v) {
     return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
   }
 
-  const isAdmin = await requireAdminSession();
   if (!isAdmin && !isPublicCatalogVehicle(v)) {
     return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
   }
@@ -38,7 +40,10 @@ export async function PUT(
 
   const { slug } = await params;
   try {
-    const existing = await getVehicleBySlug(slug, { bypassCache: true });
+    const existing = await getVehicleBySlug(slug, {
+      bypassCache: true,
+      scope: "staff",
+    });
     if (!existing) {
       return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
     }

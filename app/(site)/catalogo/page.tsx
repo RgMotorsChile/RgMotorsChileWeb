@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -321,15 +322,21 @@ function CatalogContent() {
 
       <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#12141c] p-3.5 sm:mb-8 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-5">
         <div>
-          <h2 className="text-[13px] font-bold text-white sm:text-sm">¿No encuentras lo que buscas?</h2>
+          <h2 className="text-[13px] font-bold text-white sm:text-sm">¿Quieres vender tu vehículo?</h2>
           <p className="mt-0.5 text-[11px] text-white/55 sm:text-xs">
-            Cuéntanos qué vehículo necesitas y te lo buscamos según tu presupuesto.
+            Consígnalo con nosotros: lo tasamos, lo publicamos y lo vendemos por ti.
           </p>
         </div>
         <div className="flex w-full flex-row gap-2 sm:w-auto sm:flex-wrap shrink-0">
+          <Link
+            href="/consigna"
+            className="apple-btn-primary inline-flex min-h-10 flex-1 items-center justify-center rounded-full px-3 py-2 text-[11px] font-bold text-white sm:min-h-11 sm:flex-none sm:px-5 sm:py-2.5 sm:text-xs"
+          >
+            Consigna tu vehículo
+          </Link>
           <button
             onClick={() => setIsCarRequestOpen(true)}
-            className="apple-btn-primary min-h-10 flex-1 rounded-full px-3 py-2 text-[11px] font-bold text-white sm:min-h-11 sm:flex-none sm:px-5 sm:py-2.5 sm:text-xs"
+            className="apple-btn-secondary min-h-10 flex-1 rounded-full px-3 py-2 text-[11px] font-semibold text-white/80 hover:text-white sm:min-h-11 sm:flex-none sm:px-4 sm:py-2.5 sm:text-xs"
           >
             Pedir a medida
           </button>

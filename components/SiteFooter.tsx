@@ -32,6 +32,11 @@ export default function SiteFooter() {
                 Comparador de vehículos
               </Link>
             </li>
+            <li>
+              <Link href="/consigna" className="transition-colors hover:text-white">
+                Consigna tu vehículo
+              </Link>
+            </li>
           </ul>
         </div>
 

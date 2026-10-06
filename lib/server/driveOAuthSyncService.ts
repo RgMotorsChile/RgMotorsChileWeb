@@ -5,6 +5,7 @@ import {
 } from "@/lib/vehicles/frontCoverMap";
 import { readJson, writeJson } from "@/lib/server/db";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
+import { blobStillExists } from "@/lib/server/verifyPhotos";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import {
@@ -110,8 +111,14 @@ type FolderCandidate = {
 export async function syncDrivePhotosViaOAuth(opts?: {
   maxVehicles?: number;
   folderId?: string;
+  tenantSlug?: string;
 }): Promise<SyncResult> {
-  const existingList = await getVehicles();
+  const tenantSlug = opts?.tenantSlug || "rg-motors";
+  const existingList = await getVehicles({
+    tenantSlug,
+    bypassCache: true,
+    scope: "staff",
+  });
 
   if (!isGoogleDriveOAuthConfigured()) {
     const msg =
@@ -196,6 +203,22 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }
 
     const limited = images.slice(0, MAX_PHOTOS_PER_VEHICLE);
+    // Un blob cacheado puede haberse borrado (p. ej. venta → borrado de fotos → unidad
+    // de vuelta en stock). Si ya no existe, se olvida el caché para volver a subirlo
+    // desde Drive en vez de seguir publicando una URL 404.
+    const staleChecks = await Promise.all(
+      limited.map(async (img) => {
+        const cachedUrl = state.files[img.id]?.blobUrl;
+        if (!cachedUrl) return false;
+        return !(await blobStillExists(cachedUrl));
+      }),
+    );
+    limited.forEach((img, i) => {
+      if (staleChecks[i]) {
+        console.warn(`[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`);
+        delete state.files[img.id];
+      }
+    });
     const needsWork =
       !vehicle.hasRealPhotos ||
       limited.some((img) => driveFileNeedsSync(img, state.files[img.id]));
@@ -281,7 +304,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       gallery: orderedGallery,
       image: cover || orderedGallery[0],
     };
-    await saveVehicle(vehicle);
+    await saveVehicle(vehicle, { tenantSlug });
     synced += 1;
     // Checkpoint por vehículo: si el cron corta a los 60s, no se pierde el progreso.
     state.lastRunAt = new Date().toISOString();
@@ -300,14 +323,18 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
       : "";
 
-  const updatedList = await getVehicles();
+  const updatedList = await getVehicles({
+    tenantSlug,
+    bypassCache: true,
+    scope: "staff",
+  });
   return {
     success: true,
     totalFolders: folders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
     message:
-      `Drive OAuth→Blob: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
+      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
       `(${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
       pendingNote,
     vehicles: updatedList,

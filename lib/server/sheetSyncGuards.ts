@@ -67,6 +67,12 @@ export type MassArchiveGuardInput = {
   currentActiveCount: number;
   /** Cuántas se archivarían por no aparecer en la hoja. */
   wouldArchiveCount: number;
+  /**
+   * Patentes de la hoja que ya existen en el store.
+   * Si la hoja es un subconjunto claro del stock actual, achicar es legítimo
+   * (no un scrape de otra pestaña).
+   */
+  sheetOverlapCount?: number;
   /** Umbral de caída relativa (0–1). Default 35%. */
   maxDropRatio?: number;
   /** Mínimo de stock actual para aplicar ratio. */
@@ -95,6 +101,14 @@ export function evaluateSheetWipeGuard(
       reason:
         "Planilla sin filas activas válidas — sync abortado (anti-wipe). Revisa la hoja o el scrape.",
     };
+  }
+
+  const overlap = input.sheetOverlapCount ?? 0;
+  const overlapRatio =
+    input.sheetActiveCount > 0 ? overlap / input.sheetActiveCount : 0;
+  // Misma flota, menos filas: la pestaña mandó (ej. 32→20 en Unidades Chile).
+  if (input.sheetActiveCount >= 5 && overlapRatio >= 0.75) {
+    return { abortAll: false, skipArchive: false };
   }
 
   if (

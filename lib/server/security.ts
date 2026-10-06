@@ -142,11 +142,12 @@ export function securityHeaders(): Record<string, string> {
     // Next App Router aún requiere inline para bootstrap; sin unsafe-eval.
     "Content-Security-Policy": [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      // Cloudflare Web Analytics se inyecta en el edge (beacon.min.js).
+      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://lh3.googleusercontent.com https://drive.google.com",
       "font-src 'self' data:",
-      `connect-src 'self' https://${siteHost} https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com`,
+      `connect-src 'self' https://${siteHost} https://cloudflareinsights.com https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com`,
       "frame-src 'self' https://maps.google.com https://www.google.com https://www.google.com/maps",
       "frame-ancestors 'none'",
       "base-uri 'self'",
