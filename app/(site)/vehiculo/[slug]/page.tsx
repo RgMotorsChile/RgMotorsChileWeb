@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import { formatCLP, spinFramesOf, type Vehicle } from "@/lib/vehicles";
+import { formatCLP, getVehicle, spinFramesOf, type Vehicle } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getSettings } from "@/lib/server/settingsStore";
 import { verifiedGallery, withVerifiedCover } from "@/lib/server/verifyPhotos";
@@ -16,7 +16,8 @@ import TrackVehicleView from "@/components/TrackVehicleView";
 export const revalidate = 120;
 
 async function loadVehicle(slug: string) {
-  const raw = await getVehicleBySlug(slug);
+  // Respaldo estático como antes: el catálogo pinta primero la lista estática y sus enlaces no deben dar 404.
+  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
   if (!raw || raw.status === "Borrador") return null;
   return stripPlateForPublic(raw);
 }
