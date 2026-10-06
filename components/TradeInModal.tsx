@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatCLP } from "@/lib/vehicles";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";
 
 type Props = {
@@ -65,6 +66,7 @@ export default function TradeInModal({
 
       if (!res.ok) throw new Error("Error al enviar tasación.");
 
+      trackEvent("generate_lead", { form_name: "tasacion" });
       setIsSuccess(true);
     } catch {
       setErrorMsg("No se pudo enviar la solicitud. Intenta nuevamente.");

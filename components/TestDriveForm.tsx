@@ -5,6 +5,7 @@ import Link from "next/link";
 import { asset } from "@/lib/asset";
 import { Vehicle, formatCLP } from "@/lib/vehicles";
 import { getTrafficSource } from "@/lib/trafficTracking";
+import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";
 
 const BRANCHES = ["Showroom Av. El Tepual (Puerto Montt)"];
@@ -55,7 +56,7 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
 
     try {
       // 1. Guardar en el store dedicado de Test Drives
-      await fetch("/api/test-drives", {
+      const res = await fetch("/api/test-drives", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,6 +72,8 @@ export default function TestDriveForm({ vehicle: v }: { vehicle: Vehicle }) {
           notes: `Agendado en sucursal ${branch} a las ${time} hrs.`,
         }),
       });
+
+      if (res.ok) trackEvent("generate_lead", { form_name: "prueba_manejo", item_id: v.slug });
 
       // 2. Enriquecer el lead en el motor de analítica
       await fetch("/api/track", {

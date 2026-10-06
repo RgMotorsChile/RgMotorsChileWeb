@@ -33,8 +33,9 @@ export default function CookiesPage() {
             </li>
             <li>
               <strong className="text-white">Medición (opcionales):</strong> origen de visita
-              (por ejemplo campaña o referido) para mejorar atención comercial. Se activan
-              cuando aceptas cookies no esenciales.
+              (por ejemplo campaña o referido) para mejorar atención comercial, y estadísticas
+              de uso del sitio con Google Analytics (páginas visitadas y contactos iniciados).
+              Se activan solo cuando aceptas cookies no esenciales.
             </li>
           </ul>
         </section>
@@ -60,7 +61,7 @@ export default function CookiesPage() {
             <a href={`mailto:${COMPANY.email}`} className="text-brand-300 hover:underline">
               {COMPANY.email}
             </a>
-            . Última actualización: septiembre 2026.
+            . Última actualización: octubre 2026.
           </p>
         </section>
       </article>
