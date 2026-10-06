@@ -20,14 +20,18 @@ test.describe("Sitio público", () => {
     await expect(page.locator("body")).not.toContainText(/simula|preaprob|pre-aprob/i);
   });
 
-  test("home y ficha sin rastros del simulador", async ({ page }) => {
+  test("sin simulador ni cuotas: solo precio de venta", async ({ page }) => {
+    const noCuota = /simula|\/mes\b|desde \$|cuota desde/i;
     await page.goto("/");
-    await expect(page.locator("body")).not.toContainText(/simula|\/mes\b/i);
+    await expect(page.locator("body")).not.toContainText(noCuota);
     await page.goto("/catalogo");
     const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
     expect(href).toBeTruthy();
+    await expect(page.locator("body")).not.toContainText(noCuota);
     await page.goto(href!);
-    await expect(page.getByRole("main")).not.toContainText(/simula|\/mes\b/i);
+    await expect(page.getByRole("main")).not.toContainText(noCuota);
+    await page.goto("/comparador");
+    await expect(page.locator("body")).not.toContainText(noCuota);
   });
 
   test("páginas legales existen", async ({ page }) => {
