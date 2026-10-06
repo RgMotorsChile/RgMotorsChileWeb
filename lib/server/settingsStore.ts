@@ -95,13 +95,23 @@ function sanitizeCompany(
   };
 }
 
+/** Preferencias del simulador de crédito retirado: no se exponen ni se vuelven a guardar. */
+const RETIRED_PREFERENCES = [
+  "showCuotaSimulator",
+  "defaultDownPct",
+  "defaultTermMonths",
+  "monthlyInterestRate",
+] as const;
+
 function normalizeSettings(raw: SystemSettings): SystemSettings {
+  const preferences: Record<string, unknown> = {
+    ...DEFAULT_SETTINGS.preferences,
+    ...raw.preferences,
+  };
+  for (const key of RETIRED_PREFERENCES) delete preferences[key];
   return {
     ...raw,
-    preferences: {
-      ...DEFAULT_SETTINGS.preferences,
-      ...raw.preferences,
-    },
+    preferences: preferences as SystemSettings["preferences"],
     company: sanitizeCompany({ ...DEFAULT_SETTINGS.company, ...raw.company }),
   };
 }

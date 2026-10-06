@@ -9,8 +9,7 @@ export default function SiteFooter() {
         <div className="space-y-3">
           <Logo size={50} />
           <p className="max-w-xs text-xs leading-relaxed text-white/45">
-            Automotora en Puerto Montt. Vehículos seleccionados, financiamiento con Autofin
-            y atención en showroom.
+            Automotora en Puerto Montt. Vehículos seleccionados y atención en showroom.
           </p>
           <div className="space-y-1 text-[11px] leading-relaxed text-white/40">
             <p className="font-medium text-white/55">{COMPANY.legalName}</p>

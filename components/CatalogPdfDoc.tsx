@@ -455,7 +455,7 @@ export function CatalogPdfDoc({
           </View>
           <View style={s.coverTrust}>
             <Text style={s.coverTrustItem}>✓ Fotos reales de patio</Text>
-            <Text style={s.coverTrustItem}>✓ Crédito Autofin</Text>
+            <Text style={s.coverTrustItem}>✓ Inspección 150 puntos</Text>
             <Text style={s.coverTrustItem}>✓ Av. Cardonal</Text>
           </View>
         </View>

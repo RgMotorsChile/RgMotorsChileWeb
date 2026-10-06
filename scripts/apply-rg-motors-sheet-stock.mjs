@@ -207,7 +207,6 @@ function mergeVehicle(row, existing) {
     highlights: [
       "Unidad del inventario RG Motors",
       "Fotos reales de patio cuando estén disponibles",
-      "Financiamiento Autofin referencial",
     ],
   };
 }

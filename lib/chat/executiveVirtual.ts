@@ -204,10 +204,10 @@ export function answerAsExecutive(
     };
   }
 
-  if (/\b(financi|credito|crédito|cuota|\bpie\b|autofin)\b/.test(q)) {
+  if (/\b(financi|credito|crédito|cuota|\bpie\b)\b/.test(q)) {
     intents.push("financiamiento");
     return {
-      text: `Sí, trabajamos con financiamiento (incluye Autofin). Un ejecutivo te entrega las condiciones por WhatsApp.\nSi me indicas presupuesto o pie, te muestro autos que encajen.`,
+      text: `Sí, trabajamos con financiamiento. Un ejecutivo te entrega las condiciones por WhatsApp.\nSi me indicas presupuesto o pie, te muestro autos que encajen.`,
       intents,
       financing: true,
       showContact: true,

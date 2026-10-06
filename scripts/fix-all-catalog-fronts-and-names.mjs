@@ -961,8 +961,7 @@ async function main() {
       status: "Disponible",
       highlights: [
         "Inspección mecánica de 150 puntos aprobada",
-        "Documentación y transferibilidad inmediata al día",
-        "Financiamiento Autofin disponible"
+        "Documentación y transferibilidad inmediata al día"
       ]
     });
   }

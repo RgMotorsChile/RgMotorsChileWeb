@@ -82,11 +82,11 @@ async function detectPlateRect(imageBuf) {
       // 2. Falabella Green: G > 100, G > R*1.4, G > B*1.3
       const isFalabellaGreen = g > 100 && g > r * 1.4 && g > b * 1.3 && r < 80;
 
-      // 3. Autofin Yellow text on Dark Plate / Autofin yellow dot:
-      const isAutofinDot = r > 180 && g > 170 && b < 80;
+      // 3. Yellow text / yellow dot on dark plate frame:
+      const isYellowDot = r > 180 && g > 170 && b < 80;
 
-      if (isSalgadoBlue || isFalabellaGreen || isAutofinDot) {
-        hits.push({ x, y, type: isSalgadoBlue ? "blue" : (isFalabellaGreen ? "green" : "autofin") });
+      if (isSalgadoBlue || isFalabellaGreen || isYellowDot) {
+        hits.push({ x, y, type: isSalgadoBlue ? "blue" : (isFalabellaGreen ? "green" : "yellow") });
       }
     }
   }

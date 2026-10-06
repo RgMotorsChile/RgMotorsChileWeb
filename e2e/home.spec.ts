@@ -38,7 +38,7 @@ test.describe("Sitio público", () => {
     await expect(page.getByRole("main")).toContainText(/términos|condiciones|uso/i);
 
     await page.goto("/aviso-credito");
-    await expect(page.getByRole("main")).toContainText(/crédito|aviso|autofin|sernac/i);
+    await expect(page.getByRole("main")).toContainText(/crédito|aviso|sernac/i);
   });
 
   test("admin login es accesible; panel exige auth", async ({ page }) => {
