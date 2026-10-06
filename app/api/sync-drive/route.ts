@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
           fuel: existing?.fuel || "Diésel",
           transmission: existing?.transmission || "Manual",
           bodyType: existing?.bodyType || "Camioneta",
-          location: r.location || existing?.location || "Puerto Montt · Av. El Tepual (Ex Banco de Chile)",
+          location: r.location || existing?.location || "Puerto Montt · Av. Cardonal (Ex Banco de Chile)",
           image: existing?.image || "/images/placeholder-pending-car.svg",
           gallery: existing?.gallery || [],
           hasRealPhotos: existing?.hasRealPhotos || false,

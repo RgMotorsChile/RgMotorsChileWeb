@@ -44,7 +44,7 @@ export default function ShowroomMapSection({ className = "" }: { className?: str
   const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${LAT},${LNG}`;
   const wazeUrl = `https://waze.com/ul?ll=${LAT},${LNG}&navigate=yes`;
   const visitWhatsApp = whatsappLink(
-    "Hola RG Motors, quiero coordinar una visita a su showroom de Av. El Tepual en Puerto Montt."
+    "Hola RG Motors, quiero coordinar una visita a su showroom de Av. Cardonal en Puerto Montt."
   );
 
   return (
@@ -74,7 +74,7 @@ export default function ShowroomMapSection({ className = "" }: { className?: str
             <span className="text-white/92">Puerto Montt</span>
           </h2>
           <p className="mt-4 max-w-md text-[14px] leading-relaxed text-white/48 sm:text-[15px]">
-            Av. El Tepual · Ex Banco de Chile. Revisa unidades en persona y agenda tu prueba de
+            Av. Cardonal · Ex Banco de Chile. Revisa unidades en persona y agenda tu prueba de
             manejo.
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function ShowroomMapSection({ className = "" }: { className?: str
         {/* Mapa oscuro cinematográfico */}
         <div className="relative min-h-[240px] bg-[#e8eaed] sm:min-h-[300px] lg:min-h-[420px]">
           <iframe
-            title="Ubicación RG Motors Puerto Montt - Av. El Tepual"
+            title="Ubicación RG Motors Puerto Montt - Av. Cardonal"
             src={`https://maps.google.com/maps?q=${encodeURIComponent(
               `${LAT},${LNG}`,
             )}&z=16&hl=es&output=embed`}
@@ -129,7 +129,7 @@ export default function ShowroomMapSection({ className = "" }: { className?: str
               Dirección
             </p>
             <h3 className="mt-3 font-display text-[1.65rem] font-semibold uppercase leading-none tracking-[0.06em] text-white sm:text-[1.85rem]">
-              Av. El Tepual
+              Av. Cardonal
             </h3>
             <p className="mt-2 text-sm text-white/42">Puerto Montt · Región de Los Lagos</p>
 

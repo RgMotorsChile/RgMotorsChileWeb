@@ -99,7 +99,11 @@ function sanitizeCompany(
       !website || LEGACY_BAD_SITES.has(website)
         ? COMPANY.website
         : company.website.trim(),
-    address: company.address?.trim() || COMPANY.address,
+    // Dirección legada (Av. El Tepual) → dirección oficial actual.
+    address:
+      !company.address?.trim() || /el\s+tepual/i.test(company.address)
+        ? COMPANY.address
+        : company.address.trim(),
     hours: company.hours?.trim() || COMPANY.hours,
   };
 }
