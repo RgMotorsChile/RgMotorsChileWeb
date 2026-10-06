@@ -25,10 +25,8 @@ test.describe("APIs — seguridad y catálogo", () => {
       "/api/test-drives",
       "/api/price-alerts",
       "/api/trade-in",
-      "/api/credits",
       "/api/reservations",
       "/api/contact",
-      "/api/simulations",
       "/api/track",
     ];
     for (const path of paths) {

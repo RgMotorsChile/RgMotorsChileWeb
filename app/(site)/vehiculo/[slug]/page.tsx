@@ -6,14 +6,12 @@ import {
   vehicles,
   formatCLP,
   specsOf,
-  estimateMonthly,
   spinFramesOf,
 } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import { asset } from "@/lib/asset";
 import VehicleViewer from "@/components/VehicleViewer";
-import CuotaSimulator from "@/components/CuotaSimulator";
 import VehicleActionButtons from "@/components/VehicleActionButtons";
 import MobileVehicleStickyBar from "@/components/MobileVehicleStickyBar";
 import TrackVehicleView from "@/components/TrackVehicleView";
@@ -31,7 +29,7 @@ export async function generateMetadata({
 
   return {
     title: `${v.brand} ${v.model} ${v.year} — ${formatCLP(v.price)} | RG Motors`,
-    description: `${v.brand} ${v.model} ${v.version} año ${v.year} con ${v.km.toLocaleString("es-CL")} km. Inspección de 150 puntos, fotografías reales y simulación de crédito online.`,
+    description: `${v.brand} ${v.model} ${v.version} año ${v.year} con ${v.km.toLocaleString("es-CL")} km. Inspección de 150 puntos y fotografías reales.`,
     openGraph: {
       title: `${v.brand} ${v.model} ${v.year} | RG Motors`,
       description: `Precio: ${formatCLP(v.price)} · ${v.km.toLocaleString("es-CL")} km · ${v.fuel} · ${v.transmission}`,
@@ -57,7 +55,6 @@ export default async function VehiclePage({
       return status !== "Borrador" && status !== "Vendido";
     })
     .map(stripPlateForPublic);
-  const monthly = estimateMonthly(v.price);
 
   return (
     <main className="mx-auto w-full max-w-7xl overflow-x-clip px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-28 lg:pb-8 space-y-6 sm:space-y-8">
@@ -81,9 +78,6 @@ export default async function VehiclePage({
         <div className="shrink-0 text-left sm:text-right">
           <p className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
             {formatCLP(v.price)}
-          </p>
-          <p className="mt-1 text-xs text-white/50">
-            Desde <span className="font-semibold text-brand-300">{formatCLP(monthly)}</span>/mes
           </p>
         </div>
       </div>
@@ -131,9 +125,9 @@ export default async function VehiclePage({
                   ? "● Vehículo vendido"
                   : "✓ Disponible para entrega inmediata"}
               </span>
-              <h3 className="mt-3 text-base font-bold tracking-tight text-white sm:text-lg">Consultar o financiar</h3>
+              <h3 className="mt-3 text-base font-bold tracking-tight text-white sm:text-lg">Consultar</h3>
               <p className="mt-1 text-xs text-white/55">
-                WhatsApp, simulación Autofin y tasación de tu auto en parte de pago.
+                WhatsApp, prueba de manejo y tasación de tu auto en parte de pago.
               </p>
             </div>
 
@@ -144,8 +138,6 @@ export default async function VehiclePage({
               <p>📄 Documentación al día</p>
             </div>
           </div>
-
-          <CuotaSimulator price={v.price} vehicleYear={v.year} vehicleSlug={v.slug} />
         </div>
       </div>
 

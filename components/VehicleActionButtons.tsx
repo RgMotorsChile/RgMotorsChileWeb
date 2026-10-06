@@ -26,13 +26,6 @@ export default function VehicleActionButtons({ vehicle: v }: { vehicle: Vehicle 
           Hablar con un asesor por WhatsApp
         </a>
 
-        <Link
-          href={`/simulador?auto=${encodeURIComponent(v.slug)}`}
-          className="apple-btn-primary flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-center text-[14px] font-bold text-white shadow-glow transition hover:scale-[1.01] active:scale-95"
-        >
-          Simular crédito Autofin
-        </Link>
-
         <button
           onClick={() => setIsTradeInOpen(true)}
           className="apple-btn-secondary flex min-h-11 w-full items-center justify-center gap-2 rounded-full py-3 text-center text-[13px] font-semibold text-white transition hover:border-brand-400/50"

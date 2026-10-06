@@ -183,7 +183,7 @@ function AutofactMark() {
 const TRUST_ITEMS: TrustItem[] = [
   {
     label: "Financiamiento Autofin",
-    detail: "Crédito automotriz online",
+    detail: "Crédito automotriz",
     mark: <AutofinMark />,
   },
   {

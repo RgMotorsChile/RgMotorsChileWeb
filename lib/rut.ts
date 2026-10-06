@@ -1,5 +1,3 @@
-import { AUTOFIN_DEFAULT_MONTHLY_RATE, frenchMonthlyPayment } from "@/lib/finance/autofin";
-
 /**
  * Validador y formateador de RUT chileno.
  */
@@ -47,31 +45,4 @@ export function validateRut(rut: string): boolean {
   else expectedDv = expectedDvNumber.toString();
 
   return dv === expectedDv;
-}
-
-/**
- * Capacidad referencial (carga ~35% renta). Usa la misma tasa Autofin del sitio.
- * No es pre-aprobación bancaria.
- */
-export function evaluateCreditCapacity(
-  income: number,
-  downPayment: number = 0,
-  termMonths: number = 48,
-) {
-  const maxMonthlyQuota = Math.round(income * 0.35);
-  const monthlyRate = AUTOFIN_DEFAULT_MONTHLY_RATE;
-  const term = Math.min(48, Math.max(6, termMonths));
-
-  const factor = monthlyRate / (1 - Math.pow(1 + monthlyRate, -term));
-  const maxFinanced = Math.round(maxMonthlyQuota / factor);
-  const totalPurchasingPower = maxFinanced + downPayment;
-  const sampleQuota = frenchMonthlyPayment(maxFinanced, monthlyRate, term);
-
-  return {
-    maxMonthlyQuota,
-    maxFinanced,
-    totalPurchasingPower,
-    recommendedTerm: term,
-    sampleQuota,
-  };
 }

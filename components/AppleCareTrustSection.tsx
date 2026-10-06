@@ -31,38 +31,8 @@ export default function AppleCareTrustSection() {
       />
 
       <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16">
-        {/* Financiamiento — banda útil */}
-        <div className="flex flex-col gap-5 rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#12151e] to-[#0b0c11] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-7">
-          <div className="max-w-xl">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#C9A84C]/90">
-              Financiamiento Autofin
-            </p>
-            <h2 className="mt-2 font-display text-[1.45rem] font-semibold uppercase tracking-[0.04em] text-white sm:text-[1.75rem]">
-              Simula tu cuota en minutos
-            </h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-white/48 sm:text-sm">
-              Pie, plazo y cuota del escenario normal Autofin. En sucursal, según tu
-              evaluación, la cuota puede mantenerse o mejorar.
-            </p>
-          </div>
-          <div className="rg-cta-row sm:w-auto">
-            <Link
-              href="/simulador"
-              className="rg-btn-primary inline-flex min-h-12 items-center justify-center rounded-xl px-6 py-3 text-sm font-bold text-white sm:min-h-11 sm:rounded-lg"
-            >
-              Ir al simulador
-            </Link>
-            <Link
-              href="/catalogo"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:text-white sm:min-h-11 sm:rounded-lg"
-            >
-              Ver vehículos
-            </Link>
-          </div>
-        </div>
-
         {/* Transparencia */}
-        <div className="mt-14 sm:mt-16">
+        <div>
           <div className="flex items-center gap-3">
             <span className="h-px w-8 bg-gradient-to-r from-[#C9A84C] to-transparent" />
             <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#C9A84C]/90">
@@ -110,7 +80,7 @@ export default function AppleCareTrustSection() {
               ¿Listo para tu próximo vehículo?
             </h2>
             <p className="relative mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/55 sm:text-sm">
-              Explora el stock, simula el crédito o escribe a un asesor. Te acompañamos en Puerto
+              Explora el stock, agenda una visita o escribe a un asesor. Te acompañamos en Puerto
               Montt.
             </p>
             <div className="rg-cta-row relative mx-auto mt-8 max-w-md sm:max-w-none sm:justify-center">

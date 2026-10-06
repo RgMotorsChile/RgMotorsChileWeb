@@ -8,11 +8,9 @@ export const PII_LIST_PREFIXES = [
   "/api/test-drives",
   "/api/price-alerts",
   "/api/trade-in",
-  "/api/credits",
   "/api/reservations",
   "/api/contact",
   "/api/track",
-  "/api/simulations",
 ] as const;
 
 function matchesPrefix(pathname: string, prefix: string): boolean {
@@ -32,10 +30,8 @@ const LEAD_POST_PREFIXES = [
   "/api/price-alerts",
   "/api/trade-in",
   "/api/contact",
-  "/api/credits",
   "/api/reservations",
   "/api/track",
-  "/api/simulations",
 ] as const;
 
 const PUBLIC_GET_PREFIXES = [

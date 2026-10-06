@@ -176,54 +176,6 @@ export function Funnel({
   );
 }
 
-/** Medidor semicircular (score promedio, tasa, etc.). */
-export function Gauge({
-  value,
-  max = 100,
-  label,
-  suffix = "",
-  color = "#006CFF",
-  size = 150,
-}: {
-  value: number;
-  max?: number;
-  label: string;
-  suffix?: string;
-  color?: string;
-  size?: number;
-}) {
-  const r = size / 2;
-  const radius = r - 12;
-  const circ = Math.PI * radius; // semicírculo
-  const frac = Math.min(1, value / max);
-  return (
-    <div className="flex flex-col items-center">
-      <svg width={size} height={size / 2 + 12} viewBox={`0 0 ${size} ${size / 2 + 12}`}>
-        <path
-          d={`M 12 ${r} A ${radius} ${radius} 0 0 1 ${size - 12} ${r}`}
-          fill="none"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="10"
-          strokeLinecap="round"
-        />
-        <path
-          d={`M 12 ${r} A ${radius} ${radius} 0 0 1 ${size - 12} ${r}`}
-          fill="none"
-          stroke={color}
-          strokeWidth="10"
-          strokeLinecap="round"
-          strokeDasharray={`${frac * circ} ${circ}`}
-        />
-        <text x={r} y={r - 6} textAnchor="middle" className="fill-white" fontSize="26" fontWeight="700">
-          {value}
-          {suffix}
-        </text>
-      </svg>
-      <span className="text-xs text-white/50">{label}</span>
-    </div>
-  );
-}
-
 /** Tarjeta KPI compacta. */
 export function KpiCard({
   icon,

@@ -11,7 +11,6 @@ import { isCamionetaBody } from "@/lib/vehicles/publicCatalog";
 import VehicleCard from "@/components/VehicleCard";
 import CatalogPdfButton from "@/components/CatalogPdfButton";
 import QuickCategoryFilter, { CategoryPill } from "@/components/QuickCategoryFilter";
-import FastCreditPreApprovalModal from "@/components/FastCreditPreApprovalModal";
 import CarRequestModal from "@/components/CarRequestModal";
 
 function matchesSelectedBodyType(bodyType: string, selected: string[]): boolean {
@@ -52,7 +51,6 @@ function CatalogContent() {
   const [showFilters, setShowFilters] = useState(false);
 
   // Modals
-  const [isPreApprovalOpen, setIsPreApprovalOpen] = useState(false);
   const [isCarRequestOpen, setIsCarRequestOpen] = useState(false);
 
   // Load from API on mount
@@ -323,21 +321,15 @@ function CatalogContent() {
 
       <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#12141c] p-3.5 sm:mb-8 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-5">
         <div>
-          <h2 className="text-[13px] font-bold text-white sm:text-sm">¿Quieres calcular tu financiamiento?</h2>
+          <h2 className="text-[13px] font-bold text-white sm:text-sm">¿No encuentras lo que buscas?</h2>
           <p className="mt-0.5 text-[11px] text-white/55 sm:text-xs">
-            Simula tu cuota online y te respondemos con las opciones disponibles.
+            Cuéntanos qué vehículo necesitas y te lo buscamos según tu presupuesto.
           </p>
         </div>
         <div className="flex w-full flex-row gap-2 sm:w-auto sm:flex-wrap shrink-0">
           <button
-            onClick={() => setIsPreApprovalOpen(true)}
-            className="apple-btn-primary min-h-10 flex-1 rounded-full px-3 py-2 text-[11px] font-bold text-white sm:min-h-11 sm:flex-none sm:px-5 sm:py-2.5 sm:text-xs"
-          >
-            Simular crédito
-          </button>
-          <button
             onClick={() => setIsCarRequestOpen(true)}
-            className="apple-btn-secondary min-h-10 flex-1 rounded-full px-3 py-2 text-[11px] font-semibold text-white/80 hover:text-white sm:min-h-11 sm:flex-none sm:px-4 sm:py-2.5 sm:text-xs"
+            className="apple-btn-primary min-h-10 flex-1 rounded-full px-3 py-2 text-[11px] font-bold text-white sm:min-h-11 sm:flex-none sm:px-5 sm:py-2.5 sm:text-xs"
           >
             Pedir a medida
           </button>
@@ -450,11 +442,6 @@ function CatalogContent() {
           )}
         </div>
       </div>
-
-      <FastCreditPreApprovalModal
-        isOpen={isPreApprovalOpen}
-        onClose={() => setIsPreApprovalOpen(false)}
-      />
 
       <CarRequestModal
         isOpen={isCarRequestOpen}

@@ -41,7 +41,7 @@ export default function PrivacidadPage() {
           <h2 className="text-base font-bold text-white">2. Datos que recopilamos</h2>
           <p>
             Podemos recopilar nombre, RUT, teléfono, correo electrónico, datos del vehículo de
-            interés, información de simulación de crédito (renta declarada, pie, plazo),
+            interés, información de financiamiento que nos entregues (renta declarada, pie, plazo),
             preferencias de visita o prueba de manejo, y mensajes que nos envíes por
             formularios o WhatsApp, cuando tú los entregas voluntariamente. También podemos
             registrar datos técnicos de navegación y origen de visita según tu consentimiento
@@ -57,7 +57,7 @@ export default function PrivacidadPage() {
           <h2 className="text-base font-bold text-white">3. Finalidad</h2>
           <p>
             Usamos tus datos para atender consultas, gestionar solicitudes de prioridad sobre
-            unidades, tasación o simulación de crédito, coordinar visitas o pruebas de manejo,
+            unidades, tasación o financiamiento, coordinar visitas o pruebas de manejo,
             contactarte comercialmente en relación con vehículos de nuestro inventario y
             mejorar la atención. No vendemos bases de datos a terceros ajenos a la operación
             comercial.

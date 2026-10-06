@@ -14,10 +14,20 @@ test.describe("Sitio público", () => {
     );
   });
 
-  test("simulador de crédito carga sin pasarela de pago", async ({ page }) => {
+  test("simulador retirado: /simulador redirige al catálogo", async ({ page }) => {
     await page.goto("/simulador");
-    await expect(page.getByRole("main")).toContainText(/crédito|simul|cuota|pie|plazo/i);
-    await expect(page.locator("body")).not.toContainText(/webpay|transbank/i);
+    await expect(page).toHaveURL(/\/catalogo$/);
+    await expect(page.locator("body")).not.toContainText(/simula|preaprob|pre-aprob/i);
+  });
+
+  test("home y ficha sin rastros del simulador", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("body")).not.toContainText(/simula|\/mes\b/i);
+    await page.goto("/catalogo");
+    const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
+    expect(href).toBeTruthy();
+    await page.goto(href!);
+    await expect(page.getByRole("main")).not.toContainText(/simula|\/mes\b/i);
   });
 
   test("páginas legales existen", async ({ page }) => {

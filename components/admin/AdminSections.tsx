@@ -3,12 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { asset } from "@/lib/asset";
-import { Vehicle, formatCLP, estimateMonthly } from "@/lib/vehicles";
+import { Vehicle, formatCLP } from "@/lib/vehicles";
 import VehicleEditorModal from "./VehicleEditorModal";
 import { Reservation } from "@/lib/server/reservationsStore";
-import { CreditApplication } from "@/lib/server/creditsStore";
 import { SystemSettings } from "@/lib/server/settingsStore";
-import { AUTOFIN_DEFAULT_MONTHLY_RATE } from "@/lib/finance/autofin";
 import { TradeInRequest } from "@/lib/server/tradeInStore";
 import { CarRequest } from "@/lib/server/carRequestsStore";
 import { PriceAlert } from "@/lib/server/priceAlertsStore";
@@ -48,10 +46,6 @@ const STATUS_BADGES = {
   "En proceso": "bg-amber-400/15 text-amber-300 border-amber-500/30",
   Cancelada: "bg-red-400/15 text-red-300 border-red-500/30",
   Entregado: "bg-blue-400/15 text-blue-300 border-blue-500/30",
-  "Pre-aprobado": "bg-emerald-400/15 text-emerald-300 border-emerald-500/30",
-  Aprobado: "bg-emerald-400/15 text-emerald-300 border-emerald-500/30",
-  "En evaluación": "bg-amber-400/15 text-amber-300 border-amber-500/30",
-  Rechazado: "bg-red-400/15 text-red-300 border-red-500/30",
   Pendiente: "bg-amber-400/15 text-amber-300 border-amber-500/30",
   Confirmada: "bg-emerald-400/15 text-emerald-300 border-emerald-500/30",
   Realizada: "bg-blue-400/15 text-blue-300 border-blue-500/30",
@@ -349,7 +343,6 @@ export function VehiclesSection({
                     </td>
                     <td className="py-3 text-white/70">
                       <p className="font-bold text-brand-300">{formatCLP(v.price)}</p>
-                      <p className="text-[10px] text-white/40">Est. {formatCLP(estimateMonthly(v.price))}/m</p>
                     </td>
                     <td className="py-3">
                       {v.spin && v.spin.count > 0 ? (
@@ -648,250 +641,8 @@ export function ReservationsSection() {
   );
 }
 
-/** 
- * SECCIÓN 3: SOLICITUDES DE CRÉDITO Y EVALUACIONES
- */
-export function CreditsSection() {
-  const [credits, setCredits] = useState<CreditApplication[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchCredits = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/credits");
-      if (res.ok) {
-        const data = await res.json();
-        setCredits(data.credits || []);
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCredits();
-  }, [fetchCredits]);
-
-  const handleStatusChange = async (id: string, newStatus: CreditApplication["status"]) => {
-    try {
-      const res = await fetch(`/api/credits/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        setCredits((prev) =>
-          prev.map((c) => (c.id === id ? { ...c, status: newStatus } : c))
-        );
-      }
-    } catch {
-      alert("Error al actualizar crédito.");
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">Solicitudes totales</p>
-          <p className="mt-1 text-2xl font-bold text-white">{credits.length}</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">Tasa de aprobación</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-400">
-            {credits.length
-              ? Math.round(
-                  (credits.filter((c) => c.status === "Pre-aprobado" || c.status === "Aprobado").length /
-                    credits.length) *
-                    100
-                )
-              : 0}
-            %
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">En evaluación activa</p>
-          <p className="mt-1 text-2xl font-bold text-amber-400">
-            {credits.filter((c) => c.status === "En evaluación").length}
-          </p>
-        </div>
-      </div>
-
-      <Panel title="Solicitudes de Financiamiento">
-        {isLoading ? (
-          <div className="grid h-32 place-items-center text-xs text-white/40">
-            Cargando solicitudes…
-          </div>
-        ) : credits.length === 0 ? (
-          <div className="p-8 text-center text-xs text-white/40">
-            No hay solicitudes de crédito registradas.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="text-left text-white/40">
-                <tr className="border-b border-white/10">
-                  <th className="pb-2.5 font-medium">Cliente</th>
-                  <th className="pb-2.5 font-medium">Vehículo</th>
-                  <th className="pb-2.5 font-medium">Pie / Plazo</th>
-                  <th className="pb-2.5 font-medium">Cuota Est.</th>
-                  <th className="pb-2.5 font-medium">Estado</th>
-                  <th className="pb-2.5 font-medium text-right">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {credits.map((c) => {
-                  const cleanPhone = c.phone.replace(/[^0-9]/g, "");
-                  const msg = `Hola ${c.clientName}, te contactamos de RG Motors con respecto a tu simulación de financiamiento para el ${c.vehicleSlug}. Tu estado actual es: ${c.status}. ¿Cuándo podemos llamarte?`;
-                  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-
-                  return (
-                    <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02] transition">
-                      <td className="py-3">
-                        <p className="font-bold text-white">{c.clientName}</p>
-                        <p className="text-xs text-white/40">{c.phone || c.email}</p>
-                      </td>
-                      <td className="py-3 text-white/70">
-                        <Link href={`/vehiculo/${c.vehicleSlug}`} className="text-brand-300 hover:underline">
-                          {c.vehicleSlug}
-                        </Link>
-                      </td>
-                      <td className="py-3 text-white/70">
-                        {c.downPct}% pie · {c.term} meses
-                      </td>
-                      <td className="py-3 font-bold text-brand-300">
-                        {formatCLP(c.monthlyEstimate)}
-                      </td>
-                      <td className="py-3">
-                        <select
-                          value={c.status}
-                          onChange={(e) => handleStatusChange(c.id, e.target.value as any)}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer ${
-                            STATUS_BADGES[c.status]
-                          }`}
-                        >
-                          <option value="En evaluación">🟡 En evaluación</option>
-                          <option value="Pre-aprobado">🟢 Pre-aprobado</option>
-                          <option value="Aprobado">🟢 Aprobado</option>
-                          <option value="Rechazado">🔴 Rechazado</option>
-                        </select>
-                      </td>
-                      <td className="py-3 text-right">
-                        {c.phone && (
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-500 transition"
-                          >
-                            <span>📲</span> Notificar
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
 /**
- * SECCIÓN 3b: EVENTOS DE SIMULACIÓN (DATA SCIENCE)
- */
-export function SimulationsSection() {
-  const [rows, setRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/simulations")
-      .then((r) => (r.ok ? r.json() : { simulations: [] }))
-      .then((data) => setRows(data.simulations || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const leads = rows.filter((r) => r.eventType === "lead_submit");
-  const calcs = rows.filter((r) => r.eventType === "view_calc");
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">Eventos totales</p>
-          <p className="mt-1 text-2xl font-bold text-white">{rows.length}</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">Cálculos (anon/sesión)</p>
-          <p className="mt-1 text-2xl font-bold text-brand-300">{calcs.length}</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-4">
-          <p className="text-xs text-white/50">Leads con contacto</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-400">{leads.length}</p>
-        </div>
-      </div>
-
-      <Panel title="Simulaciones capturadas (ciencia de datos)">
-        {loading ? (
-          <div className="grid h-32 place-items-center text-xs text-white/40">Cargando…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-xs text-white/40">
-            Aún no hay simulaciones. Cada ajuste de cuota y cada lead quedan en{" "}
-            <code className="text-white/60">simulations.json</code> / KV.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-xs">
-              <thead className="text-white/40">
-                <tr className="border-b border-white/10">
-                  <th className="pb-2.5 font-medium">Fecha</th>
-                  <th className="pb-2.5 font-medium">Tipo</th>
-                  <th className="pb-2.5 font-medium">Cliente</th>
-                  <th className="pb-2.5 font-medium">Auto</th>
-                  <th className="pb-2.5 font-medium">Pie / Plazo</th>
-                  <th className="pb-2.5 font-medium">Cuota</th>
-                  <th className="pb-2.5 font-medium">Contacto</th>
-                </tr>
-              </thead>
-              <tbody className="text-white/80">
-                {rows.slice(0, 200).map((r) => (
-                  <tr key={r.id} className="border-b border-white/5">
-                    <td className="py-2.5 whitespace-nowrap">
-                      {new Date(r.createdAt).toLocaleString("es-CL")}
-                    </td>
-                    <td className="py-2.5">
-                      {r.eventType === "lead_submit" ? "Lead" : "Cálculo"}
-                    </td>
-                    <td className="py-2.5">{r.clientName || "—"}</td>
-                    <td className="py-2.5">{r.vehicleSlug || "—"}</td>
-                    <td className="py-2.5">
-                      {r.downPct}% · {r.termMonths}m
-                    </td>
-                    <td className="py-2.5 font-semibold text-brand-300">
-                      {formatCLP(r.monthlyPayment || 0)}
-                    </td>
-                    <td className="py-2.5">
-                      {[r.phone, r.email].filter(Boolean).join(" · ") || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
-/** 
- * SECCIÓN 4: BASE DE CLIENTES Y LEADS
+ * Base de clientes (leads del chat).
  */
 export function ClientsSection() {
   const [leads, setLeads] = useState<any[]>([]);
@@ -1128,8 +879,8 @@ export function ConfigSection() {
           </div>
         </Panel>
 
-        {/* Preferencias y simulador */}
-        <Panel title="Parámetros Comerciales & Simulador">
+        {/* Preferencias comerciales */}
+        <Panel title="Parámetros Comerciales">
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1149,32 +900,6 @@ export function ConfigSection() {
                   }
                   className="w-full rounded-xl border border-white/15 bg-ink-950 px-3.5 py-2 text-sm text-white font-bold text-brand-300 focus:border-brand-500 outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-white/60">
-                  Tasa interés mensual (usados Autofin)
-                </label>
-                <input
-                  type="number"
-                  step={0.001}
-                  value={settings.preferences.monthlyInterestRate}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      preferences: {
-                        ...settings.preferences,
-                        monthlyInterestRate: parseFloat(e.target.value),
-                      },
-                    })
-                  }
-                  className="w-full rounded-xl border border-white/15 bg-ink-950 px-3.5 py-2 text-sm text-white focus:border-brand-500 outline-none"
-                />
-                <p className="mt-1 text-[10px] text-white/35">
-                  0 = tabla escenario normal Autofin (precio/pie/plazo). Solo valores mayores
-                  a ~{(AUTOFIN_DEFAULT_MONTHLY_RATE * 100).toFixed(2)}% suben la cuota. No uses
-                  tasas preferente/gold aquí: esas se reservan para cerrar en sucursal.
-                </p>
               </div>
             </div>
 
@@ -1243,14 +968,12 @@ export function ConfigSection() {
  * SECCIÓN 6: LEAD SCORING INTELIGENTE (SEMÁFORO DE COMPRA)
  */
 export function LeadScoringSection() {
-  const [credits, setCredits] = useState<CreditApplication[]>([]);
   const [tradeIns, setTradeIns] = useState<TradeInRequest[]>([]);
   const [carRequests, setCarRequests] = useState<CarRequest[]>([]);
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
   const [filterScore, setFilterScore] = useState<"all" | "hot" | "warm" | "cold">("all");
 
   useEffect(() => {
-    fetch("/api/credits").then((r) => r.ok ? r.json() : { applications: [] }).then((d) => setCredits(d.applications || []));
     fetch("/api/trade-in").then((r) => r.ok ? r.json() : { requests: [] }).then((d) => setTradeIns(d.requests || []));
     fetch("/api/car-requests").then((r) => r.ok ? r.json() : { requests: [] }).then((d) => setCarRequests(d.requests || []));
     fetch("/api/price-alerts").then((r) => r.ok ? r.json() : { alerts: [] }).then((d) => setPriceAlerts(d.alerts || []));
@@ -1258,16 +981,6 @@ export function LeadScoringSection() {
 
   // Consolidar todos los leads con scoring unificado
   const allLeads = [
-    ...credits.map((c) => ({
-      id: c.id,
-      name: c.clientName,
-      phone: c.phone,
-      type: "Pre-aprobación Crédito (RUT)",
-      detail: c.rut ? `RUT: ${c.rut} · Renta: ${formatCLP(c.income || 0)}` : `Pie ${c.downPct}%`,
-      score: c.score || 95,
-      date: c.date,
-      hotText: "Alta intención de financiamiento — contactar prioritario",
-    })),
     ...tradeIns.map((t) => ({
       id: t.id,
       name: t.clientName,
@@ -2246,7 +1959,7 @@ export function SoldHistorySection() {
 export function CrmHubSection({
   initialTab = "leads",
 }: {
-  initialTab?: "leads" | "testdrives" | "reservas" | "creditos" | "tasaciones" | "pedidos" | "clientes";
+  initialTab?: "leads" | "testdrives" | "reservas" | "tasaciones" | "pedidos" | "clientes";
 }) {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
@@ -2254,8 +1967,6 @@ export function CrmHubSection({
     { id: "leads", label: "Leads & Scoring", icon: "🔥" },
     { id: "testdrives", label: "Pruebas de Manejo", icon: "🚗" },
     { id: "reservas", label: "Reservas Online", icon: "★" },
-    { id: "creditos", label: "Créditos & RUT", icon: "💳" },
-    { id: "simulaciones", label: "Simulaciones DS", icon: "📈" },
     { id: "tasaciones", label: "Tasaciones / Retomas", icon: "💎" },
     { id: "pedidos", label: "Autos a Pedido & Alertas", icon: "🎯" },
     { id: "clientes", label: "Base de Clientes", icon: "👥" },
@@ -2286,8 +1997,6 @@ export function CrmHubSection({
       {activeTab === "leads" && <LeadScoringSection />}
       {activeTab === "testdrives" && <TestDrivesSection />}
       {activeTab === "reservas" && <ReservationsSection />}
-      {activeTab === "creditos" && <CreditsSection />}
-      {activeTab === "simulaciones" && <SimulationsSection />}
       {activeTab === "tasaciones" && <TradeInsSection />}
       {activeTab === "pedidos" && (
         <div className="space-y-6">

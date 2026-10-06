@@ -68,7 +68,7 @@ export default function TerminosPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-white">5. Solicitudes online</h2>
           <p>
-            Los formularios de prioridad sobre una unidad, crédito, tasación, prueba de manejo
+            Los formularios de prioridad sobre una unidad, tasación, prueba de manejo
             o contacto constituyen una solicitud de atención, no un contrato de compraventa ni
             una reserva pagada, salvo confirmación expresa por escrito o en sucursal. Ver{" "}
             <Link href="/condiciones-reserva" className="text-brand-300 hover:underline">
@@ -82,8 +82,8 @@ export default function TerminosPage() {
           <h2 className="text-base font-bold text-white">6. Financiamiento</h2>
           <p>
             {COMPANY.name} comercializa el vehículo. El crédito, si se otorga, es evaluado y
-            otorgado por Autofin u otra entidad financiera. Las simulaciones del sitio son
-            referenciales. Ver{" "}
+            otorgado por Autofin u otra entidad financiera. Cualquier estimación de cuota es
+            referencial. Ver{" "}
             <Link href="/aviso-credito" className="text-brand-300 hover:underline">
               Aviso de Crédito
             </Link>

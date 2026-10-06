@@ -7,8 +7,11 @@ describe("isPublicApi — política de acceso", () => {
     expect(isPublicApi("/api/reservations", "POST")).toBe(true);
     expect(isPublicApi("/api/car-requests", "POST")).toBe(true);
     expect(isPublicApi("/api/test-drives", "POST")).toBe(true);
-    expect(isPublicApi("/api/credits", "POST")).toBe(true);
-    expect(isPublicApi("/api/simulations", "POST")).toBe(true);
+  });
+
+  it("las APIs retiradas del simulador de crédito ya no son públicas", () => {
+    expect(isPublicApi("/api/credits", "POST")).toBe(false);
+    expect(isPublicApi("/api/simulations", "POST")).toBe(false);
   });
 
   it("bloquea GET de listados con PII (requieren admin)", () => {

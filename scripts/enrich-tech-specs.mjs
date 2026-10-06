@@ -18,7 +18,6 @@ const enriched = JSON.parse(fs.readFileSync(vehiclesPath, "utf8")).map((v) =>
 fs.writeFileSync(vehiclesPath, JSON.stringify(enriched, null, 2), "utf8");
 
 const header = `// Stock importado desde "total inventario tiempo real.xlsx" (primeros 40 con precio válido)
-import { estimateMonthlyAutofin } from "@/lib/finance/autofin";
 
 export interface VehicleSpin {
   count: number;
@@ -81,10 +80,6 @@ export function formatCLP(amount: number): string {
 
 export function formatKm(km: number): string {
   return \`\${km.toLocaleString("es-CL")} km\`;
-}
-
-export function estimateMonthly(price: number, termMonths = 48, piePercent = 0.2): number {
-  return estimateMonthlyAutofin(price, termMonths, piePercent);
 }
 
 export function spinFramesOf(v: Vehicle): string[] {

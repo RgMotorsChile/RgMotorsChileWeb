@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   ),
   title: "RG Motors — Vehículos Seleccionados en Puerto Montt",
   description:
-    "Compra tu próximo auto o camioneta en Puerto Montt. Fotos reales de patio y simulación de crédito Autofin referencial.",
+    "Compra tu próximo auto o camioneta en Puerto Montt. Fotos reales de patio y atención en showroom.",
   keywords: [
     "autos usados",
     "camionetas 4x4",
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "RG Motors — Vehículos Seleccionados en Puerto Montt",
     description:
-      "Automotora en Puerto Montt. Catálogo con fotografías reales e financiamiento Autofin referencial.",
+      "Automotora en Puerto Montt. Catálogo con fotografías reales y atención en showroom.",
     type: "website",
     locale: "es_CL",
     images: [{ url: "/logo.png", width: 512, height: 512, alt: "RG Motors" }],
