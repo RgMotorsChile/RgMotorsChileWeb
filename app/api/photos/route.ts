@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
   let spinCount = 0;
 
   // Siempre fresco: tras subir, otra instancia no debe servir caché vieja sin fotos
-  const vehicle = await getVehicleBySlug(slug, { bypassCache: true });
+  const vehicle = await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
   const currentCover = vehicle?.image ? normalizeMediaUrl(vehicle.image) : "";
 
   const seen = new Set<string>();
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Slug de vehículo no válido." }, { status: 400 });
   }
 
-  const vehicle = await getVehicleBySlug(slug, { bypassCache: true });
+  const vehicle = await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
   if (!vehicle) {
     return NextResponse.json(
       { error: `No existe el vehículo «${slug}». Elige una unidad del inventario.` },
@@ -372,7 +372,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Releer fresco por si otra subida concurrente ya escribió
-      const fresh = (await getVehicleBySlug(slug, { bypassCache: true })) || vehicle;
+      const fresh = (await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" })) || vehicle;
       const currentGallery = Array.isArray(fresh.gallery) ? [...fresh.gallery] : [];
       const updatedGallery = [...currentGallery, ...newPaths];
 
@@ -430,7 +430,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Slug no válido." }, { status: 400 });
     }
 
-    const v = await getVehicleBySlug(slug, { bypassCache: true });
+    const v = await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
     if (!v) {
       return NextResponse.json({ error: "Vehículo no encontrado." }, { status: 404 });
     }
@@ -526,7 +526,7 @@ export async function DELETE(req: NextRequest) {
       await unlink(targetFile);
     }
 
-    const v = await getVehicleBySlug(slug, { bypassCache: true });
+    const v = await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
     if (v && !isSpin) {
       const currentGallery = v.gallery || [];
       const urlHint =

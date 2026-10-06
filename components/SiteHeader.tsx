@@ -11,6 +11,7 @@ import CarRequestModal from "./CarRequestModal";
 const NAV_LINKS = [
   { href: "/", label: "Inicio" },
   { href: "/catalogo", label: "Catálogo" },
+  { href: "/consigna", label: "Consigna" },
   { href: "/comparador", label: "Comparador" },
   { href: "/contacto", label: "Contacto" },
 ];
@@ -209,6 +210,13 @@ export default function SiteHeader() {
                 >
                   WhatsApp
                 </a>
+                <Link
+                  href="/consigna"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center rounded-full border border-white/15 py-3 text-sm font-medium text-white/90"
+                >
+                  Consigna tu vehículo
+                </Link>
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

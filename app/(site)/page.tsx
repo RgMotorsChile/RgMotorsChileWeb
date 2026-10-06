@@ -7,6 +7,7 @@ import {
   pickFeaturedVehicles,
 } from "@/lib/vehicles/publicCatalog";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { withVerifiedCover } from "@/lib/server/verifyPhotos";
 import VehicleCard from "@/components/VehicleCard";
 import RevealOnScroll from "@/components/RevealOnScroll";
 import AppleCareTrustSection from "@/components/AppleCareTrustSection";
@@ -18,8 +19,10 @@ export const revalidate = 120;
 
 export default async function Home() {
   const vehicles = await getVehicles();
-  const publicVehicles = filterPublicCatalog(vehicles).map(stripPlateForPublic);
-  const featured = pickFeaturedVehicles(vehicles, 6).map(stripPlateForPublic);
+  const [publicVehicles, featured] = await Promise.all([
+    Promise.all(filterPublicCatalog(vehicles).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
+    Promise.all(pickFeaturedVehicles(vehicles, 6).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
+  ]);
 
   return (
     <main data-page="home" className="relative overflow-x-clip">
@@ -80,7 +83,7 @@ export default async function Home() {
               Camionetas y autos con fotos reales de patio.
               <span className="hidden sm:inline">
                 <br />
-                Visítalos en Puerto Montt.
+                Visítalos en Puerto Montt o consigna el tuyo con nosotros.
               </span>
               <span className="sm:hidden"> Visítalos en Puerto Montt.</span>
             </p>
@@ -91,6 +94,12 @@ export default async function Home() {
                 className="rg-btn-primary inline-flex min-h-12 items-center justify-center rounded-xl px-7 py-3.5 text-[15px] font-bold text-white sm:min-h-11 sm:min-w-[9.5rem] sm:rounded-lg"
               >
                 Ver catálogo
+              </Link>
+              <Link
+                href="/consigna"
+                className="rg-btn-ghost-light inline-flex min-h-12 items-center justify-center rounded-xl px-7 py-3.5 text-[15px] font-bold sm:min-h-11 sm:min-w-[9.5rem] sm:rounded-lg"
+              >
+                Consigna tu auto
               </Link>
             </div>
           </div>

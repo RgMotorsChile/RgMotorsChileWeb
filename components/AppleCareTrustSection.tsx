@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { whatsappLink } from "@/lib/company";
+import ConsignaSection from "./ConsignaSection";
 
 const PILLARS = [
   {
@@ -31,8 +32,11 @@ export default function AppleCareTrustSection() {
       />
 
       <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16">
+        {/* Consigna tu vehículo */}
+        <ConsignaSection />
+
         {/* Transparencia */}
-        <div>
+        <div className="mt-14 sm:mt-16">
           <div className="flex items-center gap-3">
             <span className="h-px w-8 bg-gradient-to-r from-[#C9A84C] to-transparent" />
             <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#C9A84C]/90">
@@ -80,7 +84,7 @@ export default function AppleCareTrustSection() {
               ¿Listo para tu próximo vehículo?
             </h2>
             <p className="relative mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-white/55 sm:text-sm">
-              Explora el stock, agenda una visita o escribe a un asesor. Te acompañamos en Puerto
+              Explora el stock, consigna tu auto o escribe a un asesor. Te acompañamos en Puerto
               Montt.
             </p>
             <div className="rg-cta-row relative mx-auto mt-8 max-w-md sm:max-w-none sm:justify-center">

@@ -11,6 +11,7 @@ export default function ContactForm() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fallback, setFallback] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -58,6 +59,7 @@ export default function ContactForm() {
         }
         setLoading(true);
         setError("");
+        setFallback(false);
         try {
           const res = await fetch("/api/contact", {
             method: "POST",
@@ -71,15 +73,17 @@ export default function ContactForm() {
               trafficSource: getTrafficSource(),
             }),
           });
-          const data = await res.json();
-          if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
             setError(data.error || "No se pudo enviar. Intenta de nuevo.");
+            setFallback(res.status >= 500 || !res.ok);
             return;
           }
           trackEvent("generate_lead", { form_name: "contacto" });
           setSent(true);
         } catch {
           setError("Error de conexión. Intenta nuevamente o escríbenos por WhatsApp.");
+          setFallback(true);
         } finally {
           setLoading(false);
         }
@@ -99,7 +103,17 @@ export default function ContactForm() {
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          {error}
+          <p>{error}</p>
+          {fallback && (
+            <a
+              href={whatsappLink(`Hola RG Motors, soy ${name || "un cliente"}. ${message}`.trim())}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-[#25D366] px-5 text-xs font-bold text-white"
+            >
+              Enviar por WhatsApp
+            </a>
+          )}
         </div>
       )}
 

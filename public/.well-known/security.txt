@@ -1,0 +1,5 @@
+Contact: mailto:administracion@rgmotorschile.cl
+Expires: 2027-09-24T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://www.rgmotorschile.cl/.well-known/security.txt
+Policy: https://www.rgmotorschile.cl/privacidad

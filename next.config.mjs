@@ -32,7 +32,16 @@ const nextConfig = {
   // El simulador de crédito se retiró: enlaces antiguos e indexados van al catálogo.
   async redirects() {
     if (isGhPages) return [];
-    return [{ source: "/simulador", destination: "/catalogo", permanent: true }];
+    return [
+      { source: "/simulador", destination: "/catalogo", permanent: true },
+      // Dominio raíz → www con 301 (una sola URL canónica para Google).
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "rgmotorschile.cl" }],
+        destination: "https://www.rgmotorschile.cl/:path*",
+        statusCode: 301,
+      },
+    ];
   },
   // Permite HMR cuando Playwright abre el origen por 127.0.0.1
   allowedDevOrigins: ["127.0.0.1"],
@@ -46,6 +55,8 @@ const nextConfig = {
     : {
         images: {
           formats: ["image/avif", "image/webp"],
+          // Calidades usadas por <Image> (hero/ficha 85, tarjetas 82); sin esto Next avisa y degrada.
+          qualities: [75, 82, 85],
           remotePatterns: [
             { protocol: "https", hostname: "drive.google.com" },
             { protocol: "https", hostname: "lh3.googleusercontent.com" },
