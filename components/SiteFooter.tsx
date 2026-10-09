@@ -141,6 +141,28 @@ export default function SiteFooter() {
           </div>
         </div>
       </div>
+      <div className="border-t border-white/[0.05]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-1.5 px-4 py-4 text-center text-[11px] text-white/35 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-2 sm:px-6">
+          <span>
+            Desarrollado por <span className="font-medium text-white/60">Mathias Jara</span> &middot; Desarrollador Full Stack
+          </span>
+          <span className="hidden text-white/20 sm:inline">&middot;</span>
+          <span className="flex flex-wrap items-center justify-center gap-x-2">
+            <a
+              href="https://wa.me/56964710361"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-white/70"
+            >
+              +56 9 6471 0361
+            </a>
+            <span className="text-white/20">&middot;</span>
+            <a href="mailto:mathias.jara@hotmail.com" className="transition-colors hover:text-white/70">
+              mathias.jara@hotmail.com
+            </a>
+          </span>
+        </div>
+      </div>
     </footer>
   );
 }
