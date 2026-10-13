@@ -168,12 +168,22 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     existingList.filter((v) => normalizePlateKey(v.plate || "")),
   );
 
+  // cover_locked (admin o catálogo UC): no listar la carpeta, no bajar ni
+  // subir a Blob, y no reescribir gallery/image.
+  const skippedCoverLocked = prioritized.filter((v) => v.coverLocked === true);
+  if (skippedCoverLocked.length > 0) {
+    console.log(
+      `[DriveOAuthSync] Se omiten ${skippedCoverLocked.length} vehículos con portada bloqueada; no se modifica galería ni portada.`,
+    );
+  }
+  const eligible = prioritized.filter((v) => v.coverLocked !== true);
+
   // Solo los que necesitan trabajo; el índice ya resolvió el match.
-  const needingPhotos = prioritized.filter((v) => {
+  const needingPhotos = eligible.filter((v) => {
     const key = normalizePlateKey(v.plate || "");
     return key && folderIndex.has(key) && !v.hasRealPhotos;
   });
-  const needingRefresh = prioritized.filter((v) => {
+  const needingRefresh = eligible.filter((v) => {
     const key = normalizePlateKey(v.plate || "");
     return key && folderIndex.has(key) && v.hasRealPhotos;
   });
@@ -259,6 +269,8 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   let synced = 0;
 
   for (const item of toProcess) {
+    if (item.vehicle.coverLocked === true) continue;
+
     const galleryUrls: string[] = [];
     let uploadedThisVehicle = 0;
 
