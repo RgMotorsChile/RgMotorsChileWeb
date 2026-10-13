@@ -107,7 +107,18 @@ export function evaluateSheetWipeGuard(
   const overlapRatio =
     input.sheetActiveCount > 0 ? overlap / input.sheetActiveCount : 0;
   // Misma flota, menos filas: la pestaña mandó (ej. 32→20 en Unidades Chile).
-  if (input.sheetActiveCount >= 5 && overlapRatio >= 0.75) {
+  // Pero nunca si la caída es masiva: el 10-oct una lectura parcial (7 filas, 100% overlap)
+  // archivó 37 de 44 unidades RG y borró sus fotos del Blob.
+  const dropRatio =
+    input.currentActiveCount > 0
+      ? input.wouldArchiveCount / input.currentActiveCount
+      : 0;
+  const MAX_DROP_WITH_OVERLAP = 0.5;
+  if (
+    input.sheetActiveCount >= 5 &&
+    overlapRatio >= 0.75 &&
+    dropRatio <= MAX_DROP_WITH_OVERLAP
+  ) {
     return { abortAll: false, skipArchive: false };
   }
 

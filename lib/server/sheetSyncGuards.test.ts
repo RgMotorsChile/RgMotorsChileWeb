@@ -64,6 +64,16 @@ describe("isSellableSheetRow", () => {
 });
 
 describe("evaluateSheetWipeGuard", () => {
+  it("no archiva masivo aunque la hoja parcial tenga 100% overlap (caso RG 44→7)", () => {
+    const r = evaluateSheetWipeGuard({
+      sheetActiveCount: 7,
+      currentActiveCount: 44,
+      wouldArchiveCount: 37,
+      sheetOverlapCount: 7,
+    });
+    expect(r.abortAll).toBe(false);
+    expect(r.skipArchive).toBe(true);
+  });
   it("aborta sync si la hoja no trae activos", () => {
     const r = evaluateSheetWipeGuard({
       sheetActiveCount: 0,
