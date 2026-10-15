@@ -9,7 +9,7 @@ Sitio en producción: `https://www.rgmotorschile.cl` (también apex `rgmotorschi
 - Auth admin, leads, headers de seguridad, CI
 - Cron de Vercel **diario** (plan Hobby: no admite `*/30`). `vercel.json` dispara `/api/cron/sync` a las 11:00, 12:00 y 22:00 UTC. Sin `?tenant=`, las 12:00 UTC sincronizan Unidades Chile y el resto RG Motors
 - GitHub Actions (`.github/workflows/sync-cron.yml`) sincroniza cada 30 minutos: minutos 5 y 35 UTC → `?tenant=rg-motors`; minutos 20 y 50 UTC → `?tenant=unidades-chile`. Los dos pegan a `https://rgmotorschile.cl` porque el tenant se elige por query, no por host
-- Cada corrida cabe en 60s (presupuesto de fotos; lo que no entra sigue en la siguiente) y deja una fila en `sync_state` (`catalog_cron`) con leídos / insertados / actualizados / omitidos / fotos / errores / duración, también si falla
+- Cada corrida cabe en 60s (presupuesto de fotos que rota entre autos sin fotos; lo que no entra sigue en la siguiente) y deja una fila en `sync_state` (`catalog_cron`) con leídos / insertados / actualizados / omitidos / fotos / errores / duración, también si falla. HEIC, HEIF y DNG se guardan como el JPEG que ya renderiza Drive
 - Sync omite preparación / incompletos; catálogo público exige precio y km > 0
 - Sitemap solo vehículos públicos (sin vendidos/borrador)
 - Mutaciones admin con `requireAdminSession` (defense-in-depth)

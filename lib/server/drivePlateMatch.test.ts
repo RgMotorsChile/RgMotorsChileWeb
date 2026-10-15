@@ -10,6 +10,7 @@ import {
   plateFolderNameVariants,
   plateFolderSearchPrefixes,
   prioritizeVehiclesForDriveSync,
+  rotateSyncQueue,
 } from "./drivePlateMatch";
 
 describe("normalizePlateKey", () => {
@@ -97,6 +98,32 @@ describe("driveFileNeedsSync", () => {
         },
       ),
     ).toBe(true);
+  });
+});
+
+describe("rotateSyncQueue", () => {
+  const cars = [
+    { slug: "a", plate: "AAAA 11" },
+    { slug: "b", plate: "BBBB 22" },
+    { slug: "c", plate: "CCCC 33" },
+  ];
+
+  it("empieza por el cursor para no repetir siempre el primero", () => {
+    expect(rotateSyncQueue(cars, "BBBB22").map((c) => c.slug)).toEqual(["b", "c", "a"]);
+  });
+
+  it("si el cursor ya no está en la cola, deja el orden", () => {
+    expect(rotateSyncQueue(cars, "ZZZZ99").map((c) => c.slug)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("prioriza autos sin fotos", () => {
+  it("pone primero los que no tienen fotos reales", () => {
+    const ordered = prioritizeVehiclesForDriveSync([
+      { slug: "con-fotos", plate: "BBBB 22", hasRealPhotos: true },
+      { slug: "sin-fotos", plate: "AAAA 11", hasRealPhotos: false },
+    ]);
+    expect(ordered.map((c) => c.slug)).toEqual(["sin-fotos", "con-fotos"]);
   });
 });
 

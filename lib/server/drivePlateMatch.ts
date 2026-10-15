@@ -188,3 +188,20 @@ export function prioritizeVehiclesForDriveSync<T extends SyncPriorityVehicle>(
     return String(a.slug).localeCompare(String(b.slug));
   });
 }
+
+/**
+ * Rota la cola para no empezar siempre por el mismo auto.
+ * `cursorPlate` es la patente por la que debe seguir la próxima corrida.
+ */
+export function rotateSyncQueue<T extends { plate?: string }>(
+  vehicles: T[],
+  cursorPlate: string | null | undefined,
+): T[] {
+  if (!cursorPlate || vehicles.length < 2) return vehicles;
+  const cursor = normalizePlateKey(cursorPlate);
+  const idx = vehicles.findIndex(
+    (vehicle) => normalizePlateKey(vehicle.plate || "") === cursor,
+  );
+  if (idx <= 0) return vehicles;
+  return [...vehicles.slice(idx), ...vehicles.slice(0, idx)];
+}

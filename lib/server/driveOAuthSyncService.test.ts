@@ -5,6 +5,8 @@ const getVehicles = vi.hoisted(() => vi.fn());
 const saveVehicle = vi.hoisted(() => vi.fn());
 const storeMediaFile = vi.hoisted(() => vi.fn());
 const downloadDriveFileBytes = vi.hoisted(() => vi.fn());
+const downloadDriveRenderedJpeg = vi.hoisted(() => vi.fn());
+const convertHeicToJpegBuffer = vi.hoisted(() => vi.fn());
 const listImagesInFolder = vi.hoisted(() => vi.fn());
 const listPlateFolders = vi.hoisted(() => vi.fn());
 const readJson = vi.hoisted(() => vi.fn());
@@ -22,10 +24,17 @@ vi.mock("@/lib/server/mediaStorage", () => ({
 
 vi.mock("@/lib/server/googleDriveClient", () => ({
   downloadDriveFileBytes,
+  downloadDriveRenderedJpeg,
   getDrivePhotosFolderId: () => "root-folder",
   isGoogleDriveOAuthConfigured: () => true,
   listImagesInFolder,
   listPlateFolders,
+}));
+
+vi.mock("@/lib/server/convertHeic", () => ({
+  isHeicFile: (name: string, mime?: string) =>
+    /image\/(heic|heif)/i.test(String(mime || "")) || /\.(heic|heif)$/i.test(name),
+  convertHeicToJpegBuffer,
 }));
 
 vi.mock("@/lib/server/db", () => ({
@@ -341,6 +350,207 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(listImagesInFolder).not.toHaveBeenCalled();
     expect(second.skippedUnchanged).toBe(1);
     expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
+  it("guarda HEIC y DNG como el JPEG que ya renderizó Drive", async () => {
+    const heicCar = vehicle({
+      slug: "jrth",
+      plate: "JRTH 26",
+      hasRealPhotos: false,
+    });
+    getVehicles.mockResolvedValue([heicCar]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-jrth", name: "JRTH26" }]);
+    listImagesInFolder.mockResolvedValue([
+      {
+        id: "heic-1",
+        name: "IMG_0001.HEIC",
+        mimeType: "image/heic",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+        thumbnailLink: "https://lh3.googleusercontent.com/d/heic-1=s220",
+      },
+      {
+        id: "dng-1",
+        name: "IMG_0002.DNG",
+        mimeType: "image/x-adobe-dng",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+        thumbnailLink: "https://lh3.googleusercontent.com/d/dng-1=s220",
+      },
+    ]);
+    downloadDriveRenderedJpeg.mockResolvedValue(Buffer.from("jpeg-render"));
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      photosPerVehicle: 6,
+    });
+
+    expect(result.newPhotosDownloaded).toBe(2);
+    expect(result.syncedVehicles).toBe(1);
+    expect(downloadDriveRenderedJpeg).toHaveBeenCalledWith(
+      "heic-1",
+      "https://lh3.googleusercontent.com/d/heic-1=s220",
+    );
+    expect(downloadDriveRenderedJpeg).toHaveBeenCalledWith(
+      "dng-1",
+      "https://lh3.googleusercontent.com/d/dng-1=s220",
+    );
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(convertHeicToJpegBuffer).not.toHaveBeenCalled();
+    expect(saveVehicle.mock.calls[0][0].gallery).toEqual([
+      "https://blob.example/cars/uploads/jrth/heic-1.jpg",
+      "https://blob.example/cars/uploads/jrth/dng-1.jpg",
+    ]);
+  });
+
+  it("si el thumbnail HEIC falla, convierte el original; un DNG sin thumbnail no se decodifica", async () => {
+    const heicCar = vehicle({
+      slug: "sgyl",
+      plate: "SGYL 33",
+      hasRealPhotos: false,
+    });
+    getVehicles.mockResolvedValue([heicCar]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-sgyl", name: "SGYL33" }]);
+    listImagesInFolder.mockResolvedValue([
+      {
+        id: "heic-2",
+        name: "solo.heic",
+        mimeType: "image/heic",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    downloadDriveRenderedJpeg.mockRejectedValue(new Error("sin thumbnail"));
+    downloadDriveFileBytes.mockResolvedValue(Buffer.from("heic-original"));
+    convertHeicToJpegBuffer.mockResolvedValue({
+      buffer: Buffer.from("jpeg-fallback"),
+      contentType: "image/jpeg",
+      ext: "jpg",
+    });
+
+    const heicResult = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+    expect(heicResult.newPhotosDownloaded).toBe(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("heic-2");
+    expect(convertHeicToJpegBuffer).toHaveBeenCalledTimes(1);
+    expect(saveVehicle.mock.calls[0][0].image).toBe(
+      "https://blob.example/cars/uploads/sgyl/heic-2.jpg",
+    );
+
+    const dngCar = vehicle({
+      slug: "dng-car",
+      plate: "DNGX 01",
+      hasRealPhotos: false,
+    });
+    getVehicles.mockResolvedValue([dngCar]);
+    listPlateFolders.mockResolvedValue([{ id: "folder-dng", name: "DNGX01" }]);
+    listImagesInFolder.mockResolvedValue([
+      {
+        id: "dng-2",
+        name: "raw.dng",
+        mimeType: "image/x-adobe-dng",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    convertHeicToJpegBuffer.mockClear();
+    downloadDriveFileBytes.mockClear();
+    saveVehicle.mockClear();
+
+    const dngResult = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+    expect(dngResult.newPhotosDownloaded).toBe(0);
+    expect(dngResult.errors?.length).toBeGreaterThan(0);
+    expect(convertHeicToJpegBuffer).not.toHaveBeenCalled();
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
+  it("sigue con las fotos que pasaban del tope de 10 en la corrida siguiente", async () => {
+    const car = vehicle({
+      slug: "dwjs",
+      plate: "DWJS 66",
+      hasRealPhotos: false,
+    });
+    const images = Array.from({ length: 12 }, (_, i) => ({
+      id: `p${i}`,
+      name: `${i}.jpg`,
+      mimeType: "image/jpeg",
+      modifiedTime: "2026-10-01T00:00:00.000Z",
+    }));
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-dwjs", name: "DWJS66" }]);
+    listImagesInFolder.mockResolvedValue(images);
+
+    const first = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      photosPerVehicle: 6,
+      maxNewPhotos: 6,
+    });
+    expect(first.newPhotosDownloaded).toBe(6);
+    expect(saveVehicle.mock.calls[0][0].gallery).toHaveLength(6);
+    const saved = writeJson.mock.calls.at(-1)?.[1] as {
+      files: Record<string, unknown>;
+      folders: Record<string, unknown>;
+    };
+    expect(saved.folders["folder-dwjs"]).toBeUndefined();
+
+    getVehicles.mockResolvedValue([
+      {
+        ...car,
+        hasRealPhotos: true,
+        image: saveVehicle.mock.calls[0][0].image,
+        gallery: saveVehicle.mock.calls[0][0].gallery,
+      },
+    ]);
+    readJson.mockResolvedValue(saved);
+    downloadDriveFileBytes.mockClear();
+
+    const second = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      photosPerVehicle: 6,
+      maxNewPhotos: 6,
+    });
+    expect(second.newPhotosDownloaded).toBe(6);
+    expect(saveVehicle.mock.calls.at(-1)?.[0].gallery).toHaveLength(12);
+  });
+
+  it("la corrida siguiente empieza por el auto sin fotos que todavía no tocó", async () => {
+    const cars = ["AAAA 11", "BBBB 22", "CCCC 33"].map((plate, i) =>
+      vehicle({ slug: `car-${i}`, plate, hasRealPhotos: false }),
+    );
+    getVehicles.mockResolvedValue(cars);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([
+      { id: "fa", name: "AAAA11" },
+      { id: "fb", name: "BBBB22" },
+      { id: "fc", name: "CCCC33" },
+    ]);
+    listImagesInFolder.mockImplementation(async (folderId: string) => [
+      {
+        id: `file-${folderId}`,
+        name: "1.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+
+    await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      maxNewPhotos: 1,
+      photosPerVehicle: 1,
+    });
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-fa");
+    const saved = writeJson.mock.calls.at(-1)?.[1] as { zeroPhotoCursor?: string };
+    expect(saved.zeroPhotoCursor).toBe("bbbb22");
+
+    readJson.mockResolvedValue(saved);
+    downloadDriveFileBytes.mockClear();
+    await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      maxNewPhotos: 1,
+      photosPerVehicle: 1,
+    });
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-fb");
+    expect(downloadDriveFileBytes).not.toHaveBeenCalledWith("file-fa");
   });
 
   it("no baja nada si el plazo de la corrida ya venció", async () => {
