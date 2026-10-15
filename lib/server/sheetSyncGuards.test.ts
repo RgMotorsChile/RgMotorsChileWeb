@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateSheetWipeGuard,
+  foldSheetText,
   guessBodyTypeFromModel,
   hasBlockedInventoryText,
+  isBlankSheetRow,
+  isExcludedInventorySection,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
 
@@ -60,6 +63,34 @@ describe("isSellableSheetRow", () => {
 
   it("no bloquea por nota FALTA REVISIÓN fuera de precio/km", () => {
     expect(hasBlockedInventoryText("FALTA REVISIÓN")).toBe(false);
+  });
+});
+
+describe("secciones que cortan la planilla", () => {
+  it("reconoce preparación y taller sin importar mayúsculas ni acentos", () => {
+    expect(foldSheetText("Preparación")).toBe("PREPARACION");
+    expect(isExcludedInventorySection(["", "", "", "PREPARACIÓN"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "preparacion"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "EN PREPARACION"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "TALLER"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "En taller"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "VEHICULOS EN TALLER"])).toBe(true);
+  });
+
+  it("reconoce los bloques ajenos de la pestaña RG MOTORS", () => {
+    expect(isExcludedInventorySection(["", "", "", "SALGADO"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "DON RUDY"])).toBe(true);
+    expect(isExcludedInventorySection(["", "", "", "CONSIGNADOS CASA CLIENTE"])).toBe(true);
+  });
+
+  it("una fila vacía o el encabezado de columnas no corta", () => {
+    expect(isBlankSheetRow([])).toBe(true);
+    expect(isBlankSheetRow(["", "  ", null])).toBe(true);
+    expect(isExcludedInventorySection([])).toBe(false);
+    expect(isExcludedInventorySection(undefined)).toBe(false);
+    expect(
+      isExcludedInventorySection(["PATENTE", "MARCA", "MODELO", "COLOR"]),
+    ).toBe(false);
   });
 });
 

@@ -4,6 +4,8 @@ import { Vehicle } from "@/lib/vehicles";
 import {
   evaluateSheetWipeGuard,
   guessBodyTypeFromModel,
+  isBlankSheetRow,
+  isExcludedInventorySection,
   isInventorySheetTab,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
@@ -170,6 +172,84 @@ function parseKm(raw: unknown): number {
   return clean ? parseInt(clean, 10) : 0;
 }
 
+const PLATE_RE = /[A-Z]{2,4}[0-9]{2,4}/;
+
+export type SheetVehicleRow = {
+  plate: string;
+  brand: string;
+  model: string;
+  color: string;
+  year: number;
+  listPrice?: number;
+  price: number;
+  km: number;
+  supplier: string;
+  isSold: boolean;
+  sellable: boolean;
+};
+
+/**
+ * Lee el bloque a la venta. Una fila vacía no corta: pueden venir más autos.
+ * Se corta al encabezado de preparación, taller, Salgado u otro bloque ajeno
+ * (DON RUDY, CONSIGNADOS CASA CLIENTE). RESERVADA y sin precio dejan esa
+ * fila fuera y la lectura sigue.
+ */
+export function extractSheetVehicles(rows: unknown[][]): SheetVehicleRow[] {
+  const out: SheetVehicleRow[] = [];
+  let cutAtSection = false;
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isBlankSheetRow(r)) continue;
+
+    const cells = r as unknown[];
+    const cleanP = cleanPlate(cells[1]);
+    const plateOk = cleanP.length === 6 && PLATE_RE.test(cleanP);
+    if (!plateOk) {
+      if (isExcludedInventorySection(cells)) cutAtSection = true;
+      continue;
+    }
+    if (cutAtSection) continue;
+
+    const rawText = cells.map((cell) => String(cell ?? "")).join(" ").toUpperCase();
+    const isSold =
+      rawText.includes("VENDIDO") ||
+      rawText.includes("ENTREGADO") ||
+      rawText.includes("VTA");
+    const { price, listPrice } = parsePrice(cells[7], cells[6]);
+    const km = parseKm(cells[8]);
+    const brand = cleanBrand(cells[2]);
+    const model = String(cells[3] || "").trim().toUpperCase();
+    const year = parseInt(String(cells[5]), 10) || 0;
+    const sellable =
+      !isSold &&
+      isSellableSheetRow({
+        price,
+        km,
+        brand,
+        model,
+        year,
+        rawParts: [cells[6], cells[7], cells[8]],
+      });
+
+    out.push({
+      plate: cleanP,
+      brand,
+      model,
+      color: cleanColor(cells[4]),
+      year: year || 2022,
+      price,
+      listPrice,
+      km,
+      supplier: String(cells[9] || "").trim(),
+      isSold,
+      sellable,
+    });
+  }
+
+  return out;
+}
+
 export interface SyncReport {
   success: boolean;
   message: string;
@@ -250,19 +330,7 @@ export async function syncFromLiveGoogleSheet(
     };
   }
 
-  const sheetVehicles: Array<{
-    plate: string;
-    brand: string;
-    model: string;
-    color: string;
-    year: number;
-    listPrice?: number;
-    price: number;
-    km: number;
-    supplier: string;
-    isSold: boolean;
-    sellable: boolean;
-  }> = [];
+  const sheetVehicles: SheetVehicleRow[] = [];
 
   for (const name of workbook.SheetNames) {
     if (!isInventorySheetTab(name, tenantSlug)) continue;
@@ -270,62 +338,7 @@ export async function syncFromLiveGoogleSheet(
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
-
-    // Solo el primer bloque activo (índices 1..N). Tras una fila sin patente
-    // se ignora el resto (preparación / histórico en la misma pestaña).
-    let blockStarted = false;
-
-    for (let i = 1; i < rows.length; i++) {
-      const r = rows[i];
-      if (!r || r.length < 3) {
-        if (blockStarted) break;
-        continue;
-      }
-
-      const cleanP = cleanPlate(r[1]);
-      if (cleanP.length !== 6 || !/[A-Z]{2,4}[0-9]{2,4}/.test(cleanP)) {
-        if (blockStarted) break;
-        continue;
-      }
-      blockStarted = true;
-
-      const rawText = r.join(" ").toUpperCase();
-      const isSold =
-        rawText.includes("VENDIDO") ||
-        rawText.includes("ENTREGADO") ||
-        rawText.includes("VTA");
-      const { price, listPrice } = parsePrice(r[7], r[6]);
-      const km = parseKm(r[8]);
-      const brand = cleanBrand(r[2]);
-      const model = String(r[3] || "").trim().toUpperCase();
-      const year = parseInt(String(r[5]), 10) || 0;
-
-      // Solo precio lista/oferta y km — no la fila completa (evita sacar autos por "FOTOS NUEVAS")
-      const sellable =
-        !isSold &&
-        isSellableSheetRow({
-          price,
-          km,
-          brand,
-          model,
-          year,
-          rawParts: [r[6], r[7], r[8]],
-        });
-
-      sheetVehicles.push({
-        plate: cleanP,
-        brand,
-        model,
-        color: cleanColor(r[4]),
-        year: year || 2022,
-        price,
-        listPrice,
-        km,
-        supplier: String(r[9] || "").trim(),
-        isSold,
-        sellable,
-      });
-    }
+    sheetVehicles.push(...extractSheetVehicles(rows));
   }
 
   const skippedIncomplete = sheetVehicles.filter((s) => !s.isSold && !s.sellable).length;
