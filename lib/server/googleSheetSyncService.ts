@@ -100,19 +100,62 @@ function cleanColor(c: unknown): string {
   return String(c).charAt(0).toUpperCase() + String(c).slice(1).toLowerCase();
 }
 
-function parsePrice(rawOffer: unknown, rawList: unknown): { price: number; listPrice?: number } {
-  function getNum(s: unknown): number {
-    if (!s) return 0;
-    const str = String(s);
-    if (/falta|reservado|preparacion|terminar|taller|casa|consignado|rq|fotos|vendido|entregado/i.test(str)) return 0;
-    const clean = str.replace(/[^0-9]/g, "");
-    if (!clean) return 0;
-    let n = parseInt(clean, 10);
-    if (n > 100000000) n = Math.round(n / 100);
-    return n;
+type SheetAmount = { n: number; plainThousands: boolean };
+
+/**
+ * Lee una celda de precio. `plainThousands` solo si el valor es un entero
+ * corto y limpio (7990), no un texto del que se extrajeron dígitos
+ * ("CAMION 16-09" → 1609).
+ */
+function readSheetAmount(s: unknown): SheetAmount {
+  if (typeof s === "number" && Number.isFinite(s)) {
+    let n = Math.round(s);
+    if (n > 100_000_000) n = Math.round(n / 100);
+    return { n, plainThousands: n >= 1_000 && n < 100_000 };
   }
-  const offer = getNum(rawOffer);
-  const list = getNum(rawList);
+  if (s == null || s === "") return { n: 0, plainThousands: false };
+  const str = String(s).trim();
+  if (
+    /falta|reservado|preparacion|terminar|taller|casa|consignado|rq|fotos|vendido|entregado/i.test(
+      str,
+    )
+  ) {
+    return { n: 0, plainThousands: false };
+  }
+  const clean = str.replace(/[^0-9]/g, "");
+  if (!clean) return { n: 0, plainThousands: false };
+  let n = parseInt(clean, 10);
+  if (n > 100_000_000) n = Math.round(n / 100);
+  const plainThousands = /^\d{4,5}$/.test(str) && n >= 1_000 && n < 100_000;
+  return { n, plainThousands };
+}
+
+/**
+ * PHZD48 tiene lista `$8.490.000` y oferta numérica `7990` (miles).
+ * Solo se escala si la otra celda ya es un precio en pesos y el resultado
+ * queda en el mismo orden de magnitud. 78 o "CAMION 16-09" no se tocan.
+ */
+function scalePlainThousands(amount: SheetAmount, other: SheetAmount): number {
+  if (!amount.plainThousands || other.plainThousands) return amount.n;
+  const scaled = amount.n * 1_000;
+  if (
+    other.n >= 1_000_000 &&
+    scaled >= other.n * 0.5 &&
+    scaled <= other.n * 1.05
+  ) {
+    return scaled;
+  }
+  return amount.n;
+}
+
+export function parsePrice(
+  rawOffer: unknown,
+  rawList: unknown,
+): { price: number; listPrice?: number } {
+  const offerRaw = readSheetAmount(rawOffer);
+  const listRaw = readSheetAmount(rawList);
+  const offer = scalePlainThousands(offerRaw, listRaw);
+  const list = scalePlainThousands(listRaw, offerRaw);
   if (offer > 0) return { price: offer, listPrice: list > offer ? list : undefined };
   if (list > 0) return { price: list, listPrice: undefined };
   return { price: 0, listPrice: undefined };

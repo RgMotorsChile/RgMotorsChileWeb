@@ -55,7 +55,10 @@ const STATE_FILENAME = "drive-photos-sync-state.json";
  */
 export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 12;
 export const MAX_NEW_PHOTOS_PER_RUN = 24;
-/** Por auto y corrida, para que uno de 14 fotos no se coma el presupuesto. */
+/**
+ * Descargas nuevas por auto y corrida. No es un tamaño de galería:
+ * las fotos ya guardadas se conservan y solo se agregan.
+ */
 export const PHOTOS_PER_VEHICLE_PER_RUN = 6;
 /** Listados de imágenes por corrida. Las carpetas con sello vigente no cuentan. */
 export const MAX_FOLDER_LISTS_PER_RUN = 20;
@@ -146,6 +149,72 @@ async function materializeImageBytes(
       ? image.mimeType
       : `image/${ext === "jpg" ? "jpeg" : ext}`;
   return { bytes: raw, contentType, ext };
+}
+
+function isStoredPhotoUrl(url: string | undefined): url is string {
+  const value = url?.trim() || "";
+  if (!value) return false;
+  return !value.includes("placeholder");
+}
+
+/** El sync guarda `cars/uploads/{slug}/{driveFileId}.ext` (sin sufijo aleatorio). */
+function fileIdFromStoredUrl(url: string): string | null {
+  const path = url.split("?")[0];
+  const base = path.split("/").pop() || "";
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  return stem || null;
+}
+
+/**
+ * Si la galería ya apunta al archivo de Drive, se toma como caché.
+ * Unidades Chile parte con un state propio vacío: sin esto el tope de
+ * descargas nuevas vuelve a bajar las mismas fotos y pisa la galería.
+ */
+function adoptExistingPhotosIntoFileCache(
+  vehicle: Vehicle,
+  images: DriveImageRef[],
+  state: DrivePhotosSyncState,
+  plateKey: string,
+): void {
+  const byId = new Map<string, string>();
+  for (const url of [...(vehicle.gallery || []), vehicle.image]) {
+    if (!isStoredPhotoUrl(url)) continue;
+    const id = fileIdFromStoredUrl(url);
+    if (id && !byId.has(id)) byId.set(id, url);
+  }
+  for (const image of images) {
+    const url = byId.get(image.id);
+    if (!url) continue;
+    if (state.files[image.id]?.blobUrl) continue;
+    state.files[image.id] = {
+      modifiedTime: image.modifiedTime,
+      blobUrl: url,
+      plate: plateKey,
+    };
+  }
+}
+
+/** Lo ya publicado va primero. Una corrida solo agrega URLs nuevas. */
+function mergeGalleryKeepingExisting(
+  existing: Array<string | undefined>,
+  built: string[],
+): string[] {
+  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const out: string[] = [];
+  const push = (url: string | undefined) => {
+    if (!isStoredPhotoUrl(url)) return;
+    const id = fileIdFromStoredUrl(url);
+    if (seen.has(url)) return;
+    if (id && seenIds.has(id)) return;
+    seen.add(url);
+    if (id) seenIds.add(id);
+    out.push(url);
+  };
+  for (const url of existing) push(url);
+  for (const url of built) push(url);
+  return out;
 }
 
 type FolderCandidate = {
@@ -314,6 +383,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
     const limited = images;
     const contentHash = folderContentHash(limited);
+    adoptExistingPhotosIntoFileCache(vehicle, limited, state, key);
     const hashUnchanged =
       vehicle.hasRealPhotos === true &&
       stamp?.contentHash === contentHash &&
@@ -456,22 +526,33 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       }
     }
 
-    const complete = galleryUrls.length === item.images.length && !hitSlice;
+    const mergedGallery = mergeGalleryKeepingExisting(
+      [...(item.vehicle.gallery || []), item.vehicle.image],
+      galleryUrls,
+    );
+    const everyDriveFileRepresented = item.images.every(
+      (image) =>
+        fileIdFromStoredUrl(
+          state.files[image.id]?.blobUrl || "",
+        ) === image.id ||
+        mergedGallery.some((url) => fileIdFromStoredUrl(url) === image.id),
+    );
+    const complete = everyDriveFileRepresented && !hitSlice;
     if (
       zeroPhotoKeys.includes(plateKey) &&
       (uploadedThisVehicle > 0 || (galleryUrls.length === 0 && attemptedDownload))
     ) {
       lastZeroAttempt = plateKey;
     }
-    if (galleryUrls.length === 0) {
+    if (mergedGallery.length === 0) {
       deferredVehicles += 1;
       state.lastRunAt = new Date().toISOString();
       await saveDrivePhotosSyncState(state, tenantSlug);
       continue;
     }
 
-    const cover = resolveCoverFromGallery(item.vehicle.image, galleryUrls);
-    const orderedGallery = orderGalleryWithCover(cover, galleryUrls);
+    const cover = resolveCoverFromGallery(item.vehicle.image, mergedGallery);
+    const orderedGallery = orderGalleryWithCover(cover, mergedGallery);
     const vehicle: Vehicle = {
       ...item.vehicle,
       hasRealPhotos: true,
@@ -492,7 +573,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     state.lastRunAt = new Date().toISOString();
     await saveDrivePhotosSyncState(state, tenantSlug);
     console.log(
-      `[DriveOAuthSync] ${item.folderName} → ${item.vehicle.slug}: ${galleryUrls.length}/${item.images.length} fotos (${uploadedThisVehicle} nuevas)`,
+      `[DriveOAuthSync] ${item.folderName} → ${item.vehicle.slug}: ${orderedGallery.length}/${item.images.length} fotos (${uploadedThisVehicle} nuevas)`,
     );
   }
 
