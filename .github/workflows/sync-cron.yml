@@ -61,7 +61,9 @@ jobs:
           esac
 
           # Mismo deployment. resolveCronTenant() usa ?tenant=, no el host.
-          url="https://rgmotorschile.cl/api/cron/sync?tenant=${tenant}"
+          # El apex responde 301 a www y esa redirección descarta Authorization.
+          # Sin --location: un 301 no es 2xx y el job falla.
+          url="https://www.rgmotorschile.cl/api/cron/sync?tenant=${tenant}"
           echo "GET ${url}"
 
           set +e

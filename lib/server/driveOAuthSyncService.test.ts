@@ -553,6 +553,85 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(downloadDriveFileBytes).not.toHaveBeenCalledWith("file-fa");
   });
 
+  it("no achica una galería ya guardada cuando el tope de la corrida es 6", async () => {
+    const existing = Array.from(
+      { length: 10 },
+      (_, i) => `https://blob.example/cars/uploads/rzsy35/legacy-${i}.jpg`,
+    );
+    const car = vehicle({
+      slug: "rzsy35",
+      plate: "RZSY 35",
+      hasRealPhotos: true,
+      image: existing[0],
+      gallery: existing,
+    });
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-rzsy", name: "RZSY35" }]);
+    listImagesInFolder.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => ({
+        id: `drv-${i}`,
+        name: `${i}.jpg`,
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-15T12:00:00.000Z",
+      })),
+    );
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "unidades-chile",
+      photosPerVehicle: 6,
+      maxNewPhotos: 24,
+    });
+
+    expect(result.newPhotosDownloaded).toBe(6);
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(6);
+    const saved = saveVehicle.mock.calls[0][0];
+    expect(saved.gallery.length).toBeGreaterThanOrEqual(existing.length);
+    for (const url of existing) {
+      expect(saved.gallery).toContain(url);
+    }
+    expect(saved.image).toBe(existing[0]);
+    const state = writeJson.mock.calls.at(-1)?.[1] as {
+      folders: Record<string, unknown>;
+    };
+    expect(state.folders["folder-rzsy"]).toBeUndefined();
+  });
+
+  it("con el state del tenant vacío no vuelve a bajar fotos que ya están en la galería", async () => {
+    const existing = Array.from(
+      { length: 10 },
+      (_, i) => `https://blob.example/cars/uploads/rzsy35/drv-${i}.jpg`,
+    );
+    const car = vehicle({
+      slug: "rzsy35",
+      plate: "RZSY 35",
+      hasRealPhotos: true,
+      image: existing[0],
+      gallery: existing,
+    });
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-rzsy", name: "RZSY35" }]);
+    listImagesInFolder.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => ({
+        id: `drv-${i}`,
+        name: `${i}.jpg`,
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-15T12:00:00.000Z",
+      })),
+    );
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "unidades-chile",
+      photosPerVehicle: 6,
+    });
+
+    expect(result.newPhotosDownloaded).toBe(0);
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+    expect(result.skippedUnchanged).toBe(1);
+  });
+
   it("no baja nada si el plazo de la corrida ya venció", async () => {
     getVehicles.mockResolvedValue([fresh]);
     readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
