@@ -18,6 +18,44 @@ export function isInventorySheetTab(
 }
 
 /**
+ * Mayúsculas y sin acentos, para comparar encabezados de la planilla.
+ * "PREPARACIÓN" y "preparacion" quedan en "PREPARACION".
+ */
+export function foldSheetText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+}
+
+/** Fila sin celdas con texto. No corta la lectura del inventario. */
+export function isBlankSheetRow(row: unknown): boolean {
+  if (!Array.isArray(row) || row.length === 0) return true;
+  return row.every((cell) => cell == null || String(cell).trim() === "");
+}
+
+/**
+ * Encabezados que cortan el inventario a la venta, vistos en la pestaña
+ * "RG MOTORS " (columna MODELO): PREPARACION, DON RUDY, CONSIGNADOS CASA
+ * CLIENTE y SALGADO. "UNIDADES CHILE" no trae estos bloques.
+ * TALLER no está hoy en esas pestañas; se reconoce igual (TALLER, EN TALLER).
+ * La comparación ignora mayúsculas y acentos.
+ */
+const EXCLUDED_SECTION_HEADER =
+  /^(?:EN\s+)?(?:PREPARACION|TALLER|SALGADO|DON RUDY|CONSIGNADOS(?:\s+CASA\s+CLIENTE)?|VEHICULOS\s+EN\s+(?:PREPARACION|TALLER))$/;
+
+export function isExcludedInventorySection(row: unknown): boolean {
+  if (!Array.isArray(row) || isBlankSheetRow(row)) return false;
+  return row.some((cell) => {
+    const label = foldSheetText(String(cell ?? ""));
+    if (!label || label.length > 40) return false;
+    return EXCLUDED_SECTION_HEADER.test(label);
+  });
+}
+
+/**
  * Solo bloquea estados claros de no-venta en celdas de precio/km
  * (ej. "FALTA FOTOS Y PRECIO"). NO usar notas de fila: "FOTOS NUEVAS" o
  * "FALTA REVISIÓN" son operativas y no deben sacar el auto de vitrina.

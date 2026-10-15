@@ -7,6 +7,8 @@ import {
   resolveCoverFromGallery,
 } from "@/lib/vehicles/frontCoverMap";
 import {
+  isBlankSheetRow,
+  isExcludedInventorySection,
   isInventorySheetTab,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
@@ -208,13 +210,19 @@ export async function parseExcelStockBuffer(buffer: Buffer): Promise<any[]> {
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    let cutAtSection = false;
 
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
-      if (!r || r.length < 3) continue;
+      if (isBlankSheetRow(r)) continue;
 
-      const rawPlate = String(r[1] || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-      if (rawPlate.length !== 6 || !/[A-Z]{2,4}[0-9]{2,4}/.test(rawPlate)) continue;
+      const rawPlate = String(r?.[1] || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      const plateOk = rawPlate.length === 6 && /[A-Z]{2,4}[0-9]{2,4}/.test(rawPlate);
+      if (!plateOk) {
+        if (isExcludedInventorySection(r)) cutAtSection = true;
+        continue;
+      }
+      if (cutAtSection) continue;
 
       const rawText = r.join(" ").toUpperCase();
       const isSold = rawText.includes("VENDIDO") || rawText.includes("ENTREGADO") || rawText.includes("VTA");
