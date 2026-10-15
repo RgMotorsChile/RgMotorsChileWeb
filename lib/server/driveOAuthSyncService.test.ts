@@ -38,6 +38,7 @@ vi.mock("@/lib/server/verifyPhotos", () => ({
 }));
 
 import { syncDrivePhotosViaOAuth } from "./driveOAuthSyncService";
+import { folderContentHash } from "./drivePlateMatch";
 
 function vehicle(
   partial: Partial<Vehicle> & Pick<Vehicle, "slug" | "plate">,
@@ -172,5 +173,189 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
       tenantSlug: "unidades-chile",
     });
     expect(listImagesInFolder).not.toHaveBeenCalledWith("folder-locked");
+    expect(readJson).toHaveBeenCalledWith(
+      "drive-photos-sync-state.unidades-chile.json",
+      expect.any(Object),
+    );
+  });
+});
+
+describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
+  const fresh = vehicle({
+    slug: "fresh-car",
+    plate: "AAAA 11",
+    hasRealPhotos: false,
+  });
+  const second = vehicle({
+    slug: "second-car",
+    plate: "BBBB 22",
+    hasRealPhotos: false,
+  });
+  const unchanged = vehicle({
+    slug: "same-car",
+    plate: "CCCC 33",
+    hasRealPhotos: true,
+    image: "https://blob.example/cars/uploads/same-car/file-same.jpg",
+    gallery: ["https://blob.example/cars/uploads/same-car/file-same.jpg"],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    saveVehicle.mockResolvedValue({ success: true });
+    writeJson.mockResolvedValue(undefined);
+    blobStillExists.mockResolvedValue(true);
+    downloadDriveFileBytes.mockResolvedValue(Buffer.from("img"));
+    storeMediaFile.mockImplementation(
+      async ({ relativePath }: { relativePath: string }) => ({
+        url: `https://blob.example/${relativePath}`,
+        relativePath: `/${relativePath}`,
+        storage: "blob" as const,
+      }),
+    );
+  });
+
+  it("no lista ni baja una carpeta cuyo modifiedTime no cambió", async () => {
+    getVehicles.mockResolvedValue([unchanged]);
+    readJson.mockResolvedValue({
+      lastRunAt: "2026-10-01T00:00:00.000Z",
+      files: {
+        "file-same": {
+          modifiedTime: "2026-10-01T00:00:00.000Z",
+          blobUrl: "https://blob.example/cars/uploads/same-car/file-same.jpg",
+        },
+      },
+      folders: {
+        "folder-same": {
+          modifiedTime: "2026-10-02T00:00:00.000Z",
+          contentHash: "abc",
+        },
+      },
+    });
+    listPlateFolders.mockResolvedValue([
+      {
+        id: "folder-same",
+        name: "CCCC33",
+        modifiedTime: "2026-10-02T00:00:00.000Z",
+      },
+    ]);
+
+    const result = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+
+    expect(result.success).toBe(true);
+    expect(result.skippedUnchanged).toBe(1);
+    expect(result.newPhotosDownloaded).toBe(0);
+    expect(listImagesInFolder).not.toHaveBeenCalled();
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
+  it("salta la descarga si el hash de la carpeta no cambió", async () => {
+    const images = [
+      {
+        id: "file-same",
+        name: "1.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ];
+    getVehicles.mockResolvedValue([unchanged]);
+    readJson.mockResolvedValue({
+      lastRunAt: null,
+      files: {
+        "file-same": {
+          modifiedTime: "2026-10-01T00:00:00.000Z",
+          blobUrl: "https://blob.example/cars/uploads/same-car/file-same.jpg",
+        },
+      },
+      folders: {
+        "folder-same": { contentHash: folderContentHash(images) },
+      },
+    });
+    listPlateFolders.mockResolvedValue([{ id: "folder-same", name: "CCCC33" }]);
+    listImagesInFolder.mockResolvedValue(images);
+
+    const result = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+
+    expect(result.skippedUnchanged).toBe(1);
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+    expect(listImagesInFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("corta al presupuesto de fotos y deja el resto para la siguiente corrida", async () => {
+    getVehicles.mockResolvedValue([fresh, second]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-a", name: "AAAA11" },
+      { id: "folder-b", name: "BBBB22" },
+    ]);
+    listImagesInFolder.mockImplementation(async (folderId: string) => [
+      {
+        id: folderId === "folder-a" ? "file-a" : "file-b",
+        name: "1.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      maxNewPhotos: 1,
+    });
+
+    expect(result.newPhotosDownloaded).toBe(1);
+    expect(result.syncedVehicles).toBe(1);
+    expect(result.deferredVehicles).toBe(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(saveVehicle).toHaveBeenCalledTimes(1);
+    expect(saveVehicle.mock.calls[0][0].slug).toBe("fresh-car");
+    expect(saveVehicle.mock.calls.some((call) => call[0]?.slug === "second-car")).toBe(
+      false,
+    );
+  });
+
+  it("sella una carpeta vacía y no la vuelve a listar si no cambia", async () => {
+    getVehicles.mockResolvedValue([fresh]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([
+      {
+        id: "folder-a",
+        name: "AAAA11",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+    listImagesInFolder.mockResolvedValue([]);
+
+    await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+    const saved = writeJson.mock.calls.at(-1)?.[1] as {
+      folders: Record<string, { contentHash?: string; modifiedTime?: string }>;
+    };
+    expect(saved.folders["folder-a"]).toMatchObject({
+      contentHash: folderContentHash([]),
+      modifiedTime: "2026-10-01T00:00:00.000Z",
+    });
+
+    readJson.mockResolvedValue(saved);
+    listImagesInFolder.mockClear();
+    const second = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+    expect(listImagesInFolder).not.toHaveBeenCalled();
+    expect(second.skippedUnchanged).toBe(1);
+    expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
+  it("no baja nada si el plazo de la corrida ya venció", async () => {
+    getVehicles.mockResolvedValue([fresh]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([{ id: "folder-a", name: "AAAA11" }]);
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      deadlineAt: Date.now() - 1,
+    });
+
+    expect(result.deferredVehicles).toBeGreaterThan(0);
+    expect(listImagesInFolder).not.toHaveBeenCalled();
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
   });
 });

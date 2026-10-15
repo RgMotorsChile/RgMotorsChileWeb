@@ -77,6 +77,44 @@ export function driveFileNeedsSync(
   return file.modifiedTime > cached.modifiedTime;
 }
 
+export type CachedDriveFolder = {
+  modifiedTime?: string;
+  /** Hash de id + modifiedTime de las imágenes ya sincronizadas. */
+  contentHash?: string;
+};
+
+/**
+ * Hash estable del contenido de una carpeta. Sirve para saltar la descarga
+ * cuando Drive no trae modifiedTime de la carpeta o ese sello no cambió.
+ */
+export function folderContentHash(
+  images: Array<{ id: string; modifiedTime?: string }>,
+): string {
+  const body = [...images]
+    .map((img) => `${img.id}\t${img.modifiedTime || ""}`)
+    .sort()
+    .join("\n");
+  let hash = 2166136261;
+  for (let i = 0; i < body.length; i++) {
+    hash ^= body.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * true si ya sincronizamos esta carpeta y su modifiedTime no avanzó.
+ * Sin sello o sin modifiedTime hay que listar (el hash se compara después).
+ */
+export function folderStampIsCurrent(
+  folder: { modifiedTime?: string },
+  cached?: CachedDriveFolder | null,
+): boolean {
+  if (!cached?.contentHash) return false;
+  if (!folder.modifiedTime || !cached.modifiedTime) return false;
+  return folder.modifiedTime === cached.modifiedTime;
+}
+
 export function folderMatchesVehiclePlate(
   folderName: string,
   vehiclePlate: string | undefined,
@@ -111,10 +149,10 @@ export function pickBestPlateFolder<T extends { name: string }>(
  * Índice patente normalizada → carpeta Drive.
  * Usa el nombre completo de carpeta (RZVL18) sin importar espacios en el stock.
  */
-export function buildPlateFolderIndex(
-  folders: Array<{ id: string; name: string }>,
-): Map<string, { id: string; name: string }> {
-  const map = new Map<string, { id: string; name: string }>();
+export function buildPlateFolderIndex<
+  T extends { id: string; name: string; modifiedTime?: string },
+>(folders: T[]): Map<string, T> {
+  const map = new Map<string, T>();
   for (const f of folders) {
     const key = normalizePlateKey(f.name);
     if (!key) continue;

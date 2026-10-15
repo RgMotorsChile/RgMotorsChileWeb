@@ -7,7 +7,9 @@ Sitio en producción: `https://www.rgmotorschile.cl` (también apex `rgmotorschi
 - KV + Blob + `ADMIN_SESSION_SECRET` + `CRON_SECRET`
 - Dominios www + apex
 - Auth admin, leads, headers de seguridad, CI
-- Cron **2×/día** (08:00 y 19:00 Chile / UTC-3): GET `/api/cron/sync` ejecuta Sheets (solo hoja **RG MOTORS**, con precio+km) + fotos Drive
+- Cron de Vercel **diario** (plan Hobby: no admite `*/30`). `vercel.json` dispara `/api/cron/sync` a las 11:00, 12:00 y 22:00 UTC. Sin `?tenant=`, las 12:00 UTC sincronizan Unidades Chile y el resto RG Motors
+- GitHub Actions (`.github/workflows/sync-cron.yml`) sincroniza cada 30 minutos: minutos 5 y 35 UTC → `?tenant=rg-motors`; minutos 20 y 50 UTC → `?tenant=unidades-chile`. Los dos pegan a `https://rgmotorschile.cl` porque el tenant se elige por query, no por host
+- Cada corrida cabe en 60s (presupuesto de fotos; lo que no entra sigue en la siguiente) y deja una fila en `sync_state` (`catalog_cron`) con leídos / insertados / actualizados / omitidos / fotos / errores / duración, también si falla
 - Sync omite preparación / incompletos; catálogo público exige precio y km > 0
 - Sitemap solo vehículos públicos (sin vendidos/borrador)
 - Mutaciones admin con `requireAdminSession` (defense-in-depth)
@@ -54,7 +56,18 @@ Verificar: `https://www.rgmotorschile.cl/api/health` → `ok: true` y `resend` e
 1. Habilitar Google Drive API + OAuth Desktop en Google Cloud
 2. `node scripts/google-drive-oauth-setup.mjs` con la cuenta que ve la carpeta
 3. Setear `GOOGLE_DRIVE_*` + `DRIVE_PHOTOS_FOLDER_ID` en Vercel → Redeploy
-4. Disparar `/api/cron/sync` varias veces (tope ~10 vehículos/corrida)
+4. Disparar `/api/cron/sync?tenant=rg-motors` varias veces (tope de fotos nuevas por corrida; el resto sigue en la siguiente)
+
+### Secret de GitHub Actions
+
+El workflow de 30 minutos llama a producción con el mismo `CRON_SECRET` de Vercel. Hay que crearlo a mano (no está en el repo):
+
+1. GitHub → **Settings → Secrets and variables → Actions → New repository secret**
+2. Name: `CRON_SECRET`
+3. Value: el mismo valor que `CRON_SECRET` en Vercel (Production)
+4. Probar con **Actions → Sync inventario → Run workflow** y elegir el tenant
+
+Sin ese secret el workflow falla antes de llamar al sitio. No hace falta cambiar `vercel.json`: en Hobby un cron `*/30` no se programa.
 
 ### Cuota Vercel (próximo sprint)
 

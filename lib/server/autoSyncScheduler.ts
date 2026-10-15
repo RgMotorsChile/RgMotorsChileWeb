@@ -14,12 +14,20 @@ const SYNC_INTERVAL_MS = 60 * 60 * 1000;
 let isSyncing = false;
 let lastSyncTime: Date | null = null;
 
-export async function runAutoSync(): Promise<{
+export async function runAutoSync(opts?: {
+  tenantSlug?: string;
+  maxNewPhotos?: number;
+  deadlineAt?: number;
+}): Promise<{
   success: boolean;
   message: string;
   syncedVehicles?: number;
   newPhotosDownloaded?: number;
   totalFolders?: number;
+  skippedUnchanged?: number;
+  skippedCoverLocked?: number;
+  deferredVehicles?: number;
+  errors?: string[];
 }> {
   if (isSyncing) {
     return { success: false, message: "Una sincronización ya está en curso." };
@@ -34,7 +42,7 @@ export async function runAutoSync(): Promise<{
   );
 
   try {
-    const result = await syncCatalogFromDriveFolders(DEFAULT_DRIVE_URLS);
+    const result = await syncCatalogFromDriveFolders(DEFAULT_DRIVE_URLS, opts);
     lastSyncTime = new Date();
     if (!result.success) {
       console.error(`[AutoSync] ${result.message}`);
@@ -49,6 +57,10 @@ export async function runAutoSync(): Promise<{
       syncedVehicles: result.syncedVehicles,
       newPhotosDownloaded: result.newPhotosDownloaded,
       totalFolders: result.totalFolders,
+      skippedUnchanged: result.skippedUnchanged,
+      skippedCoverLocked: result.skippedCoverLocked,
+      deferredVehicles: result.deferredVehicles,
+      errors: result.errors,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error desconocido";

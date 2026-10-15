@@ -15,6 +15,7 @@ const DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export type DriveFolderRef = {
   id: string;
   name: string;
+  modifiedTime?: string;
 };
 
 export type DriveImageRef = {
@@ -81,7 +82,7 @@ export async function listPlateFolders(
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: "nextPageToken, files(id, name)",
+      fields: "nextPageToken, files(id, name, modifiedTime)",
       pageSize: 1000,
       pageToken,
       supportsAllDrives: true,
@@ -89,7 +90,13 @@ export async function listPlateFolders(
       spaces: "drive",
     });
     for (const f of res.data.files || []) {
-      if (f.id && f.name) out.push({ id: f.id, name: f.name });
+      if (f.id && f.name) {
+        out.push({
+          id: f.id,
+          name: f.name,
+          modifiedTime: f.modifiedTime || undefined,
+        });
+      }
     }
     pageToken = res.data.nextPageToken || undefined;
   } while (pageToken);

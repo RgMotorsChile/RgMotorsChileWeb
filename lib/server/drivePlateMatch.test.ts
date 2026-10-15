@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlateFolderIndex,
   driveFileNeedsSync,
+  folderContentHash,
   folderMatchesVehiclePlate,
+  folderStampIsCurrent,
   normalizePlateKey,
   pickBestPlateFolder,
   plateFolderNameVariants,
@@ -95,6 +97,44 @@ describe("driveFileNeedsSync", () => {
         },
       ),
     ).toBe(true);
+  });
+});
+
+describe("folderStampIsCurrent", () => {
+  const images = [
+    { id: "b", modifiedTime: "2026-02-01T00:00:00.000Z" },
+    { id: "a", modifiedTime: "2026-01-01T00:00:00.000Z" },
+  ];
+
+  it("es estable aunque cambie el orden de las fotos", () => {
+    expect(folderContentHash(images)).toBe(folderContentHash([...images].reverse()));
+  });
+
+  it("cambia si modifiedTime avanza", () => {
+    const next = folderContentHash([
+      { id: "a", modifiedTime: "2026-03-01T00:00:00.000Z" },
+      images[0],
+    ]);
+    expect(next).not.toBe(folderContentHash(images));
+  });
+
+  it("salta la carpeta solo con sello y modifiedTime iguales", () => {
+    const hash = folderContentHash(images);
+    expect(
+      folderStampIsCurrent(
+        { modifiedTime: "2026-04-01T00:00:00.000Z" },
+        { modifiedTime: "2026-04-01T00:00:00.000Z", contentHash: hash },
+      ),
+    ).toBe(true);
+    expect(
+      folderStampIsCurrent(
+        { modifiedTime: "2026-05-01T00:00:00.000Z" },
+        { modifiedTime: "2026-04-01T00:00:00.000Z", contentHash: hash },
+      ),
+    ).toBe(false);
+    expect(folderStampIsCurrent({ modifiedTime: "2026-04-01T00:00:00.000Z" }, null)).toBe(
+      false,
+    );
   });
 });
 
