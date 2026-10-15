@@ -47,7 +47,7 @@ vi.mock("@/lib/server/verifyPhotos", () => ({
 }));
 
 import { syncDrivePhotosViaOAuth } from "./driveOAuthSyncService";
-import { folderContentHash } from "./drivePlateMatch";
+import { DRIVE_FOLDER_STAMP_REVISION, folderContentHash } from "./drivePlateMatch";
 
 function vehicle(
   partial: Partial<Vehicle> & Pick<Vehicle, "slug" | "plate">,
@@ -135,40 +135,31 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
     );
   });
 
-  it("salta el vehículo con portada bloqueada y sincroniza el que no lo está", async () => {
+  it("agrega fotos al auto con portada bloqueada y no le cambia la portada", async () => {
     const result = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
 
     expect(result.success).toBe(true);
-    expect(result.syncedVehicles).toBe(1);
-    expect(result.newPhotosDownloaded).toBe(1);
+    expect(result.syncedVehicles).toBe(2);
+    expect(result.newPhotosDownloaded).toBe(2);
+    expect(listImagesInFolder).toHaveBeenCalledWith("folder-locked");
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-locked");
 
-    expect(listImagesInFolder).not.toHaveBeenCalledWith("folder-locked");
-    expect(listImagesInFolder).toHaveBeenCalledWith("folder-open");
-    expect(downloadDriveFileBytes).not.toHaveBeenCalledWith("file-locked");
-    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-open");
-    expect(storeMediaFile).toHaveBeenCalledTimes(1);
-    expect(storeMediaFile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        relativePath: "cars/uploads/open-car/file-open.jpg",
-      }),
+    const lockedSave = saveVehicle.mock.calls.find((call) => call[0]?.slug === "locked-car")?.[0];
+    expect(lockedSave.image).toBe("https://cdn.example/locked-cover.jpg");
+    expect(lockedSave.gallery).toContain("https://cdn.example/locked-cover.jpg");
+    expect(lockedSave.gallery).toContain(
+      "https://blob.example/cars/uploads/locked-car/file-locked.jpg",
     );
+    expect(lockedSave.coverLocked).toBe(true);
 
-    expect(saveVehicle).toHaveBeenCalledTimes(1);
-    const [saved, opts] = saveVehicle.mock.calls[0];
-    expect(saved.slug).toBe("open-car");
-    expect(saved.image).toBe(
+    const openSave = saveVehicle.mock.calls.find((call) => call[0]?.slug === "open-car");
+    expect(openSave?.[0].image).toBe(
       "https://blob.example/cars/uploads/open-car/file-open.jpg",
     );
-    expect(saved.gallery).toEqual([
-      "https://blob.example/cars/uploads/open-car/file-open.jpg",
-    ]);
-    expect(opts).toEqual({ tenantSlug: "rg-motors" });
-    expect(saveVehicle.mock.calls.some((call) => call[0]?.slug === "locked-car")).toBe(
-      false,
-    );
+    expect(openSave?.[1]).toEqual({ tenantSlug: "rg-motors" });
   });
 
-  it("también omite coverLocked en Unidades Chile, que usa la misma sync", async () => {
+  it("en Unidades Chile también conserva la portada bloqueada al sumar fotos", async () => {
     await syncDrivePhotosViaOAuth({ tenantSlug: "unidades-chile" });
 
     expect(getVehicles).toHaveBeenCalledWith({
@@ -176,12 +167,14 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
       bypassCache: true,
       scope: "staff",
     });
-    expect(saveVehicle).toHaveBeenCalledTimes(1);
-    expect(saveVehicle.mock.calls[0][0].slug).toBe("open-car");
+    const lockedSave = saveVehicle.mock.calls.find((call) => call[0]?.slug === "locked-car")?.[0];
+    expect(lockedSave.image).toBe("https://cdn.example/locked-cover.jpg");
+    expect(lockedSave.gallery).toContain(
+      "https://blob.example/cars/uploads/locked-car/file-locked.jpg",
+    );
     expect(saveVehicle.mock.calls[0][1]).toEqual({
       tenantSlug: "unidades-chile",
     });
-    expect(listImagesInFolder).not.toHaveBeenCalledWith("folder-locked");
     expect(readJson).toHaveBeenCalledWith(
       "drive-photos-sync-state.unidades-chile.json",
       expect.any(Object),
@@ -237,6 +230,7 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
         "folder-same": {
           modifiedTime: "2026-10-02T00:00:00.000Z",
           contentHash: "abc",
+          revision: DRIVE_FOLDER_STAMP_REVISION,
         },
       },
     });
@@ -630,6 +624,98 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(downloadDriveFileBytes).not.toHaveBeenCalled();
     expect(saveVehicle).not.toHaveBeenCalled();
     expect(result.skippedUnchanged).toBe(1);
+  });
+
+  it("fusiona las dos carpetas de la patente y no usa SRCP17 para otra patente", async () => {
+    const car = vehicle({
+      slug: "pskj",
+      plate: "PSKJ 78",
+      hasRealPhotos: false,
+    });
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-a", name: "PSKJ78" },
+      { id: "folder-b", name: "PSKJ 78" },
+      { id: "folder-typo", name: "SRCP17" },
+    ]);
+    listImagesInFolder.mockImplementation(async (folderId: string) => {
+      if (folderId === "folder-a") {
+        return [
+          {
+            id: "a1",
+            name: "1.jpg",
+            mimeType: "image/jpeg",
+            modifiedTime: "2026-10-01T00:00:00.000Z",
+          },
+        ];
+      }
+      if (folderId === "folder-b") {
+        return [
+          {
+            id: "b1",
+            name: "1.jpg",
+            mimeType: "image/jpeg",
+            modifiedTime: "2026-10-01T00:00:00.000Z",
+          },
+        ];
+      }
+      return [
+        {
+          id: "typo",
+          name: "1.jpg",
+          mimeType: "image/jpeg",
+          modifiedTime: "2026-10-01T00:00:00.000Z",
+        },
+      ];
+    });
+
+    const result = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      photosPerVehicle: 12,
+      maxNewPhotos: 36,
+    });
+
+    expect(result.newPhotosDownloaded).toBe(2);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("a1");
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("b1");
+    expect(downloadDriveFileBytes).not.toHaveBeenCalledWith("typo");
+    expect(saveVehicle.mock.calls[0][0].gallery).toEqual([
+      "https://blob.example/cars/uploads/pskj/a1.jpg",
+      "https://blob.example/cars/uploads/pskj/b1.jpg",
+    ]);
+  });
+
+  it("un sello viejo sin revisión vuelve a listar la carpeta", async () => {
+    getVehicles.mockResolvedValue([unchanged]);
+    readJson.mockResolvedValue({
+      lastRunAt: "2026-10-01T00:00:00.000Z",
+      files: {},
+      folders: {
+        "folder-same": {
+          modifiedTime: "2026-10-02T00:00:00.000Z",
+          contentHash: "abc",
+        },
+      },
+    });
+    listPlateFolders.mockResolvedValue([
+      {
+        id: "folder-same",
+        name: "CCCC33",
+        modifiedTime: "2026-10-02T00:00:00.000Z",
+      },
+    ]);
+    listImagesInFolder.mockResolvedValue([
+      {
+        id: "file-new",
+        name: "2.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+
+    await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+    expect(listImagesInFolder).toHaveBeenCalledWith("folder-same");
   });
 
   it("no baja nada si el plazo de la corrida ya venció", async () => {

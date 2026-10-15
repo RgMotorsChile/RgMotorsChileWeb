@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DRIVE_FOLDER_STAMP_REVISION,
   buildPlateFolderIndex,
   driveFileNeedsSync,
   folderContentHash,
   folderMatchesVehiclePlate,
   folderStampIsCurrent,
+  groupPlateFolders,
   normalizePlateKey,
   pickBestPlateFolder,
   plateFolderNameVariants,
@@ -145,14 +147,24 @@ describe("folderStampIsCurrent", () => {
     expect(next).not.toBe(folderContentHash(images));
   });
 
-  it("salta la carpeta solo con sello y modifiedTime iguales", () => {
+  it("salta la carpeta solo con sello vigente y modifiedTime iguales", () => {
     const hash = folderContentHash(images);
+    expect(
+      folderStampIsCurrent(
+        { modifiedTime: "2026-04-01T00:00:00.000Z" },
+        {
+          modifiedTime: "2026-04-01T00:00:00.000Z",
+          contentHash: hash,
+          revision: DRIVE_FOLDER_STAMP_REVISION,
+        },
+      ),
+    ).toBe(true);
     expect(
       folderStampIsCurrent(
         { modifiedTime: "2026-04-01T00:00:00.000Z" },
         { modifiedTime: "2026-04-01T00:00:00.000Z", contentHash: hash },
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       folderStampIsCurrent(
         { modifiedTime: "2026-05-01T00:00:00.000Z" },
@@ -162,6 +174,20 @@ describe("folderStampIsCurrent", () => {
     expect(folderStampIsCurrent({ modifiedTime: "2026-04-01T00:00:00.000Z" }, null)).toBe(
       false,
     );
+  });
+});
+
+describe("groupPlateFolders", () => {
+  it("junta las dos carpetas de una patente y no asocia SRCP17 con SRCP22", () => {
+    const groups = groupPlateFolders([
+      { id: "a", name: "PSKJ78" },
+      { id: "b", name: "PSKJ 78" },
+      { id: "c", name: "SRCP17" },
+      { id: "d", name: "SRCP22" },
+    ]);
+    expect(groups.get("pskj78")?.map((folder) => folder.id)).toEqual(["a", "b"]);
+    expect(groups.get("srcp17")?.map((folder) => folder.id)).toEqual(["c"]);
+    expect(groups.get("srcp22")?.map((folder) => folder.id)).toEqual(["d"]);
   });
 });
 

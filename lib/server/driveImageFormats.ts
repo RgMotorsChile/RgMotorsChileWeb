@@ -18,7 +18,8 @@ export function isHeicHeifOrDng(name: string, mime?: string): boolean {
 export function isImportableDriveImage(name: string, mime?: string): boolean {
   const type = String(mime || "").toLowerCase();
   if (type.startsWith("image/")) return true;
-  return /\.(jpe?g|png|webp|gif|heic|heif|dng)$/i.test(name);
+  // Drive a veces manda octet-stream en un JPEG/HEIC/TIFF válido.
+  return /\.(jpe?g|png|webp|gif|heic|heif|dng|tiff?|bmp)$/i.test(name);
 }
 
 function isGoogleThumbnailHost(hostname: string): boolean {
