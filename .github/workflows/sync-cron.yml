@@ -1,0 +1,91 @@
+# Vercel Hobby solo admite crons diarios (vercel.json: 11:00, 12:00 y 22:00 UTC).
+# El intervalo de 30 minutos vive acá. Cada schedule elige un tenant; el
+# endpoint de producción resuelve el tenant por query, no por host, así que
+# RG y Unidades Chile pegan al mismo deployment.
+name: Sync inventario
+
+on:
+  schedule:
+    # UTC. Minutos 5 y 35 → RG Motors.
+    - cron: "5,35 * * * *"
+    # UTC. Minutos 20 y 50 → Unidades Chile.
+    - cron: "20,50 * * * *"
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: Tenant a sincronizar
+        required: true
+        type: choice
+        options:
+          - rg-motors
+          - unidades-chile
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Elegir tenant y disparar el sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_TENANT: ${{ inputs.tenant }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Falta el secret CRON_SECRET en GitHub Actions." >&2
+            echo "Crearlo en Settings → Secrets and variables → Actions con el mismo valor que CRON_SECRET en Vercel." >&2
+            exit 1
+          fi
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            tenant="${INPUT_TENANT}"
+          else
+            case "${EVENT_SCHEDULE}" in
+              "5,35 * * * *") tenant="rg-motors" ;;
+              "20,50 * * * *") tenant="unidades-chile" ;;
+              *)
+                echo "Schedule no reconocido: ${EVENT_SCHEDULE}" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          case "${tenant}" in
+            rg-motors|unidades-chile) ;;
+            *)
+              echo "Tenant inválido: ${tenant}" >&2
+              exit 1
+              ;;
+          esac
+
+          # Mismo deployment. resolveCronTenant() usa ?tenant=, no el host.
+          url="https://rgmotorschile.cl/api/cron/sync?tenant=${tenant}"
+          echo "GET ${url}"
+
+          set +e
+          http_code=$(curl --silent --show-error --max-time 75 \
+            -o /tmp/sync-body.json \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${url}")
+          curl_status=$?
+          set -e
+
+          if [ "${curl_status}" -ne 0 ]; then
+            echo "curl falló (exit ${curl_status})" >&2
+            cat /tmp/sync-body.json >&2 || true
+            exit 1
+          fi
+
+          echo "HTTP ${http_code}"
+          cat /tmp/sync-body.json
+          echo
+          case "${http_code}" in
+            2*) exit 0 ;;
+            *)
+              echo "El sync respondió ${http_code}, se esperaba 2xx." >&2
+              exit 1
+              ;;
+          esac

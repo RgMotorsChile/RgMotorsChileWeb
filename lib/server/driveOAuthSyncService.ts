@@ -7,17 +7,23 @@ import { readJson, writeJson } from "@/lib/server/db";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
 import { blobStillExists } from "@/lib/server/verifyPhotos";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
+import { isHeicHeifOrDng } from "@/lib/server/driveImageFormats";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import {
   buildPlateFolderIndex,
   driveFileNeedsSync,
+  folderContentHash,
   folderMatchesVehiclePlate,
+  folderStampIsCurrent,
   normalizePlateKey,
   prioritizeVehiclesForDriveSync,
+  rotateSyncQueue,
   type CachedDriveFile,
+  type CachedDriveFolder,
 } from "@/lib/server/drivePlateMatch";
 import {
   downloadDriveFileBytes,
+  downloadDriveRenderedJpeg,
   getDrivePhotosFolderId,
   isGoogleDriveOAuthConfigured,
   listImagesInFolder,
@@ -32,36 +38,71 @@ export type SyncResult = {
   newPhotosDownloaded: number;
   message: string;
   vehicles: Vehicle[];
+  skippedUnchanged?: number;
+  skippedCoverLocked?: number;
+  deferredVehicles?: number;
+  errors?: string[];
 };
 
 const STATE_FILENAME = "drive-photos-sync-state.json";
-/** Hobby + CDN ~60s: índice de carpetas es barato; limitar solo las descargas. */
-export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 3;
-const MAX_PHOTOS_PER_VEHICLE = 10;
+/**
+ * Hobby + maxDuration 60s.
+ * La corrida de las 08:00 Chile (11:00 UTC) solo alcanzó 3 autos porque el tope
+ * era 3 vehículos × 10 fotos: PFKX61 quedó en 9, DWJS66 en 10/14 y HLXB59 en
+ * 10/12. El resto (JRTH26, TRBX87, KVGK53, SBZG55, SPXG35, LWRS59) ni se tocó.
+ * Ahora el tope real es el presupuesto de fotos y un cupo por auto, y la cola
+ * rota para no repetir siempre los mismos. Los HEIC/DNG entran como JPEG de Drive.
+ */
+export const MAX_VEHICLES_PER_DRIVE_SYNC_RUN = 12;
+export const MAX_NEW_PHOTOS_PER_RUN = 24;
+/** Por auto y corrida, para que uno de 14 fotos no se coma el presupuesto. */
+export const PHOTOS_PER_VEHICLE_PER_RUN = 6;
+/** Listados de imágenes por corrida. Las carpetas con sello vigente no cuentan. */
+export const MAX_FOLDER_LISTS_PER_RUN = 20;
+
+export function drivePhotosSyncStateKey(tenantSlug: string): string {
+  if (!tenantSlug || tenantSlug === "rg-motors") return STATE_FILENAME;
+  return `drive-photos-sync-state.${tenantSlug}.json`;
+}
 
 export type DrivePhotosSyncState = {
   lastRunAt: string | null;
   /** fileId Drive → metadatos Blob */
   files: Record<string, CachedDriveFile>;
+  /** folderId Drive → modifiedTime + hash del contenido ya sincronizado */
+  folders: Record<string, CachedDriveFolder>;
+  /** Patente normalizada por la que sigue la ronda de autos sin fotos. */
+  zeroPhotoCursor?: string | null;
 };
 
 const EMPTY_STATE: DrivePhotosSyncState = {
   lastRunAt: null,
   files: {},
+  folders: {},
+  zeroPhotoCursor: null,
 };
 
-export async function loadDrivePhotosSyncState(): Promise<DrivePhotosSyncState> {
-  const raw = await readJson<DrivePhotosSyncState>(STATE_FILENAME, EMPTY_STATE);
+export async function loadDrivePhotosSyncState(
+  tenantSlug = "rg-motors",
+): Promise<DrivePhotosSyncState> {
+  const raw = await readJson<DrivePhotosSyncState>(
+    drivePhotosSyncStateKey(tenantSlug),
+    EMPTY_STATE,
+  );
   return {
     lastRunAt: raw.lastRunAt ?? null,
     files: raw.files && typeof raw.files === "object" ? raw.files : {},
+    folders: raw.folders && typeof raw.folders === "object" ? raw.folders : {},
+    zeroPhotoCursor:
+      typeof raw.zeroPhotoCursor === "string" ? raw.zeroPhotoCursor : null,
   };
 }
 
 export async function saveDrivePhotosSyncState(
   state: DrivePhotosSyncState,
+  tenantSlug = "rg-motors",
 ): Promise<void> {
-  await writeJson(STATE_FILENAME, state);
+  await writeJson(drivePhotosSyncStateKey(tenantSlug), state);
 }
 
 function extForImage(name: string, mime: string): string {
@@ -79,15 +120,26 @@ function extForImage(name: string, mime: string): string {
 async function materializeImageBytes(
   image: DriveImageRef,
 ): Promise<{ bytes: Buffer; contentType: string; ext: string }> {
-  const raw = await downloadDriveFileBytes(image.id);
-  if (isHeicFile(image.name, image.mimeType)) {
-    const converted = await convertHeicToJpegBuffer(raw);
-    return {
-      bytes: converted.buffer,
-      contentType: converted.contentType,
-      ext: converted.ext,
-    };
+  if (isHeicHeifOrDng(image.name, image.mimeType)) {
+    try {
+      const bytes = await downloadDriveRenderedJpeg(image.id, image.thumbnailLink);
+      return { bytes, contentType: "image/jpeg", ext: "jpg" };
+    } catch (renderErr) {
+      if (!isHeicFile(image.name, image.mimeType)) throw renderErr;
+      console.warn(
+        `[DriveOAuthSync] Thumbnail de ${image.name} no sirvió; se intenta heic-decode:`,
+        renderErr instanceof Error ? renderErr.message : renderErr,
+      );
+      const raw = await downloadDriveFileBytes(image.id);
+      const converted = await convertHeicToJpegBuffer(raw);
+      return {
+        bytes: converted.buffer,
+        contentType: converted.contentType,
+        ext: converted.ext,
+      };
+    }
   }
+  const raw = await downloadDriveFileBytes(image.id);
   const ext = extForImage(image.name, image.mimeType);
   const contentType =
     image.mimeType?.startsWith("image/") && !/heic|heif/i.test(image.mimeType)
@@ -100,6 +152,8 @@ type FolderCandidate = {
   vehicle: Vehicle;
   folderId: string;
   folderName: string;
+  folderModifiedTime?: string;
+  contentHash: string;
   images: DriveImageRef[];
   needsWork: boolean;
 };
@@ -110,6 +164,10 @@ type FolderCandidate = {
  */
 export async function syncDrivePhotosViaOAuth(opts?: {
   maxVehicles?: number;
+  maxNewPhotos?: number;
+  photosPerVehicle?: number;
+  /** Epoch ms. Al pasarlo, la corrida deja el resto para la siguiente. */
+  deadlineAt?: number;
   folderId?: string;
   tenantSlug?: string;
 }): Promise<SyncResult> {
@@ -138,7 +196,11 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
   const rootId = opts?.folderId || getDrivePhotosFolderId();
   const maxVehicles = opts?.maxVehicles ?? MAX_VEHICLES_PER_DRIVE_SYNC_RUN;
-  const state = await loadDrivePhotosSyncState();
+  const maxNewPhotos = opts?.maxNewPhotos ?? MAX_NEW_PHOTOS_PER_RUN;
+  const photosPerVehicle = opts?.photosPerVehicle ?? PHOTOS_PER_VEHICLE_PER_RUN;
+  const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY;
+  const state = await loadDrivePhotosSyncState(tenantSlug);
+  const errors: string[] = [];
 
   // 1) Listar TODAS las carpetas de patente una vez y matchear por clave normalizada
   //    (RZVL 18 en Excel ≡ RZVL18 en Drive). Evita fallos de name= / contains.
@@ -156,6 +218,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       newPhotosDownloaded: 0,
       message: msg,
       vehicles: existingList,
+      errors: [msg],
     };
   }
 
@@ -187,32 +250,83 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     const key = normalizePlateKey(v.plate || "");
     return key && folderIndex.has(key) && v.hasRealPhotos;
   });
-  const queue = [...needingPhotos, ...needingRefresh];
+  // Autos en cero primero, rotados para no repetir siempre el mismo slug.
+  // Los que ya tienen alguna foto se rellenan solo si sobra presupuesto.
+  const queue = [
+    ...rotateSyncQueue(needingPhotos, state.zeroPhotoCursor),
+    ...needingRefresh,
+  ];
 
   const toProcess: FolderCandidate[] = [];
-  for (const vehicle of queue) {
-    if (toProcess.length >= maxVehicles) break;
+  const emptyFolderHash = folderContentHash([]);
+  let skippedUnchanged = 0;
+  let deferredVehicles = 0;
+  let folderLists = 0;
+
+  for (let i = 0; i < queue.length; i++) {
+    const vehicle = queue[i];
+    const outOfBudget =
+      Date.now() >= deadlineAt ||
+      folderLists >= MAX_FOLDER_LISTS_PER_RUN ||
+      toProcess.length >= maxVehicles;
+    if (outOfBudget) {
+      deferredVehicles += queue.length - i;
+      break;
+    }
+
     const key = normalizePlateKey(vehicle.plate || "");
     const folder = folderIndex.get(key);
     if (!folder) continue;
     if (!folderMatchesVehiclePlate(folder.name, vehicle.plate)) continue;
 
+    const stamp = state.folders[folder.id];
+    // Carpeta sin cambios: no listar. Una carpeta vacía ya sellada se salta
+    // aunque el auto todavía no tenga fotos (no hay nada nuevo que bajar).
+    const emptyStamp = stamp?.contentHash === emptyFolderHash;
+    if (
+      folderStampIsCurrent(folder, stamp) &&
+      (vehicle.hasRealPhotos || emptyStamp)
+    ) {
+      skippedUnchanged += 1;
+      continue;
+    }
+
     let images: DriveImageRef[] = [];
     try {
+      folderLists += 1;
       images = await listImagesInFolder(folder.id);
     } catch (err) {
-      console.warn(
-        `[DriveOAuthSync] No se listaron fotos de ${folder.name}:`,
-        err instanceof Error ? err.message : err,
-      );
+      const detail = err instanceof Error ? err.message : String(err);
+      errors.push(`No se listaron fotos de ${folder.name}: ${detail}`);
+      console.warn(`[DriveOAuthSync] No se listaron fotos de ${folder.name}:`, detail);
       continue;
     }
     if (images.length === 0) {
+      // Sello vacío: la próxima corrida no vuelve a gastar un list() si la
+      // carpeta no cambió. Si aparecen fotos, modifiedTime avanza.
+      state.folders[folder.id] = {
+        modifiedTime: folder.modifiedTime,
+        contentHash: folderContentHash([]),
+      };
       console.warn(`[DriveOAuthSync] Carpeta ${folder.name} sin imágenes`);
       continue;
     }
 
-    const limited = images.slice(0, MAX_PHOTOS_PER_VEHICLE);
+    const limited = images;
+    const contentHash = folderContentHash(limited);
+    const hashUnchanged =
+      vehicle.hasRealPhotos === true &&
+      stamp?.contentHash === contentHash &&
+      limited.every((img) => !driveFileNeedsSync(img, state.files[img.id]));
+    if (hashUnchanged) {
+      state.folders[folder.id] = {
+        modifiedTime: folder.modifiedTime || stamp?.modifiedTime,
+        contentHash,
+      };
+      skippedUnchanged += 1;
+      continue;
+    }
+
     // Un blob cacheado puede haberse borrado (p. ej. venta → borrado de fotos → unidad
     // de vuelta en stock). Si ya no existe, se olvida el caché para volver a subirlo
     // desde Drive en vez de seguir publicando una URL 404.
@@ -223,16 +337,25 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         return !(await blobStillExists(cachedUrl));
       }),
     );
-    limited.forEach((img, i) => {
-      if (staleChecks[i]) {
-        console.warn(`[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`);
+    limited.forEach((img, iBlob) => {
+      if (staleChecks[iBlob]) {
+        console.warn(
+          `[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`,
+        );
         delete state.files[img.id];
       }
     });
     const needsWork =
       !vehicle.hasRealPhotos ||
       limited.some((img) => driveFileNeedsSync(img, state.files[img.id]));
-    if (!needsWork) continue;
+    if (!needsWork) {
+      state.folders[folder.id] = {
+        modifiedTime: folder.modifiedTime,
+        contentHash,
+      };
+      skippedUnchanged += 1;
+      continue;
+    }
 
     console.log(
       `[DriveOAuthSync] Match ${vehicle.plate || key} → carpeta "${folder.name}" (${limited.length} fotos)`,
@@ -241,6 +364,8 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       vehicle,
       folderId: folder.id,
       folderName: folder.name,
+      folderModifiedTime: folder.modifiedTime,
+      contentHash,
       images: limited,
       needsWork: true,
     });
@@ -262,17 +387,30 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       newPhotosDownloaded: 0,
       message: msg,
       vehicles: existingList,
+      errors: [msg],
     };
   }
 
   let newPhotos = 0;
   let synced = 0;
+  let budgetExhausted = Date.now() >= deadlineAt;
+  const zeroPhotoKeys = needingPhotos.map((vehicle) =>
+    normalizePlateKey(vehicle.plate || ""),
+  );
+  let lastZeroAttempt: string | null = null;
 
   for (const item of toProcess) {
     if (item.vehicle.coverLocked === true) continue;
+    const plateKey = normalizePlateKey(item.vehicle.plate || item.folderName);
+    if (budgetExhausted || Date.now() >= deadlineAt) {
+      deferredVehicles += 1;
+      continue;
+    }
 
     const galleryUrls: string[] = [];
     let uploadedThisVehicle = 0;
+    let hitSlice = false;
+    let attemptedDownload = false;
 
     for (const image of item.images) {
       const cached = state.files[image.id];
@@ -280,7 +418,17 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         galleryUrls.push(cached.blobUrl);
         continue;
       }
+      if (uploadedThisVehicle >= photosPerVehicle) {
+        hitSlice = true;
+        break;
+      }
+      if (newPhotos >= maxNewPhotos || Date.now() >= deadlineAt) {
+        hitSlice = true;
+        budgetExhausted = true;
+        break;
+      }
 
+      attemptedDownload = true;
       try {
         const { bytes, contentType, ext } = await materializeImageBytes(image);
         const relativePath = `cars/uploads/${item.vehicle.slug}/${image.id}.${ext}`;
@@ -292,21 +440,35 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         state.files[image.id] = {
           modifiedTime: image.modifiedTime,
           blobUrl: stored.url,
-          plate: normalizePlateKey(item.vehicle.plate || item.folderName),
+          plate: plateKey,
         };
         galleryUrls.push(stored.url);
         uploadedThisVehicle += 1;
         newPhotos += 1;
       } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        errors.push(`Falló foto ${image.name}: ${detail}`);
         console.warn(
           `[DriveOAuthSync] Falló foto ${image.name} (${image.id}):`,
-          err instanceof Error ? err.message : err,
+          detail,
         );
         if (cached?.blobUrl) galleryUrls.push(cached.blobUrl);
       }
     }
 
-    if (galleryUrls.length === 0) continue;
+    const complete = galleryUrls.length === item.images.length && !hitSlice;
+    if (
+      zeroPhotoKeys.includes(plateKey) &&
+      (uploadedThisVehicle > 0 || (galleryUrls.length === 0 && attemptedDownload))
+    ) {
+      lastZeroAttempt = plateKey;
+    }
+    if (galleryUrls.length === 0) {
+      deferredVehicles += 1;
+      state.lastRunAt = new Date().toISOString();
+      await saveDrivePhotosSyncState(state, tenantSlug);
+      continue;
+    }
 
     const cover = resolveCoverFromGallery(item.vehicle.image, galleryUrls);
     const orderedGallery = orderGalleryWithCover(cover, galleryUrls);
@@ -318,21 +480,38 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     };
     await saveVehicle(vehicle, { tenantSlug });
     synced += 1;
+    if (complete) {
+      state.folders[item.folderId] = {
+        modifiedTime: item.folderModifiedTime,
+        contentHash: item.contentHash,
+      };
+    } else {
+      deferredVehicles += 1;
+    }
     // Checkpoint por vehículo: si el cron corta a los 60s, no se pierde el progreso.
     state.lastRunAt = new Date().toISOString();
-    await saveDrivePhotosSyncState(state);
+    await saveDrivePhotosSyncState(state, tenantSlug);
     console.log(
-      `[DriveOAuthSync] ${item.folderName} → ${item.vehicle.slug}: ${galleryUrls.length} fotos (${uploadedThisVehicle} nuevas)`,
+      `[DriveOAuthSync] ${item.folderName} → ${item.vehicle.slug}: ${galleryUrls.length}/${item.images.length} fotos (${uploadedThisVehicle} nuevas)`,
     );
   }
 
-  state.lastRunAt = new Date().toISOString();
-  await saveDrivePhotosSyncState(state);
+  if (lastZeroAttempt && zeroPhotoKeys.length > 1) {
+    const rotated = rotateSyncQueue(needingPhotos, state.zeroPhotoCursor).map((vehicle) =>
+      normalizePlateKey(vehicle.plate || ""),
+    );
+    const index = rotated.indexOf(lastZeroAttempt);
+    if (index >= 0) {
+      state.zeroPhotoCursor = rotated[(index + 1) % rotated.length];
+    }
+  }
 
-  const remainingLikely = Math.max(0, needingPhotos.length - synced);
+  state.lastRunAt = new Date().toISOString();
+  await saveDrivePhotosSyncState(state, tenantSlug);
+
   const pendingNote =
-    remainingLikely > 0
-      ? ` Quedan ~${remainingLikely} sin fotos reales para próximas corridas (tope ${maxVehicles}/run).`
+    deferredVehicles > 0
+      ? ` Quedan ${deferredVehicles} para la próxima corrida (tope ${maxNewPhotos} fotos, ${photosPerVehicle} por auto; la cola rota).`
       : "";
 
   const updatedList = await getVehicles({
@@ -345,9 +524,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     totalFolders: folders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
+    skippedUnchanged,
+    skippedCoverLocked: skippedCoverLocked.length,
+    deferredVehicles,
+    errors,
     message:
-      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas ` +
-      `(${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
+      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas, ` +
+      `${skippedUnchanged} carpetas sin cambios, ${skippedCoverLocked.length} con portada bloqueada` +
+      ` (${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
       pendingNote,
     vehicles: updatedList,
   };

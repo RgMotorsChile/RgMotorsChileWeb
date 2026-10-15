@@ -20,6 +20,10 @@ export type SyncResult = {
   newPhotosDownloaded: number;
   message: string;
   vehicles: Vehicle[];
+  skippedUnchanged?: number;
+  skippedCoverLocked?: number;
+  deferredVehicles?: number;
+  errors?: string[];
 };
 
 function fetchUrl(url: string): Promise<string> {
@@ -80,14 +84,29 @@ export async function extractFoldersFromDriveUrl(folderUrl: string): Promise<{ n
   }
 }
 
-export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise<SyncResult> {
+export async function syncCatalogFromDriveFolders(
+  folderUrls: string[],
+  opts?: {
+    tenantSlug?: string;
+    maxNewPhotos?: number;
+    deadlineAt?: number;
+  },
+): Promise<SyncResult> {
   // Camino principal: OAuth cuenta U → Blob (carpeta restringida).
   if (isGoogleDriveOAuthConfigured()) {
-    return syncDrivePhotosViaOAuth();
+    return syncDrivePhotosViaOAuth({
+      tenantSlug: opts?.tenantSlug,
+      maxNewPhotos: opts?.maxNewPhotos,
+      deadlineAt: opts?.deadlineAt,
+    });
   }
 
   const allFolders: { name: string; id: string }[] = [];
-  const existingList = await getVehicles({ scope: "staff" });
+  const existingList = await getVehicles({
+    scope: "staff",
+    tenantSlug: opts?.tenantSlug,
+    bypassCache: true,
+  });
 
   // Fallback legacy (scrape HTML): solo útil si la carpeta es pública.
   console.warn(
@@ -134,6 +153,11 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
       continue;
     }
 
+    // cover_locked: la portada y la galería las fijó el admin. Drive no las pisa.
+    if (existing.coverLocked === true) {
+      continue;
+    }
+
     const photos = await extractPhotosFromFolder(folder.id);
     if (photos.length === 0) continue;
 
@@ -154,11 +178,15 @@ export async function syncCatalogFromDriveFolders(folderUrls: string[]): Promise
       image: cover || orderedGallery[0],
     };
 
-    await saveVehicle(vehicle);
+    await saveVehicle(vehicle, { tenantSlug: opts?.tenantSlug });
     synced += 1;
   }
 
-  const updatedList = await getVehicles({ scope: "staff" });
+  const updatedList = await getVehicles({
+    scope: "staff",
+    tenantSlug: opts?.tenantSlug,
+    bypassCache: true,
+  });
 
   return {
     success: true,

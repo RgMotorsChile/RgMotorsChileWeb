@@ -142,6 +142,8 @@ export interface SyncReport {
   antiWipeSkippedArchive?: boolean;
   /** Filas en hoja omitidas (preparación / sin precio / sin km) */
   skippedIncomplete?: number;
+  /** Filas de inventario leídas en la pestaña del tenant. */
+  rowsRead?: number;
 }
 
 export async function syncFromLiveGoogleSheet(
@@ -342,6 +344,7 @@ export async function syncFromLiveGoogleSheet(
       sheetAccessGranted: true,
       antiWipe: true,
       skippedIncomplete,
+      rowsRead: sheetVehicles.length,
       timestamp: new Date().toISOString(),
     };
   }
@@ -497,6 +500,7 @@ export async function syncFromLiveGoogleSheet(
       sheetAccessGranted: true,
       antiWipeSkippedArchive: wipeGuard.skipArchive,
       skippedIncomplete,
+      rowsRead: sheetVehicles.length,
       timestamp: new Date().toISOString(),
     };
   }
@@ -511,6 +515,7 @@ export async function syncFromLiveGoogleSheet(
     sheetAccessGranted: true,
     antiWipeSkippedArchive: wipeGuard.skipArchive,
     skippedIncomplete,
+    rowsRead: sheetVehicles.length,
     timestamp: new Date().toISOString(),
   };
 }

@@ -1,6 +1,11 @@
 import { google } from "googleapis";
 import type { drive_v3 } from "googleapis";
 import {
+  isImportableDriveImage,
+  looksLikeRasterImage,
+  renderedThumbnailUrl,
+} from "@/lib/server/driveImageFormats";
+import {
   normalizePlateKey,
   pickBestPlateFolder,
   plateFolderNameVariants,
@@ -15,6 +20,7 @@ const DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export type DriveFolderRef = {
   id: string;
   name: string;
+  modifiedTime?: string;
 };
 
 export type DriveImageRef = {
@@ -22,6 +28,7 @@ export type DriveImageRef = {
   name: string;
   mimeType: string;
   modifiedTime?: string;
+  thumbnailLink?: string;
 };
 
 export function getDrivePhotosFolderId(): string {
@@ -65,9 +72,7 @@ export function createDriveApi(
 }
 
 function isImageFile(file: drive_v3.Schema$File): boolean {
-  const mime = String(file.mimeType || "").toLowerCase();
-  if (mime.startsWith("image/")) return true;
-  return /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(String(file.name || ""));
+  return isImportableDriveImage(String(file.name || ""), file.mimeType || "");
 }
 
 /** Lista subcarpetas (patentes) bajo la carpeta raíz de fotos. */
@@ -81,7 +86,7 @@ export async function listPlateFolders(
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: "nextPageToken, files(id, name)",
+      fields: "nextPageToken, files(id, name, modifiedTime)",
       pageSize: 1000,
       pageToken,
       supportsAllDrives: true,
@@ -89,7 +94,13 @@ export async function listPlateFolders(
       spaces: "drive",
     });
     for (const f of res.data.files || []) {
-      if (f.id && f.name) out.push({ id: f.id, name: f.name });
+      if (f.id && f.name) {
+        out.push({
+          id: f.id,
+          name: f.name,
+          modifiedTime: f.modifiedTime || undefined,
+        });
+      }
     }
     pageToken = res.data.nextPageToken || undefined;
   } while (pageToken);
@@ -175,7 +186,7 @@ export async function listImagesInFolder(
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
-      fields: "nextPageToken, files(id, name, mimeType, modifiedTime)",
+      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, thumbnailLink)",
       pageSize: 1000,
       pageToken,
       supportsAllDrives: true,
@@ -191,6 +202,7 @@ export async function listImagesInFolder(
         name: f.name,
         mimeType: f.mimeType || "image/jpeg",
         modifiedTime: f.modifiedTime || undefined,
+        thumbnailLink: f.thumbnailLink || undefined,
       });
     }
     pageToken = res.data.nextPageToken || undefined;
@@ -198,6 +210,53 @@ export async function listImagesInFolder(
 
   return out.sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { numeric: true }),
+  );
+}
+
+type RenderedDownloadDeps = {
+  getToken?: () => Promise<string | undefined>;
+  fetchImpl?: typeof fetch;
+};
+
+let sharedDriveAuth: ReturnType<typeof createDriveOAuthClient> | null = null;
+
+async function defaultDriveToken(): Promise<string | undefined> {
+  if (!sharedDriveAuth) sharedDriveAuth = createDriveOAuthClient();
+  const access = await sharedDriveAuth.getAccessToken();
+  if (typeof access === "string") return access || undefined;
+  return access?.token || undefined;
+}
+
+/**
+ * JPEG/WebP/PNG que Drive ya renderizó (thumbnail a s2000).
+ * Sirve para HEIC/HEIF/DNG sin decodificar el original en la función.
+ */
+export async function downloadDriveRenderedJpeg(
+  fileId: string,
+  thumbnailLink?: string,
+  deps?: RenderedDownloadDeps,
+): Promise<Buffer> {
+  const fetchImpl = deps?.fetchImpl || fetch;
+  const token = deps?.getToken ? await deps.getToken() : await defaultDriveToken();
+  const primary = renderedThumbnailUrl(thumbnailLink, fileId);
+  const fallback = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w2000`;
+  const urls = [...new Set([primary, fallback])];
+  let lastStatus = 0;
+
+  for (const url of urls) {
+    const inits: Array<RequestInit | undefined> = [undefined];
+    if (token) inits.push({ headers: { Authorization: `Bearer ${token}` } });
+    for (const init of inits) {
+      const res = await fetchImpl(url, init);
+      lastStatus = res.status;
+      if (!res.ok) continue;
+      const bytes = Buffer.from(await res.arrayBuffer());
+      if (looksLikeRasterImage(bytes)) return bytes;
+    }
+  }
+
+  throw new Error(
+    `Drive no entregó un JPEG renderizado para ${fileId} (último HTTP ${lastStatus}).`,
   );
 }
 

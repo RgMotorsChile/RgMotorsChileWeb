@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlateFolderIndex,
   driveFileNeedsSync,
+  folderContentHash,
   folderMatchesVehiclePlate,
+  folderStampIsCurrent,
   normalizePlateKey,
   pickBestPlateFolder,
   plateFolderNameVariants,
   plateFolderSearchPrefixes,
   prioritizeVehiclesForDriveSync,
+  rotateSyncQueue,
 } from "./drivePlateMatch";
 
 describe("normalizePlateKey", () => {
@@ -95,6 +98,70 @@ describe("driveFileNeedsSync", () => {
         },
       ),
     ).toBe(true);
+  });
+});
+
+describe("rotateSyncQueue", () => {
+  const cars = [
+    { slug: "a", plate: "AAAA 11" },
+    { slug: "b", plate: "BBBB 22" },
+    { slug: "c", plate: "CCCC 33" },
+  ];
+
+  it("empieza por el cursor para no repetir siempre el primero", () => {
+    expect(rotateSyncQueue(cars, "BBBB22").map((c) => c.slug)).toEqual(["b", "c", "a"]);
+  });
+
+  it("si el cursor ya no está en la cola, deja el orden", () => {
+    expect(rotateSyncQueue(cars, "ZZZZ99").map((c) => c.slug)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("prioriza autos sin fotos", () => {
+  it("pone primero los que no tienen fotos reales", () => {
+    const ordered = prioritizeVehiclesForDriveSync([
+      { slug: "con-fotos", plate: "BBBB 22", hasRealPhotos: true },
+      { slug: "sin-fotos", plate: "AAAA 11", hasRealPhotos: false },
+    ]);
+    expect(ordered.map((c) => c.slug)).toEqual(["sin-fotos", "con-fotos"]);
+  });
+});
+
+describe("folderStampIsCurrent", () => {
+  const images = [
+    { id: "b", modifiedTime: "2026-02-01T00:00:00.000Z" },
+    { id: "a", modifiedTime: "2026-01-01T00:00:00.000Z" },
+  ];
+
+  it("es estable aunque cambie el orden de las fotos", () => {
+    expect(folderContentHash(images)).toBe(folderContentHash([...images].reverse()));
+  });
+
+  it("cambia si modifiedTime avanza", () => {
+    const next = folderContentHash([
+      { id: "a", modifiedTime: "2026-03-01T00:00:00.000Z" },
+      images[0],
+    ]);
+    expect(next).not.toBe(folderContentHash(images));
+  });
+
+  it("salta la carpeta solo con sello y modifiedTime iguales", () => {
+    const hash = folderContentHash(images);
+    expect(
+      folderStampIsCurrent(
+        { modifiedTime: "2026-04-01T00:00:00.000Z" },
+        { modifiedTime: "2026-04-01T00:00:00.000Z", contentHash: hash },
+      ),
+    ).toBe(true);
+    expect(
+      folderStampIsCurrent(
+        { modifiedTime: "2026-05-01T00:00:00.000Z" },
+        { modifiedTime: "2026-04-01T00:00:00.000Z", contentHash: hash },
+      ),
+    ).toBe(false);
+    expect(folderStampIsCurrent({ modifiedTime: "2026-04-01T00:00:00.000Z" }, null)).toBe(
+      false,
+    );
   });
 });
 
