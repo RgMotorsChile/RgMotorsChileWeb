@@ -43,7 +43,7 @@ export async function extractPhotosFromFolder(folderId: string): Promise<{ fileN
   const url = `https://drive.google.com/drive/folders/${folderId}`;
   try {
     const html = await fetchUrl(url);
-    const regex = /aria-label="([^"]+?\.(?:jpg|jpeg|png|webp|heic))\s+Image\s+Shared"[^>]*ssk='5:[^:]*:([a-zA-Z0-9_-]+)/gi;
+    const regex = /aria-label="([^"]+?\.(?:jpe?g|png|webp|gif|heic|heif|dng|tiff?|bmp))\s+Image\s+Shared"[^>]*ssk='5:[^:]*:([a-zA-Z0-9_-]+)/gi;
     let m: RegExpExecArray | null;
     const photos: { fileName: string; fileId: string; downloadUrl: string }[] = [];
     while ((m = regex.exec(html)) !== null) {
@@ -155,30 +155,37 @@ export async function syncCatalogFromDriveFolders(
       continue;
     }
 
-    // cover_locked: la portada y la galería las fijó el admin. Drive no las pisa.
-    if (existing.coverLocked === true) {
-      continue;
-    }
-
     const photos = await extractPhotosFromFolder(folder.id);
     if (photos.length === 0) continue;
 
-    // Build gallery using direct Drive thumbnail URLs (no local downloads, no edits)
-    const gallery = photos.map(
+    const incoming = photos.map(
       (p) => `https://drive.google.com/thumbnail?id=${p.fileId}&sz=w1000`,
     );
     newPhotos += photos.length;
-
-    // Conservar portada elegida en admin si esa foto sigue en Drive
-    const cover = resolveCoverFromGallery(existing.image, gallery);
-    const orderedGallery = orderGalleryWithCover(cover, gallery);
-
+    const locked = existing.coverLocked === true;
+    const prior = [...(existing.gallery || []), existing.image].filter(
+      (url) => url && !url.includes("placeholder"),
+    );
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    for (const url of [...prior, ...incoming]) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      merged.push(url);
+    }
+    const cover = locked
+      ? existing.image
+      : resolveCoverFromGallery(existing.image, merged);
+    const orderedGallery = locked ? merged : orderGalleryWithCover(cover, merged);
     const vehicle: Vehicle = {
       ...existing,
       hasRealPhotos: true,
       gallery: orderedGallery,
-      image: cover || orderedGallery[0],
+      image: locked ? existing.image : cover || orderedGallery[0],
     };
+    existing.gallery = vehicle.gallery;
+    existing.image = vehicle.image;
+    existing.hasRealPhotos = true;
 
     await saveVehicle(vehicle, { tenantSlug: opts?.tenantSlug });
     synced += 1;

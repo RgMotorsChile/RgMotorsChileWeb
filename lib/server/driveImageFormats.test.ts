@@ -19,7 +19,9 @@ describe("formatos de Drive", () => {
   it("importa raw aunque Drive no mande image/*", () => {
     expect(isImportableDriveImage("SGYL33.HEIC", "application/octet-stream")).toBe(true);
     expect(isImportableDriveImage("SBZG55 (1).jpg", "")).toBe(true);
+    expect(isImportableDriveImage("foto.tif", "application/octet-stream")).toBe(true);
     expect(isImportableDriveImage("notas.txt", "text/plain")).toBe(false);
+    expect(isImportableDriveImage("clip.mp4", "video/mp4")).toBe(false);
   });
 
   it("pide el thumbnail a s2000", () => {

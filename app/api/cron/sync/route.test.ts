@@ -14,7 +14,7 @@ vi.mock("@/lib/server/googleSheetSyncService", () => ({
 
 vi.mock("@/lib/server/driveOAuthSyncService", () => ({
   syncDrivePhotosViaOAuth,
-  MAX_NEW_PHOTOS_PER_RUN: 24,
+  MAX_NEW_PHOTOS_PER_RUN: 36,
 }));
 
 vi.mock("@/lib/server/autoSyncScheduler", () => ({
@@ -101,7 +101,7 @@ describe("GET /api/cron/sync", () => {
     expect(syncDrivePhotosViaOAuth).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantSlug: "unidades-chile",
-        maxNewPhotos: 24,
+        maxNewPhotos: 36,
       }),
     );
     expect(runAutoSync).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe("GET /api/cron/sync", () => {
     const res = await call("https://rgmotorschile.cl/api/cron/sync");
     expect(res.status).toBe(200);
     expect(runAutoSync).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantSlug: "rg-motors", maxNewPhotos: 24 }),
+      expect.objectContaining({ tenantSlug: "rg-motors", maxNewPhotos: 36 }),
     );
     expect(syncDrivePhotosViaOAuth).not.toHaveBeenCalled();
     const body = await res.json();

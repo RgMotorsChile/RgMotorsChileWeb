@@ -81,7 +81,16 @@ export type CachedDriveFolder = {
   modifiedTime?: string;
   /** Hash de id + modifiedTime de las imágenes ya sincronizadas. */
   contentHash?: string;
+  /**
+   * Los sellos anteriores a esta revisión se re-listan. Así se recuperan
+   * fotos que quedaron fuera cuando el tope era 10 o cuando un HEIC no
+   * entraba en el listado.
+   */
+  revision?: number;
 };
+
+/** Subir este número obliga a volver a listar carpetas ya selladas. */
+export const DRIVE_FOLDER_STAMP_REVISION = 2;
 
 /**
  * Hash estable del contenido de una carpeta. Sirve para saltar la descarga
@@ -111,6 +120,7 @@ export function folderStampIsCurrent(
   cached?: CachedDriveFolder | null,
 ): boolean {
   if (!cached?.contentHash) return false;
+  if (cached.revision !== DRIVE_FOLDER_STAMP_REVISION) return false;
   if (!folder.modifiedTime || !cached.modifiedTime) return false;
   return folder.modifiedTime === cached.modifiedTime;
 }
@@ -146,25 +156,44 @@ export function pickBestPlateFolder<T extends { name: string }>(
 }
 
 /**
- * Índice patente normalizada → carpeta Drive.
- * Usa el nombre completo de carpeta (RZVL18) sin importar espacios en el stock.
+ * Todas las carpetas cuyo nombre normalizado es la patente.
+ * PSKJ78 y "PSKJ 78" se fusionan. SRCP17 no entra en SRCP22.
+ * La compacta (sin espacio ni guion) queda primera.
+ */
+export function groupPlateFolders<
+  T extends { id: string; name: string; modifiedTime?: string },
+>(folders: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const folder of folders) {
+    const key = normalizePlateKey(folder.name);
+    if (!key) continue;
+    const list = map.get(key) || [];
+    list.push(folder);
+    map.set(key, list);
+  }
+  for (const [key, list] of map) {
+    list.sort((a, b) => {
+      const aCompact = /[\s\-_]/.test(a.name) ? 1 : 0;
+      const bCompact = /[\s\-_]/.test(b.name) ? 1 : 0;
+      if (aCompact !== bCompact) return aCompact - bCompact;
+      return a.name.localeCompare(b.name);
+    });
+    map.set(key, list);
+  }
+  return map;
+}
+
+/**
+ * Índice patente normalizada → carpeta Drive preferida.
+ * Para bajar fotos hay que usar groupPlateFolders: un auto puede tener dos.
  */
 export function buildPlateFolderIndex<
   T extends { id: string; name: string; modifiedTime?: string },
 >(folders: T[]): Map<string, T> {
   const map = new Map<string, T>();
-  for (const f of folders) {
-    const key = normalizePlateKey(f.name);
-    if (!key) continue;
-    const prev = map.get(key);
-    if (!prev) {
-      map.set(key, f);
-      continue;
-    }
-    // Preferí nombre sin espacios/guiones (formato Drive típico)
-    const preferNew =
-      !/[\s\-_]/.test(f.name) && /[\s\-_]/.test(prev.name);
-    if (preferNew) map.set(key, f);
+  for (const [key, list] of groupPlateFolders(folders)) {
+    const first = list[0];
+    if (first) map.set(key, first);
   }
   return map;
 }
