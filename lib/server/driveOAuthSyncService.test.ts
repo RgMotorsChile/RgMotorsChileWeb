@@ -731,6 +731,298 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(result.deferredVehicles).toBeGreaterThan(0);
     expect(listImagesInFolder).not.toHaveBeenCalled();
     expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(blobStillExists).not.toHaveBeenCalled();
     expect(saveVehicle).not.toHaveBeenCalled();
+  });
+});
+
+function driveImage(id: string) {
+  return {
+    id,
+    name: `${id}.jpg`,
+    mimeType: "image/jpeg",
+    modifiedTime: "2026-10-01T00:00:00.000Z",
+  };
+}
+
+function sealedFolderState(
+  folderId: string,
+  images: Array<{ id: string; modifiedTime?: string }>,
+  files: Record<string, { modifiedTime?: string; blobUrl?: string }>,
+) {
+  return {
+    lastRunAt: "2026-10-02T00:00:00.000Z",
+    files,
+    folders: {
+      [folderId]: {
+        modifiedTime: "2026-10-02T00:00:00.000Z",
+        contentHash: folderContentHash(images),
+        revision: DRIVE_FOLDER_STAMP_REVISION,
+      },
+    },
+  };
+}
+
+describe("syncDrivePhotosViaOAuth blobs 404", () => {
+  const front =
+    "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-front.jpg";
+  const side =
+    "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-side.jpg";
+  const rear =
+    "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-rear.jpg";
+  const orphan =
+    "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-gone.jpg";
+  const ssddImages = [driveImage("file-front"), driveImage("file-side"), driveImage("file-rear")];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    saveVehicle.mockResolvedValue({ success: true });
+    writeJson.mockResolvedValue(undefined);
+    downloadDriveFileBytes.mockResolvedValue(Buffer.from("img"));
+    storeMediaFile.mockImplementation(async ({ relativePath }: { relativePath: string }) => ({
+      url: `https://blob.example/${relativePath}`,
+      relativePath: `/${relativePath}`,
+      storage: "blob" as const,
+    }));
+  });
+
+  it("re-sube el blob 404 de una carpeta sellada, conserva orden, portada y filas válidas", async () => {
+    const ssdd = vehicle({
+      slug: "ssdd57",
+      plate: "SSDD57",
+      hasRealPhotos: true,
+      image: front,
+      gallery: [front, side, rear, orphan],
+    });
+    const healthyUrl = "https://old.public.blob.vercel-storage.com/cars/uploads/ok-car/file-ok.jpg";
+    const healthy = vehicle({
+      slug: "ok-car",
+      plate: "OKOK11",
+      hasRealPhotos: true,
+      image: healthyUrl,
+      gallery: [healthyUrl],
+    });
+    const healthyImages = [driveImage("file-ok")];
+    getVehicles.mockResolvedValue([ssdd, healthy]);
+    readJson.mockResolvedValue({
+      ...sealedFolderState("folder-ssdd", ssddImages, {
+        "file-front": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: front },
+        "file-side": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: side },
+        "file-rear": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: rear },
+      }),
+      folders: {
+        "folder-ssdd": sealedFolderState("folder-ssdd", ssddImages, {}).folders["folder-ssdd"],
+        "folder-ok": sealedFolderState("folder-ok", healthyImages, {}).folders["folder-ok"],
+      },
+      files: {
+        "file-front": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: front },
+        "file-side": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: side },
+        "file-rear": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: rear },
+        "file-ok": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: healthyUrl },
+      },
+    });
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-ssdd", name: "SSDD57", modifiedTime: "2026-10-02T00:00:00.000Z" },
+      { id: "folder-ok", name: "OKOK11", modifiedTime: "2026-10-02T00:00:00.000Z" },
+    ]);
+    listImagesInFolder.mockImplementation(async (folderId: string) => {
+      if (folderId === "folder-ssdd") return ssddImages;
+      if (folderId === "folder-ok") return healthyImages;
+      return [];
+    });
+    blobStillExists.mockImplementation(async (url: string) => url !== side && url !== orphan);
+
+    const result = await syncDrivePhotosViaOAuth({ tenantSlug: "unidades-chile" });
+
+    expect(result.success).toBe(true);
+    expect(result.repairedPhotos).toBe(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-side");
+    expect(listImagesInFolder).toHaveBeenCalledWith("folder-ssdd");
+    expect(listImagesInFolder).not.toHaveBeenCalledWith("folder-ok");
+    const saved = saveVehicle.mock.calls[0][0];
+    expect(saved.image).toBe(front);
+    expect(saved.gallery).toEqual([
+      front,
+      "https://blob.example/cars/uploads/ssdd57/file-side.jpg",
+      rear,
+      orphan,
+    ]);
+    expect(saveVehicle.mock.calls[0][1]).toEqual({ tenantSlug: "unidades-chile" });
+  });
+
+  it("con portada bloqueada re-sube esa misma foto si el blob de la portada es 404", async () => {
+    const cover =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/sxdw38/file-cover.jpg";
+    const other =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/sxdw38/file-other.jpg";
+    const images = [driveImage("file-cover"), driveImage("file-other")];
+    const sxdw = vehicle({
+      slug: "sxdw38",
+      plate: "SXDW38",
+      hasRealPhotos: true,
+      coverLocked: true,
+      image: cover,
+      gallery: [cover, other],
+    });
+    getVehicles.mockResolvedValue([sxdw]);
+    readJson.mockResolvedValue(
+      sealedFolderState("folder-sxdw", images, {
+        "file-cover": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: cover },
+        "file-other": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: other },
+      }),
+    );
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-sxdw", name: "SXDW38", modifiedTime: "2026-10-02T00:00:00.000Z" },
+    ]);
+    listImagesInFolder.mockResolvedValue(images);
+    blobStillExists.mockImplementation(async (url: string) => url !== cover);
+
+    const result = await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+
+    expect(result.repairedPhotos).toBe(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-cover");
+    const saved = saveVehicle.mock.calls[0][0];
+    const fresh = "https://blob.example/cars/uploads/sxdw38/file-cover.jpg";
+    expect(saved.coverLocked).toBe(true);
+    expect(saved.image).toBe(fresh);
+    expect(saved.gallery).toEqual([fresh, other]);
+  });
+
+  it("con portada bloqueada no cambia la portada si el 404 es otra foto", async () => {
+    const cover =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/sxdw38/file-cover.jpg";
+    const other =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/sxdw38/file-other.jpg";
+    const images = [driveImage("file-cover"), driveImage("file-other")];
+    const sxdw = vehicle({
+      slug: "sxdw38",
+      plate: "SXDW38",
+      hasRealPhotos: true,
+      coverLocked: true,
+      image: cover,
+      gallery: [other, cover],
+    });
+    getVehicles.mockResolvedValue([sxdw]);
+    readJson.mockResolvedValue(
+      sealedFolderState("folder-sxdw", images, {
+        "file-cover": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: cover },
+        "file-other": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: other },
+      }),
+    );
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-sxdw", name: "SXDW38", modifiedTime: "2026-10-02T00:00:00.000Z" },
+    ]);
+    listImagesInFolder.mockResolvedValue(images);
+    blobStillExists.mockImplementation(async (url: string) => url !== other);
+
+    await syncDrivePhotosViaOAuth({ tenantSlug: "unidades-chile" });
+
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-other");
+    const saved = saveVehicle.mock.calls[0][0];
+    expect(saved.coverLocked).toBe(true);
+    expect(saved.image).toBe(cover);
+    expect(saved.gallery).toEqual([
+      "https://blob.example/cars/uploads/sxdw38/file-other.jpg",
+      cover,
+    ]);
+  });
+
+  it("no borra la fila si el blob es 404 y el archivo ya no está en Drive", async () => {
+    const only =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-gone.jpg";
+    const images = [driveImage("file-front")];
+    const ssdd = vehicle({
+      slug: "ssdd57",
+      plate: "SSDD57",
+      hasRealPhotos: true,
+      image: only,
+      gallery: [only],
+    });
+    getVehicles.mockResolvedValue([ssdd]);
+    readJson.mockResolvedValue(
+      sealedFolderState("folder-ssdd", images, {
+        "file-front": {
+          modifiedTime: "2026-10-01T00:00:00.000Z",
+          blobUrl: "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-front.jpg",
+        },
+      }),
+    );
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-ssdd", name: "SSDD57", modifiedTime: "2026-10-02T00:00:00.000Z" },
+    ]);
+    listImagesInFolder.mockResolvedValue(images);
+    blobStillExists.mockResolvedValue(false);
+
+    const result = await syncDrivePhotosViaOAuth({ tenantSlug: "unidades-chile" });
+
+    expect(result.repairedPhotos).toBe(0);
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
+  it("respeta el cupo de HEAD y sigue en la misma patente en la corrida siguiente", async () => {
+    const first =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-a.jpg";
+    const second =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/ssdd57/file-b.jpg";
+    const images = [driveImage("file-a"), driveImage("file-b")];
+    const ssdd = vehicle({
+      slug: "ssdd57",
+      plate: "SSDD57",
+      hasRealPhotos: true,
+      image: first,
+      gallery: [first, second],
+    });
+    getVehicles.mockResolvedValue([ssdd]);
+    readJson.mockResolvedValue(
+      sealedFolderState("folder-ssdd", images, {
+        "file-a": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: first },
+        "file-b": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: second },
+      }),
+    );
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-ssdd", name: "SSDD57", modifiedTime: "2026-10-02T00:00:00.000Z" },
+    ]);
+    listImagesInFolder.mockResolvedValue(images);
+    blobStillExists.mockImplementation(async (url: string) => url !== second);
+
+    const firstRun = await syncDrivePhotosViaOAuth({
+      tenantSlug: "unidades-chile",
+      maxBlobHeadChecks: 1,
+    });
+
+    expect(firstRun.repairedPhotos).toBe(0);
+    expect(blobStillExists).toHaveBeenCalledTimes(1);
+    expect(blobStillExists).toHaveBeenCalledWith(first);
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(saveVehicle).not.toHaveBeenCalled();
+    const saved = writeJson.mock.calls.at(-1)?.[1] as {
+      blobCheckCursor?: string;
+      blobCheckOffset?: number;
+    };
+    expect(saved.blobCheckCursor).toBe("ssdd57");
+    expect(saved.blobCheckOffset).toBe(1);
+
+    readJson.mockResolvedValue(saved);
+    blobStillExists.mockClear();
+    const secondRun = await syncDrivePhotosViaOAuth({
+      tenantSlug: "unidades-chile",
+      maxBlobHeadChecks: 1,
+    });
+
+    expect(secondRun.repairedPhotos).toBe(1);
+    expect(blobStillExists).toHaveBeenCalledTimes(1);
+    expect(blobStillExists).toHaveBeenCalledWith(second);
+    expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-b");
+    const repaired = saveVehicle.mock.calls[0][0];
+    expect(repaired.image).toBe(first);
+    expect(repaired.gallery).toEqual([
+      first,
+      "https://blob.example/cars/uploads/ssdd57/file-b.jpg",
+    ]);
   });
 });

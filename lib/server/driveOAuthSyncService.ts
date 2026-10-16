@@ -37,6 +37,8 @@ export type SyncResult = {
   totalFolders: number;
   syncedVehicles: number;
   newPhotosDownloaded: number;
+  /** Blobs 404 cuyo archivo seguía en Drive y se volvieron a subir. */
+  repairedPhotos?: number;
   message: string;
   vehicles: Vehicle[];
   skippedUnchanged?: number;
@@ -65,6 +67,16 @@ export const MAX_NEW_PHOTOS_PER_RUN = 36;
 export const PHOTOS_PER_VEHICLE_PER_RUN = 12;
 /** Listados de imágenes por corrida. Una patente con dos carpetas gasta dos. */
 export const MAX_FOLDER_LISTS_PER_RUN = 30;
+/**
+ * HEAD de blobs ya publicados por corrida. Una galería sellada no se vuelve a
+ * bajar: sin este cupo los 404 (blob borrado) quedan para siempre.
+ */
+export const MAX_BLOB_HEAD_CHECKS_PER_RUN = 40;
+/**
+ * Con reposiciones ya detectadas, no seguir haciendo HEAD hasta agotar el
+ * plazo: hay que dejar tiempo para re-subir dentro del presupuesto del cron.
+ */
+const BLOB_HEAD_DEADLINE_MARGIN_MS = 12_000;
 
 export function drivePhotosSyncStateKey(tenantSlug: string): string {
   if (!tenantSlug || tenantSlug === "rg-motors") return STATE_FILENAME;
@@ -79,6 +91,10 @@ export type DrivePhotosSyncState = {
   folders: Record<string, CachedDriveFolder>;
   /** Patente normalizada por la que sigue la ronda de autos sin fotos. */
   zeroPhotoCursor?: string | null;
+  /** Patente normalizada por la que sigue la revisión HEAD de blobs de galería. */
+  blobCheckCursor?: string | null;
+  /** URLs ya revisadas de blobCheckCursor. La siguiente corrida sigue desde ahí. */
+  blobCheckOffset?: number;
 };
 
 const EMPTY_STATE: DrivePhotosSyncState = {
@@ -86,6 +102,8 @@ const EMPTY_STATE: DrivePhotosSyncState = {
   files: {},
   folders: {},
   zeroPhotoCursor: null,
+  blobCheckCursor: null,
+  blobCheckOffset: 0,
 };
 
 export async function loadDrivePhotosSyncState(
@@ -101,6 +119,12 @@ export async function loadDrivePhotosSyncState(
     folders: raw.folders && typeof raw.folders === "object" ? raw.folders : {},
     zeroPhotoCursor:
       typeof raw.zeroPhotoCursor === "string" ? raw.zeroPhotoCursor : null,
+    blobCheckCursor:
+      typeof raw.blobCheckCursor === "string" ? raw.blobCheckCursor : null,
+    blobCheckOffset:
+      typeof raw.blobCheckOffset === "number" && raw.blobCheckOffset > 0
+        ? Math.floor(raw.blobCheckOffset)
+        : 0,
   };
 }
 
@@ -220,12 +244,101 @@ function mergeGalleryKeepingExisting(
   return out;
 }
 
+/** Portada primero: con el cupo de HEAD justo, el 404 de la portada se ve en esta corrida. */
+function storedPhotoUrls(vehicle: Vehicle): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (url?: string) => {
+    if (!isStoredPhotoUrl(url) || seen.has(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+  push(vehicle.image);
+  for (const url of vehicle.gallery || []) push(url);
+  return out;
+}
+
+/**
+ * Id de Drive de una URL ya publicada.
+ * Primero el state (blobUrl → fileId); si no, el nombre del archivo
+ * (`cars/uploads/{slug}/{driveFileId}.ext`).
+ */
+function resolveStoredDriveId(
+  url: string | undefined,
+  state: DrivePhotosSyncState,
+): string | null {
+  if (!isStoredPhotoUrl(url)) return null;
+  for (const [id, file] of Object.entries(state.files)) {
+    if (file.blobUrl === url) return id;
+  }
+  return fileIdFromStoredUrl(url);
+}
+
+function appendBrokenUrl(map: Map<string, string[]>, id: string, url: string): void {
+  const list = map.get(id);
+  if (!list) {
+    map.set(id, [url]);
+    return;
+  }
+  if (!list.includes(url)) list.push(url);
+}
+
+type BlobHeadBudget = {
+  used: number;
+  max: number;
+  deadlineAt: number;
+  /** Hay un 404 confirmado: reservar el final del plazo para re-subir. */
+  reserveForUpload: boolean;
+};
+
+function blobHeadAllowed(budget: BlobHeadBudget): boolean {
+  if (budget.used >= budget.max || Date.now() >= budget.deadlineAt) return false;
+  if (
+    budget.reserveForUpload &&
+    Number.isFinite(budget.deadlineAt) &&
+    budget.deadlineAt - Date.now() < BLOB_HEAD_DEADLINE_MARGIN_MS
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * HEAD de cada URL de galería. Un 404/410/403 (blobStillExists) es un blob
+ * perdido. Timeout u otro error cuentan como presente: no se toca la fila.
+ */
+async function galleryBlobsMissing(
+  urls: string[],
+  budget: BlobHeadBudget,
+  known: Map<string, boolean>,
+): Promise<{ missing: Set<string>; complete: boolean; checked: number }> {
+  const missing = new Set<string>();
+  let checked = 0;
+  for (const url of urls) {
+    if (!blobHeadAllowed(budget)) return { missing, complete: false, checked };
+    checked += 1;
+    let exists = known.get(url);
+    if (exists === undefined) {
+      budget.used += 1;
+      exists = await blobStillExists(url);
+      known.set(url, exists);
+    }
+    if (!exists) {
+      missing.add(url);
+      budget.reserveForUpload = true;
+    }
+  }
+  return { missing, complete: true, checked };
+}
+
 type FolderWork = {
   folderId: string;
   folderName: string;
   folderModifiedTime?: string;
   contentHash: string;
   images: DriveImageRef[];
+  /** URL 404 → archivo de Drive que sigue en la carpeta. */
+  brokenUrlsByDriveId: Map<string, string[]>;
 };
 
 type FolderCandidate = {
@@ -233,6 +346,9 @@ type FolderCandidate = {
   folders: FolderWork[];
   /** Fotos de todas las carpetas de la patente, sin repetir id de Drive. */
   images: DriveImageRef[];
+  brokenUrlsByDriveId: Map<string, string[]>;
+  /** Si la portada era el blob roto, se re-sube ese mismo archivo. */
+  brokenCoverDriveId?: string;
 };
 
 function stampDriveFolder(
@@ -268,6 +384,8 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   photosPerVehicle?: number;
   /** Epoch ms. Al pasarlo, la corrida deja el resto para la siguiente. */
   deadlineAt?: number;
+  /** HEAD de blobs de galería por corrida. Por defecto MAX_BLOB_HEAD_CHECKS_PER_RUN. */
+  maxBlobHeadChecks?: number;
   folderId?: string;
   tenantSlug?: string;
 }): Promise<SyncResult> {
@@ -299,6 +417,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const maxNewPhotos = opts?.maxNewPhotos ?? MAX_NEW_PHOTOS_PER_RUN;
   const photosPerVehicle = opts?.photosPerVehicle ?? PHOTOS_PER_VEHICLE_PER_RUN;
   const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY;
+  const maxBlobHeadChecks = opts?.maxBlobHeadChecks ?? MAX_BLOB_HEAD_CHECKS_PER_RUN;
   const state = await loadDrivePhotosSyncState(tenantSlug);
   const errors: string[] = [];
 
@@ -355,20 +474,76 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     ...needingRefresh,
   ];
 
+  const blobBudget: BlobHeadBudget = {
+    used: 0,
+    max: maxBlobHeadChecks,
+    deadlineAt,
+    reserveForUpload: false,
+  };
+  const knownBlobs = new Map<string, boolean>();
+  const missingBySlug = new Map<string, Set<string>>();
+  const probeOrder = rotateSyncQueue(needingRefresh, state.blobCheckCursor);
+  // El sello de carpeta y los IDs ya presentes no ven un blob borrado.
+  // Se revisa la galería con HEAD, rotando la patente para no repetir siempre
+  // el mismo auto cuando el cupo se acaba.
+  if (Date.now() < deadlineAt && blobBudget.max > 0 && needingRefresh.length > 0) {
+    let cursorSet = false;
+    let lastComplete: string | null = null;
+    for (const vehicle of probeOrder) {
+      const plateKey = normalizePlateKey(vehicle.plate || "");
+      if (!blobHeadAllowed(blobBudget)) {
+        state.blobCheckCursor = plateKey;
+        state.blobCheckOffset = 0;
+        cursorSet = true;
+        break;
+      }
+      const urls = storedPhotoUrls(vehicle);
+      if (urls.length === 0) {
+        lastComplete = plateKey;
+        continue;
+      }
+      const resumeHere = state.blobCheckCursor === plateKey;
+      const start = resumeHere ? Math.min(state.blobCheckOffset || 0, urls.length) : 0;
+      const probed = await galleryBlobsMissing(urls.slice(start), blobBudget, knownBlobs);
+      if (probed.missing.size > 0) missingBySlug.set(vehicle.slug, probed.missing);
+      if (!probed.complete) {
+        state.blobCheckCursor = plateKey;
+        state.blobCheckOffset = start + probed.checked;
+        cursorSet = true;
+        break;
+      }
+      state.blobCheckOffset = 0;
+      lastComplete = plateKey;
+    }
+    if (!cursorSet && lastComplete) {
+      const keys = probeOrder.map((vehicle) => normalizePlateKey(vehicle.plate || ""));
+      const index = keys.indexOf(lastComplete);
+      if (index >= 0) {
+        state.blobCheckCursor = keys[(index + 1) % keys.length];
+        state.blobCheckOffset = 0;
+      }
+    }
+  }
+
+  const orderedQueue = [
+    ...queue.filter((vehicle) => missingBySlug.has(vehicle.slug)),
+    ...queue.filter((vehicle) => !missingBySlug.has(vehicle.slug)),
+  ];
+
   const toProcess: FolderCandidate[] = [];
   const emptyFolderHash = folderContentHash([]);
   let skippedUnchanged = 0;
   let deferredVehicles = 0;
   let folderLists = 0;
 
-  for (let i = 0; i < queue.length; i++) {
-    const vehicle = queue[i];
+  for (let i = 0; i < orderedQueue.length; i++) {
+    const vehicle = orderedQueue[i];
     const outOfBudget =
       Date.now() >= deadlineAt ||
       folderLists >= MAX_FOLDER_LISTS_PER_RUN ||
       toProcess.length >= maxVehicles;
     if (outOfBudget) {
-      deferredVehicles += queue.length - i;
+      deferredVehicles += orderedQueue.length - i;
       break;
     }
 
@@ -380,6 +555,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
     const folderWork: FolderWork[] = [];
     let skippedThisVehicle = 0;
+    let listingIncomplete = false;
+    const missingUrls = missingBySlug.get(vehicle.slug);
+    const coverDriveId = resolveStoredDriveId(vehicle.image, state);
 
     for (const folder of plateFolders) {
       const stamp = state.folders[folder.id];
@@ -388,12 +566,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         stamp?.revision === DRIVE_FOLDER_STAMP_REVISION;
       if (
         folderStampIsCurrent(folder, stamp) &&
-        (vehicle.hasRealPhotos || emptyStamp)
+        (vehicle.hasRealPhotos || emptyStamp) &&
+        (!missingUrls || missingUrls.size === 0)
       ) {
         skippedThisVehicle += 1;
         continue;
       }
       if (folderLists >= MAX_FOLDER_LISTS_PER_RUN) {
+        listingIncomplete = true;
         deferredVehicles += 1;
         break;
       }
@@ -417,8 +597,22 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
       const contentHash = folderContentHash(images);
       adoptExistingPhotosIntoFileCache(vehicle, images, state, key);
+      const presentIds = new Set(images.map((img) => img.id));
+      const brokenUrlsByDriveId = new Map<string, string[]>();
+      for (const url of missingUrls || []) {
+        const id = resolveStoredDriveId(url, state);
+        if (!id || !presentIds.has(id)) continue;
+        appendBrokenUrl(brokenUrlsByDriveId, id, url);
+      }
+      for (const id of brokenUrlsByDriveId.keys()) {
+        console.warn(
+          `[DriveOAuthSync] Blob 404 en ${vehicle.slug} (${id}); el archivo sigue en Drive y se vuelve a subir.`,
+        );
+        delete state.files[id];
+      }
       const hashUnchanged =
         vehicle.hasRealPhotos === true &&
+        brokenUrlsByDriveId.size === 0 &&
         stamp?.revision === DRIVE_FOLDER_STAMP_REVISION &&
         stamp?.contentHash === contentHash &&
         images.every((img) => !driveFileNeedsSync(img, state.files[img.id]));
@@ -433,23 +627,34 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         continue;
       }
 
-      const staleChecks = await Promise.all(
-        images.map(async (img) => {
-          const cachedUrl = state.files[img.id]?.blobUrl;
-          if (!cachedUrl) return false;
-          return !(await blobStillExists(cachedUrl));
-        }),
-      );
-      images.forEach((img, iBlob) => {
-        if (staleChecks[iBlob]) {
+      for (const img of images) {
+        const cachedUrl = state.files[img.id]?.blobUrl;
+        if (!cachedUrl || brokenUrlsByDriveId.has(img.id)) continue;
+        const known = knownBlobs.get(cachedUrl);
+        if (known === false) {
           console.warn(
             `[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`,
           );
+          appendBrokenUrl(brokenUrlsByDriveId, img.id, cachedUrl);
+          delete state.files[img.id];
+          continue;
+        }
+        if (known === true || !blobHeadAllowed(blobBudget)) continue;
+        blobBudget.used += 1;
+        const exists = await blobStillExists(cachedUrl);
+        knownBlobs.set(cachedUrl, exists);
+        if (!exists) {
+          blobBudget.reserveForUpload = true;
+          console.warn(
+            `[DriveOAuthSync] Blob perdido para ${vehicle.slug} (${img.id}); se vuelve a subir.`,
+          );
+          appendBrokenUrl(brokenUrlsByDriveId, img.id, cachedUrl);
           delete state.files[img.id];
         }
-      });
+      }
       const needsWork =
         !vehicle.hasRealPhotos ||
+        brokenUrlsByDriveId.size > 0 ||
         images.some((img) => driveFileNeedsSync(img, state.files[img.id]));
       if (!needsWork) {
         stampDriveFolder(state, folder.id, folder.modifiedTime, contentHash);
@@ -463,7 +668,23 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         folderModifiedTime: folder.modifiedTime,
         contentHash,
         images,
+        brokenUrlsByDriveId,
       });
+    }
+
+    if (missingUrls && missingUrls.size > 0 && !listingIncomplete) {
+      const matched = new Set<string>();
+      for (const folder of folderWork) {
+        for (const urls of folder.brokenUrlsByDriveId.values()) {
+          for (const url of urls) matched.add(url);
+        }
+      }
+      const unmatched = [...missingUrls].filter((url) => !matched.has(url));
+      if (unmatched.length > 0) {
+        console.warn(
+          `[DriveOAuthSync] ${vehicle.plate || vehicle.slug}: ${unmatched.length} blob(s) 404 sin archivo en Drive; se conservan las filas.`,
+        );
+      }
     }
 
     if (skippedThisVehicle > 0 && folderWork.length === 0) {
@@ -481,10 +702,23 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         images.push(image);
       }
     }
+    const brokenUrlsByDriveId = new Map<string, string[]>();
+    for (const folder of folderWork) {
+      for (const [id, urls] of folder.brokenUrlsByDriveId) {
+        for (const url of urls) appendBrokenUrl(brokenUrlsByDriveId, id, url);
+      }
+    }
     console.log(
       `[DriveOAuthSync] Match ${vehicle.plate || key} → ${folderWork.map((folder) => folder.folderName).join(" + ")} (${images.length} fotos)`,
     );
-    toProcess.push({ vehicle, folders: folderWork, images });
+    toProcess.push({
+      vehicle,
+      folders: folderWork,
+      images,
+      brokenUrlsByDriveId,
+      brokenCoverDriveId:
+        coverDriveId && brokenUrlsByDriveId.has(coverDriveId) ? coverDriveId : undefined,
+    });
   }
 
   const matchedInStock = prioritized.filter((v) =>
@@ -508,6 +742,8 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   }
 
   let newPhotos = 0;
+  let repairedPhotos = 0;
+  const replacedBlobUrls = new Set<string>();
   let synced = 0;
   let coverLockedUpdated = 0;
   let budgetExhausted = Date.now() >= deadlineAt;
@@ -526,11 +762,20 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }
 
     const galleryUrls: string[] = [];
+    const replacements = new Map<string, string>();
     let uploadedThisVehicle = 0;
     let hitSlice = false;
     let attemptedDownload = false;
+    const uploadOrder = [...item.images];
+    if (item.brokenCoverDriveId) {
+      uploadOrder.sort((a, b) => {
+        if (a.id === item.brokenCoverDriveId) return -1;
+        if (b.id === item.brokenCoverDriveId) return 1;
+        return 0;
+      });
+    }
 
-    for (const image of item.images) {
+    for (const image of uploadOrder) {
       const cached = state.files[image.id];
       if (!driveFileNeedsSync(image, cached) && cached?.blobUrl) {
         galleryUrls.push(cached.blobUrl);
@@ -563,6 +808,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         galleryUrls.push(stored.url);
         uploadedThisVehicle += 1;
         newPhotos += 1;
+        const brokenUrls = item.brokenUrlsByDriveId.get(image.id);
+        if (brokenUrls?.length) {
+          repairedPhotos += 1;
+          for (const oldUrl of brokenUrls) {
+            replacements.set(oldUrl, stored.url);
+            replacedBlobUrls.add(oldUrl);
+          }
+        }
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         errors.push(`Falló foto ${image.name}: ${detail}`);
@@ -575,7 +828,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }
 
     const mergedGallery = mergeGalleryKeepingExisting(
-      [...(item.vehicle.gallery || []), item.vehicle.image],
+      [...(item.vehicle.gallery || []), item.vehicle.image].map(
+        (url) => (url && replacements.get(url)) || url,
+      ),
       galleryUrls,
     );
     const everyDriveFileRepresented = item.images.every(
@@ -600,9 +855,11 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     }
 
     const locked = item.vehicle.coverLocked === true;
+    const coverSource =
+      (item.vehicle.image && replacements.get(item.vehicle.image)) || item.vehicle.image;
     const cover = locked
-      ? item.vehicle.image
-      : resolveCoverFromGallery(item.vehicle.image, mergedGallery);
+      ? coverSource
+      : resolveCoverFromGallery(coverSource, mergedGallery);
     const orderedGallery = locked
       ? mergedGallery
       : orderGalleryWithCover(cover, mergedGallery);
@@ -610,7 +867,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       ...item.vehicle,
       hasRealPhotos: true,
       gallery: orderedGallery,
-      image: locked ? item.vehicle.image : cover || orderedGallery[0],
+      image: locked ? coverSource : cover || orderedGallery[0],
     };
     await saveVehicle(vehicle, { tenantSlug });
     synced += 1;
@@ -638,6 +895,21 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     console.log(
       `[DriveOAuthSync] ${item.folders.map((folder) => folder.folderName).join(" + ")} → ${item.vehicle.slug}: ${orderedGallery.length}/${item.images.length} fotos (${uploadedThisVehicle} nuevas)`,
     );
+  }
+
+  const stuck = probeOrder.find((vehicle) => {
+    const missing = missingBySlug.get(vehicle.slug);
+    if (!missing || missing.size === 0) return false;
+    const item = toProcess.find((candidate) => candidate.vehicle.slug === vehicle.slug);
+    if (!item) return true;
+    const repairable: string[] = [];
+    for (const urls of item.brokenUrlsByDriveId.values()) repairable.push(...urls);
+    if (repairable.length === 0) return false;
+    return repairable.some((url) => !replacedBlobUrls.has(url));
+  });
+  if (stuck) {
+    state.blobCheckCursor = normalizePlateKey(stuck.plate || "");
+    state.blobCheckOffset = 0;
   }
 
   if (lastZeroAttempt && zeroPhotoKeys.length > 1) {
@@ -668,13 +940,15 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     totalFolders: folders.length,
     syncedVehicles: synced,
     newPhotosDownloaded: newPhotos,
+    repairedPhotos,
     skippedUnchanged,
     skippedCoverLocked: 0,
     deferredVehicles,
     errors,
     message:
-      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas, ` +
-      `${skippedUnchanged} carpetas sin cambios, ${coverLockedUpdated} con portada fija conservada` +
+      `Drive OAuth→Blob [${tenantSlug}]: ${synced} vehículos actualizados, ${newPhotos} fotos nuevas` +
+      (repairedPhotos > 0 ? ` (${repairedPhotos} blobs 404 re-subidos)` : "") +
+      `, ${skippedUnchanged} carpetas sin cambios, ${coverLockedUpdated} con portada fija conservada` +
       ` (${folders.length} carpetas Drive, ${matchedInStock} con match de patente en stock).` +
       pendingNote,
     vehicles: updatedList,
