@@ -25,17 +25,20 @@ export default function VehicleViewer({
   spinFrames = [],
   spinHiFrames,
   spinFront,
+  spinSprite,
 }: {
   gallery: string[];
   name: string;
   spinFrames?: string[];
   spinHiFrames?: string[];
   spinFront?: number;
+  spinSprite?: { src: string; cols: number; w: number; h: number };
 }) {
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const photos = useMemo(() => gallery.filter((src) => !failed.has(src)), [gallery, failed]);
   const [selected, setSelected] = useState(0);
-  const hasSpin = spinFrames.length > 0;
+  const [spinBroken, setSpinBroken] = useState(false);
+  const hasSpin = spinFrames.length > 0 && !spinBroken;
   const [tab, setTab] = useState<Tab>("fotos");
 
   const markFailed = useCallback((src: string) => {
@@ -81,6 +84,11 @@ export default function VehicleViewer({
             frames={spinFrames}
             hiFrames={spinHiFrames}
             frontIndex={spinFront}
+            sprite={spinSprite}
+            onFatal={() => {
+              setSpinBroken(true);
+              setTab("fotos");
+            }}
             className="absolute inset-0 h-full w-full"
             autoPlay={false}
           />
@@ -141,7 +149,7 @@ export default function VehicleViewer({
               role="listitem"
               onClick={() => setSelected(i)}
               aria-label={`Ver foto ${i + 1}`}
-              className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border transition sm:h-16 sm:w-24 ${
+              className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border bg-white/[0.06] transition sm:h-16 sm:w-24 ${
                 i === idx ? "border-brand-400 ring-1 ring-brand-400/40" : "border-white/10 opacity-70 hover:opacity-100"
               }`}
             >
@@ -149,7 +157,7 @@ export default function VehicleViewer({
               <img
                 src={asset(src)}
                 alt=""
-                loading="lazy"
+                loading={i < 8 ? "eager" : "lazy"}
                 decoding="async"
                 width={96}
                 height={64}

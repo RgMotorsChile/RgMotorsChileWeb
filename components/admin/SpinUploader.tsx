@@ -31,7 +31,7 @@ export default function SpinUploader() {
       })
       .catch(console.error);
   }, []);
-  const [studio, setStudio] = useState(true);
+  const studio = false; // el fondo siempre es el patio real de RG Motors
 
   const [status, setStatus] = useState<Status>("idle");
   const [pct, setPct] = useState(0);
@@ -122,10 +122,23 @@ export default function SpinUploader() {
         <h2 className="font-semibold">Generar giro 360° desde un video</h2>
         <p className="mt-1 text-sm text-white/50">
           Sube un video dando una vuelta completa al auto. El sistema extrae los
-          fotogramas y los deja en calidad de estudio automáticamente.
+          fotogramas, mantiene el fondo real del patio y desenfoca la patente.
         </p>
 
         {/* Vehículo */}
+        {/* Guía de grabación */}
+        <details open className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/75">
+          <summary className="cursor-pointer font-semibold text-white">Cómo grabar el video 360° (leer antes)</summary>
+          <ul className="mt-3 list-disc space-y-1.5 pl-5">
+            <li>Grabar siempre en el patio de RG Motors (Av. Cardonal). El fondo real del patio se mantiene.</li>
+            <li>Auto limpio, luz pareja (día nublado o sombra completa); sin personas caminando detrás.</li>
+            <li>Celular en horizontal, 4K o 1080p a 60 fps. Sin zoom.</li>
+            <li>Altura de los focos y a unos 3 m del auto, siempre a la misma distancia.</li>
+            <li>Una vuelta completa, lenta y pareja: 40–60 segundos, terminando donde empezaste.</li>
+            <li>El auto entero dentro del cuadro en todo momento (no acercarse en los costados).</li>
+          </ul>
+        </details>
+
         <label className="mt-5 block text-sm font-medium text-white/70">Vehículo</label>
         <select
           value={slug}
@@ -179,20 +192,6 @@ export default function SpinUploader() {
           onChange={(e) => setFrames(parseInt(e.target.value, 10))}
           className="mt-1 w-full accent-brand-500"
         />
-
-        {/* Estudio */}
-        <label className="mt-4 flex items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={studio}
-            disabled={busy}
-            onChange={(e) => setStudio(e.target.checked)}
-            className="h-4 w-4 accent-brand-500"
-          />
-          <span className="text-white/80">
-            Modo estudio (recorta el fondo con IA y monta el auto sobre showroom oscuro)
-          </span>
-        </label>
 
         <button
           onClick={handleUpload}

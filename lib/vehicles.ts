@@ -8,6 +8,8 @@ export interface VehicleSpin {
   hiPattern?: string;
   /** Índice (0-based) de la foto que muestra el frente del auto. */
   front?: number;
+  /** Hoja de miniaturas para carga progresiva. */
+  sprite?: { src: string; cols: number; w: number; h: number };
 }
 
 export interface Vehicle {

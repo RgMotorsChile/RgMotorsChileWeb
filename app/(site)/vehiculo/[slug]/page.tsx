@@ -114,6 +114,9 @@ export default async function VehiclePage({
           <VehicleViewer gallery={gallery} name={`${v.brand} ${v.model} ${v.year}`} spinFrames={spinFrames}
             spinHiFrames={spinHiFrames}
             spinFront={v.spin?.front}
+            spinSprite={
+              spinFrames.length && v.spin?.sprite ? { ...v.spin.sprite, src: asset(v.spin.sprite.src) } : undefined
+            }
           />
         </div>
 

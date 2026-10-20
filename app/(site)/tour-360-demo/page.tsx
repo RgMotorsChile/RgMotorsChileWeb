@@ -11,17 +11,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const COUNT = 72;
+const COUNT = 120;
 const n = (i: number) => String(i + 1).padStart(3, "0");
-const frames = Array.from({ length: COUNT }, (_, i) => asset(`/cars/spin/demo-hilux-dx-roja/${n(i)}.webp`));
+const frames = Array.from({ length: COUNT }, (_, i) => asset(`/cars/spin/rhcl44/${n(i)}.webp`));
 const hiFrames = Array.from({ length: COUNT }, (_, i) =>
-  asset(`/cars/spin/demo-hilux-dx-roja/hi/${n(i)}.webp`),
+  asset(`/cars/spin/rhcl44/hi/${n(i)}.webp`),
 );
 
 export default function Tour360DemoPage() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10">
-      <h1 className="mb-4 text-2xl font-bold text-white">Tour 360° · Toyota Hilux DX (prueba)</h1>
+      <h1 className="mb-4 text-2xl font-bold text-white">Tour 360° · Toyota Hilux DX</h1>
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl sm:aspect-[16/10]">
         <PhotoSpin360 frames={frames} hiFrames={hiFrames} frontIndex={0} className="absolute inset-0 h-full w-full" />
       </div>
