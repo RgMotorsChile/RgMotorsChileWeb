@@ -83,4 +83,27 @@ describe("extractSheetVehicles", () => {
       "TCGB98",
     ]);
   });
+
+  it("bajo SALGADO entran los CONSIGNADOS PATIO RG, no los de patio Salgado ni reservados/vendidos/sin precio", () => {
+    const loc = (plate: string, place: string, extra: unknown[] = []) =>
+      car(plate, ["Due�o", "", "", place, ...extra]);
+    const rows = [
+      ["", "PATENTE", "MARCA", "MODELO"],
+      car("TRBX87", ["Due�o", "", "", "CONSIGNADOS PATIO RG"]),
+      ["", "", "", "SALGADO"],
+      car("RWYR12", ["RUDY", "", "", "SALGADO"]),
+      loc("RWXW22", "CONSIGNADOS PATIO SALGADO"),
+      loc("GHTD24", "CONSIGNADOS PATIO RG"),
+      loc("HLXB59", "consignados patio rg"),
+      loc("AAAA11", "CONSIGNADOS PATIO RG", ["vendido"]),
+      loc("BBBB22", "CONSIGNADOS PATIO RG", ["RESERVADA"]),
+      loc("CCCC33", "CONSIGNADOS PATIO RG").map((c, i) => (i === 6 || i === 7 ? "COLOCAR PRECIO" : c)),
+    ];
+    const parsed = extractSheetVehicles(rows);
+    expect(parsed.filter((r) => r.sellable).map((r) => r.plate)).toEqual([
+      "TRBX87",
+      "GHTD24",
+      "HLXB59",
+    ]);
+  });
 });

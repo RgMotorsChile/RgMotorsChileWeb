@@ -56,6 +56,18 @@ export function isExcludedInventorySection(row: unknown): boolean {
 }
 
 /**
+ * Columna de ubicaci�n (despu�s de PROVEEDOR): "CONSIGNADOS PATIO RG" marca
+ * autos a la venta en el patio RG aunque la fila quede bajo otro bloque
+ * (ej. SALGADO). "CONSIGNADOS PATIO SALGADO" no cuenta.
+ */
+export function isPatioRgConsignedRow(row: unknown): boolean {
+  if (!Array.isArray(row)) return false;
+  return row
+    .slice(10)
+    .some((cell) => foldSheetText(String(cell ?? "")) === "CONSIGNADOS PATIO RG");
+}
+
+/**
  * Solo bloquea estados claros de no-venta en celdas de precio/km
  * (ej. "FALTA FOTOS Y PRECIO"). NO usar notas de fila: "FOTOS NUEVAS" o
  * "FALTA REVISIÓN" son operativas y no deben sacar el auto de vitrina.

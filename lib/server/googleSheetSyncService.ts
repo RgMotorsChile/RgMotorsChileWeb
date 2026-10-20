@@ -6,6 +6,7 @@ import {
   guessBodyTypeFromModel,
   isBlankSheetRow,
   isExcludedInventorySection,
+  isPatioRgConsignedRow,
   isInventorySheetTab,
   isSellableSheetRow,
 } from "@/lib/server/sheetSyncGuards";
@@ -209,13 +210,16 @@ export function extractSheetVehicles(rows: unknown[][]): SheetVehicleRow[] {
       if (isExcludedInventorySection(cells)) cutAtSection = true;
       continue;
     }
-    if (cutAtSection) continue;
+    // Bajo otro bloque solo entran los consignados en patio RG.
+    const patioRg = isPatioRgConsignedRow(cells);
+    if (cutAtSection && !patioRg) continue;
 
     const rawText = cells.map((cell) => String(cell ?? "")).join(" ").toUpperCase();
     const isSold =
       rawText.includes("VENDIDO") ||
       rawText.includes("ENTREGADO") ||
-      rawText.includes("VTA");
+      rawText.includes("VTA") ||
+      (patioRg && rawText.includes("RESERVAD"));
     const { price, listPrice } = parsePrice(cells[7], cells[6]);
     const km = parseKm(cells[8]);
     const brand = cleanBrand(cells[2]);
