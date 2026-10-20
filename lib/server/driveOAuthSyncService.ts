@@ -639,7 +639,11 @@ export async function syncDrivePhotosViaOAuth(opts?: {
           delete state.files[img.id];
           continue;
         }
-        if (known === true || !blobHeadAllowed(blobBudget)) continue;
+        if (known === true) continue;
+        // Auto sin fotos (nuevo o re-creado tras salir de la planilla): el
+        // caché puede apuntar a blobs borrados al archivarlo. Se verifica
+        // siempre, aunque no quede cupo de HEAD.
+        if (vehicle.hasRealPhotos && !blobHeadAllowed(blobBudget)) continue;
         blobBudget.used += 1;
         const exists = await blobStillExists(cachedUrl);
         knownBlobs.set(cachedUrl, exists);
