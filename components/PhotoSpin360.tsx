@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 type Props = {
   frames: string[];
+  /** Mismas fotos en alta resolución: se cargan bajo demanda en pantalla completa o zoom. */
+  hiFrames?: string[];
+  /** Índice de la foto que muestra el frente; ajusta los accesos rápidos y la foto inicial. */
+  frontIndex?: number;
   /** Sensibilidad en px por frame */
   dragSensitivity?: number;
   className?: string;
@@ -19,6 +23,8 @@ const VIEW_PRESETS = [
 
 export default function PhotoSpin360({
   frames,
+  hiFrames,
+  frontIndex,
   dragSensitivity,
   className = "",
   autoPlay = false,
@@ -33,6 +39,22 @@ export default function PhotoSpin360({
   const lastYRef = useRef(0);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
   const total = frames.length;
+  const hiImgsRef = useRef<Map<number, HTMLImageElement>>(new Map());
+  const hiModeRef = useRef(false);
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartRef = useRef<number | null>(null);
+  const lastTapRef = useRef(0);
+  const toggleZoomRef = useRef<(() => void) | null>(null);
+  const hasFront = typeof frontIndex === "number" && frontIndex >= 0 && frontIndex < total;
+  const startIndex = hasFront ? frontIndex : 0;
+  const presets = hasFront
+    ? [
+        { label: "Frente", pct: (startIndex / total) % 1, icon: "🚘" },
+        { label: "Costado", pct: ((startIndex + total / 4) / total) % 1, icon: "↪️" },
+        { label: "Trasera", pct: ((startIndex + total / 2) / total) % 1, icon: "🔄" },
+        { label: "Costado", pct: ((startIndex + (3 * total) / 4) / total) % 1, icon: "↩️" },
+      ]
+    : VIEW_PRESETS;
 
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
@@ -53,7 +75,8 @@ export default function PhotoSpin360({
   const draw = useCallback(
     (i: number, zoom = isZoomed, pan = zoomPan) => {
       const canvas = canvasRef.current;
-      const img = imgsRef.current[i];
+      const hi = hiModeRef.current ? hiImgsRef.current.get(i) : undefined;
+      const img = hi && hi.complete && hi.naturalWidth ? hi : imgsRef.current[i];
       if (!canvas || !img || !img.complete || !img.naturalWidth) return;
 
       const ctx = canvas.getContext("2d", { alpha: false });
@@ -130,7 +153,7 @@ export default function PhotoSpin360({
     setReady(false);
     setLoaded(0);
     setShowHint(true);
-    const start = 0;
+    const start = startIndex;
     indexRef.current = start;
     setIndex(start);
 
@@ -206,7 +229,36 @@ export default function PhotoSpin360({
     return () => {
       cancelled = true;
     };
-  }, [frames, total, draw]);
+  }, [frames, total, draw, startIndex]);
+
+  // Alta resolución bajo demanda: solo la foto visible (y vecinas) en pantalla completa o zoom.
+  useEffect(() => {
+    hiImgsRef.current = new Map();
+  }, [hiFrames]);
+  useEffect(() => {
+    const want = !!hiFrames?.length && (isFullscreen || isZoomed);
+    hiModeRef.current = want;
+    if (!want || dragging || isAutoRotating) {
+      draw(indexRef.current);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      for (const d of [0, 1, -1]) {
+        const i = (((index + d) % total) + total) % total;
+        const src = hiFrames?.[i];
+        if (!src || hiImgsRef.current.has(i)) continue;
+        const img = new Image();
+        img.decoding = "async";
+        img.onload = () => {
+          if (indexRef.current === i) draw(i);
+        };
+        img.src = src;
+        hiImgsRef.current.set(i, img);
+      }
+      draw(indexRef.current);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [hiFrames, isFullscreen, isZoomed, dragging, isAutoRotating, index, total, draw]);
 
   // Hint de arrastre desaparece a los 4s
   useEffect(() => {
@@ -278,6 +330,20 @@ export default function PhotoSpin360({
   // Manejo de puntero (Mouse / Touch)
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointersRef.current.size === 2) {
+        const [a, b] = [...pointersRef.current.values()];
+        pinchStartRef.current = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+        draggingRef.current = false;
+        return;
+      }
+      const now = performance.now();
+      if (e.pointerType === "touch" && now - lastTapRef.current < 280) {
+        lastTapRef.current = 0;
+        toggleZoomRef.current?.();
+        return;
+      }
+      lastTapRef.current = now;
       stopInertia();
       setIsAutoRotating(false);
       setShowHint(false);
@@ -295,6 +361,18 @@ export default function PhotoSpin360({
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (pointersRef.current.has(e.pointerId)) {
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+      if (pointersRef.current.size === 2 && pinchStartRef.current) {
+        const [a, b] = [...pointersRef.current.values()];
+        const ratio = Math.hypot(a!.x - b!.x, a!.y - b!.y) / pinchStartRef.current;
+        if ((ratio > 1.15 && !isZoomed) || (ratio < 0.87 && isZoomed)) {
+          pinchStartRef.current = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+          toggleZoomRef.current?.();
+        }
+        return;
+      }
       if (!draggingRef.current) return;
       const now = performance.now();
       const dt = Math.max(1, now - lastTimeRef.current);
@@ -342,6 +420,8 @@ export default function PhotoSpin360({
 
   const endDrag = useCallback(
     (e: React.PointerEvent) => {
+      pointersRef.current.delete(e.pointerId);
+      if (pointersRef.current.size < 2) pinchStartRef.current = null;
       if (!draggingRef.current) return;
       draggingRef.current = false;
       setDragging(false);
@@ -402,6 +482,24 @@ export default function PhotoSpin360({
       return next;
     });
   }, [draw]);
+  useEffect(() => {
+    toggleZoomRef.current = toggleZoom;
+  }, [toggleZoom]);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        stopInertia();
+        setIsAutoRotating(false);
+        setShowHint(false);
+        setFrame(indexRef.current + (e.key === "ArrowRight" ? 1 : -1));
+      } else if (e.key === "+" || e.key === "-") {
+        if ((e.key === "+") !== isZoomed) toggleZoom();
+      }
+    },
+    [setFrame, stopInertia, isZoomed, toggleZoom]
+  );
 
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -410,12 +508,16 @@ export default function PhotoSpin360({
   }, []);
 
   const pct = total ? Math.round((loaded / total) * 100) : 0;
-  const angle = total ? Math.round((index / total) * 360) : 0;
+  const angle = total ? Math.round(((((index - startIndex) % total) + total) % total / total) * 360) : 0;
 
   return (
     <div
       ref={wrapRef}
-      className={`relative select-none overflow-hidden rounded-3xl border border-white/15 bg-black shadow-2xl no-select group ${className}`}
+      tabIndex={0}
+      role="img"
+      aria-label="Vista 360° del vehículo: arrastra o usa las flechas para girar"
+      onKeyDown={onKeyDown}
+      className={`relative select-none overflow-hidden rounded-3xl outline-none focus-visible:ring-2 focus-visible:ring-brand-400 border border-white/15 bg-black shadow-2xl no-select group ${className}`}
     >
       <canvas
         ref={canvasRef}
@@ -497,9 +599,9 @@ export default function PhotoSpin360({
       {/* Preset View Angles (Quick-Jump Chips) */}
       {ready && !isZoomed && (
         <div className="pointer-events-auto absolute top-14 left-4 z-10 hidden sm:flex flex-wrap gap-1.5">
-          {VIEW_PRESETS.map((vp) => (
+          {presets.map((vp, i) => (
             <button
-              key={vp.label}
+              key={`${vp.label}-${i}`}
               onClick={() => animateToRatio(vp.pct)}
               className="flex items-center gap-1 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur-md transition hover:border-brand-400/50 hover:bg-brand-500/20 hover:text-white"
             >

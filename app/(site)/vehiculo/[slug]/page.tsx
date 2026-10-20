@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import { formatCLP, getVehicle, spinFramesOf, type Vehicle } from "@/lib/vehicles";
+import { formatCLP, getVehicle, spinFramesOf, spinHiFramesOf, type Vehicle } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getSettings } from "@/lib/server/settingsStore";
 import { verifiedGallery, withVerifiedCover } from "@/lib/server/verifyPhotos";
@@ -79,6 +79,7 @@ export default async function VehiclePage({
     verifiedGallery(v.image, v.gallery),
   ]);
   const spinFrames = settings?.preferences?.showSpin360 ? spinFramesOf(v).map((f) => asset(f)) : [];
+  const spinHiFrames = spinFrames.length ? spinHiFramesOf(v).map((f) => asset(f)) : [];
   // Similares: solo con portada viva (antes podía salir un blob 404 en la miniatura).
   const similar = (
     await Promise.all(
@@ -110,7 +111,10 @@ export default async function VehiclePage({
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:gap-10">
         <div className="min-w-0">
-          <VehicleViewer gallery={gallery} name={`${v.brand} ${v.model} ${v.year}`} spinFrames={spinFrames} />
+          <VehicleViewer gallery={gallery} name={`${v.brand} ${v.model} ${v.year}`} spinFrames={spinFrames}
+            spinHiFrames={spinHiFrames}
+            spinFront={v.spin?.front}
+          />
         </div>
 
         <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
