@@ -59,6 +59,7 @@ export default function VehicleEditorModal({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [vehiclePhotos, setVehiclePhotos] = useState<string[]>([]);
+  const [replacingUrl, setReplacingUrl] = useState<string | null>(null);
   const [isLoadingPhotos, setIsLoadingPhotos] = useState<boolean>(false);
   const [showManualUrlInput, setShowManualUrlInput] = useState<boolean>(false);
 
@@ -154,6 +155,33 @@ export default function VehicleEditorModal({
 
   const handleChange = (field: keyof Vehicle, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleReplacePhoto = async (oldUrl: string, file: File | undefined) => {
+    if (!file || !vehicle?.slug) return;
+    setReplacingUrl(oldUrl);
+    setErrorMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("slug", vehicle.slug);
+      fd.append("oldUrl", oldUrl);
+      fd.append("file", file);
+      const res = await fetch("/api/photos/replace", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.newUrl) throw new Error(data.error || "No se pudo reemplazar la foto.");
+      const newUrl = String(data.newUrl);
+      const swap = (u: string) => (mediaUrlsEqual(u, oldUrl) ? newUrl : u);
+      setVehiclePhotos((prev) => prev.map(swap));
+      setFormData((prev) => ({
+        ...prev,
+        image: prev.image && mediaUrlsEqual(prev.image, oldUrl) ? newUrl : prev.image,
+        gallery: (prev.gallery || []).map(swap),
+      }));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Error al reemplazar la foto.");
+    } finally {
+      setReplacingUrl(null);
+    }
   };
 
   const handleAddHighlight = () => {
@@ -617,6 +645,28 @@ export default function VehicleEditorModal({
                               </span>
                             </div>
                           )}
+
+                          {/* Reemplazar esta foto (misma posición y portada) */}
+                          {isEditing && vehicle?.slug ? (
+                            <label
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute bottom-7 right-2 z-10 cursor-pointer rounded-lg bg-black/70 px-2 py-1 text-[10px] font-bold text-white border border-white/20 hover:bg-brand-500"
+                              title="Subir un archivo que reemplaza esta foto"
+                            >
+                              {replacingUrl === photoUrl ? "Subiendo…" : "Reemplazar foto"}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+                                className="hidden"
+                                disabled={replacingUrl !== null}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  e.target.value = "";
+                                  void handleReplacePhoto(photoUrl, f);
+                                }}
+                              />
+                            </label>
+                          ) : null}
 
                           {/* Pie con nombre de foto */}
                           <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 text-[10px] text-white/80 truncate font-mono">

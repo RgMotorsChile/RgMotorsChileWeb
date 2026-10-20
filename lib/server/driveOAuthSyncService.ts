@@ -1,4 +1,5 @@
 import type { Vehicle } from "@/lib/vehicles";
+import { stripReplacedSuffix } from "./photoReplace";
 import {
   orderGalleryWithCover,
   resolveCoverFromGallery,
@@ -189,8 +190,29 @@ function fileIdFromStoredUrl(url: string): string | null {
   const path = url.split("?")[0];
   const base = path.split("/").pop() || "";
   const dot = base.lastIndexOf(".");
-  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const stem = stripReplacedSuffix(dot > 0 ? base.slice(0, dot) : base);
   return stem || null;
+}
+
+/**
+ * Tras "Reemplazar foto" en el admin: el archivo de Drive de esa foto apunta
+ * al blob nuevo y queda marcado, así el sync no restaura la original.
+ */
+export async function markDrivePhotoReplaced(
+  oldUrl: string,
+  newUrl: string,
+  tenantSlug = "rg-motors",
+): Promise<boolean> {
+  const state = await loadDrivePhotosSyncState(tenantSlug);
+  const id = resolveStoredDriveId(oldUrl, state) || fileIdFromStoredUrl(oldUrl);
+  if (!id) return false;
+  state.files[id] = {
+    ...(state.files[id] || {}),
+    blobUrl: newUrl,
+    manualReplacedAt: new Date().toISOString(),
+  };
+  await saveDrivePhotosSyncState(state, tenantSlug);
+  return true;
 }
 
 /**

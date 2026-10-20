@@ -65,6 +65,8 @@ export type CachedDriveFile = {
   modifiedTime?: string;
   blobUrl?: string;
   plate?: string;
+  /** Reemplazada a mano desde el admin: el sync no la vuelve a bajar. */
+  manualReplacedAt?: string;
 };
 
 /** true si el archivo de Drive no está en Blob o cambió según modifiedTime. */
@@ -73,6 +75,7 @@ export function driveFileNeedsSync(
   cached?: CachedDriveFile | null,
 ): boolean {
   if (!cached?.blobUrl) return true;
+  if (cached.manualReplacedAt) return false;
   if (!file.modifiedTime || !cached.modifiedTime) return true;
   return file.modifiedTime > cached.modifiedTime;
 }
