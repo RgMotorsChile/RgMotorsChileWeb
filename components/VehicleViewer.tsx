@@ -23,10 +23,14 @@ export default function VehicleViewer({
   gallery,
   name,
   spinFrames = [],
+  spinHiFrames,
+  spinFront,
 }: {
   gallery: string[];
   name: string;
   spinFrames?: string[];
+  spinHiFrames?: string[];
+  spinFront?: number;
 }) {
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const photos = useMemo(() => gallery.filter((src) => !failed.has(src)), [gallery, failed]);
@@ -73,7 +77,13 @@ export default function VehicleViewer({
 
       <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#080b11] sm:aspect-[16/10] sm:rounded-3xl">
         {tab === "exterior" && hasSpin ? (
-          <PhotoSpin360 frames={spinFrames} className="absolute inset-0 h-full w-full" autoPlay={false} />
+          <PhotoSpin360
+            frames={spinFrames}
+            hiFrames={spinHiFrames}
+            frontIndex={spinFront}
+            className="absolute inset-0 h-full w-full"
+            autoPlay={false}
+          />
         ) : current ? (
           <>
             <Image
