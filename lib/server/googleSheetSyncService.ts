@@ -1,5 +1,5 @@
 import { getVehicles, replaceAllVehicles } from "./vehiclesStore";
-import { archiveSoldVehicle } from "./soldVehiclesStore";
+import { archiveSoldVehicle, getSoldVehicles } from "./soldVehiclesStore";
 import { Vehicle } from "@/lib/vehicles";
 import {
   evaluateSheetWipeGuard,
@@ -418,6 +418,13 @@ export async function syncFromLiveGoogleSheet(
   let soldCount = 0;
 
   const updatedActiveList: Vehicle[] = [];
+  // Autos que la sync sacó por error y vuelven: recuperar ficha del historial.
+  const soldByPlate = new Map<string, Awaited<ReturnType<typeof getSoldVehicles>>[number]>();
+  for (const r of await getSoldVehicles().catch(() => [])) {
+    const p = cleanPlate(r.plate);
+    if (p && !soldByPlate.has(p)) soldByPlate.set(p, r);
+  }
+  const known = (v?: string) => (v && v !== "Por confirmar" ? v : undefined);
 
   for (const item of sheetVehicles) {
     // If marked as sold directly in sheet
@@ -495,6 +502,13 @@ export async function syncFromLiveGoogleSheet(
           "Financiamiento y retoma de vehículos en parte de pago",
         ],
       };
+      const prev = soldByPlate.get(item.plate);
+      if (prev) {
+        newV.fuel = known(prev.fuel) || newV.fuel;
+        newV.transmission = known(prev.transmission) || newV.transmission;
+        newV.bodyType = known(prev.bodyType) || newV.bodyType;
+        if (prev.version) newV.version = prev.version;
+      }
       updatedActiveList.push(newV);
       newCount++;
     }
