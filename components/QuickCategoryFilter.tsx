@@ -1,6 +1,6 @@
 "use client";
 
-export type CategoryPill = "todos" | "hibridos" | "suv" | "sedan" | "camioneta" | "bajo-km";
+export type CategoryPill = "todos" | "hibridos" | "suv" | "sedan" | "camioneta";
 
 interface QuickCategoryFilterProps {
   activeCategory: CategoryPill;
@@ -19,7 +19,6 @@ export default function QuickCategoryFilter({
     { id: "suv", label: "SUVs & Crossovers", icon: "🏔️" },
     { id: "sedan", label: "Sedanes", icon: "💼" },
     { id: "camioneta", label: "Camionetas", icon: "🛻" },
-    { id: "bajo-km", label: "< 30.000 km", icon: "🏆" },
   ];
 
   return (

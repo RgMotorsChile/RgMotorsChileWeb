@@ -133,7 +133,6 @@ export default function ReserveFlow({ vehicle: v }: { vehicle: Vehicle }) {
           <p className="mt-2 text-2xl font-extrabold text-brand-300">{formatCLP(v.price)}</p>
         </div>
         <div className="space-y-1.5 border-t border-white/10 pt-3 text-xs text-white/60">
-          <p>✓ {v.km.toLocaleString("es-CL")} km</p>
           <p>
             ✓ {v.fuel} · Transmisión {v.transmission}
           </p>

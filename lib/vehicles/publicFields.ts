@@ -9,7 +9,6 @@ export type VehicleCardDTO = Pick<
   | "version"
   | "year"
   | "price"
-  | "km"
   | "fuel"
   | "transmission"
   | "bodyType"
@@ -63,6 +62,8 @@ export function stripPlateForPublic<T extends HiddenFromPublic>(
     ownersCount: _ownersCount,
     ...rest
   } = vehicle;
+  // Kilometraje: nunca se muestra en el sitio público (sigue en BD y admin).
+  delete (rest as { km?: number }).km;
   return rest;
 }
 
@@ -74,7 +75,6 @@ export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
     version: v.version,
     year: v.year,
     price: v.price,
-    km: v.km,
     fuel: v.fuel,
     transmission: v.transmission,
     bodyType: v.bodyType,

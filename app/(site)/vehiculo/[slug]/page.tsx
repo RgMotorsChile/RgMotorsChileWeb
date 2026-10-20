@@ -35,11 +35,11 @@ export async function generateMetadata({
 
   return {
     title: `${v.brand} ${v.model} ${v.year} — ${formatCLP(v.price)} | RG Motors`,
-    description: `${v.brand} ${v.model} ${v.version} año ${v.year} con ${v.km.toLocaleString("es-CL")} km en Puerto Montt. Inspección de 150 puntos y fotografías reales.`,
+    description: `${v.brand} ${v.model} ${v.version} año ${v.year} en Puerto Montt. Inspección de 150 puntos y fotografías reales.`,
     alternates: { canonical: `https://www.rgmotorschile.cl/vehiculo/${v.slug}` },
     openGraph: {
       title: `${v.brand} ${v.model} ${v.year} | RG Motors`,
-      description: `Precio: ${formatCLP(v.price)} · ${v.km.toLocaleString("es-CL")} km · ${v.fuel} · ${v.transmission}`,
+      description: `Precio: ${formatCLP(v.price)} · ${v.fuel} · ${v.transmission}`,
       images: [cover ? asset(cover) : "/og-image.png"],
     },
   };
@@ -54,7 +54,6 @@ function known(value: string | number | undefined | null): value is string | num
 function keySpecs(v: Vehicle): { label: string; value: string }[] {
   const rows: Array<[string, string | number | undefined]> = [
     ["Año", v.year],
-    ["Kilometraje", `${v.km.toLocaleString("es-CL")} km`],
     ["Transmisión", v.transmission],
     ["Combustible", v.fuel],
     ["Tracción", v.traction],
@@ -130,7 +129,7 @@ export default async function VehiclePage({
             {v.brand} {v.model}
           </h1>
           <p className="mt-1 break-words text-sm text-white/50">
-            {v.year} · {v.km.toLocaleString("es-CL")} km · {v.location}
+            {v.year} · {v.location}
           </p>
           <p className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">{formatCLP(v.price)}</p>
 

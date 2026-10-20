@@ -176,7 +176,7 @@ const TRUST_ITEMS: TrustItem[] = [
   },
   {
     label: "Stock verificado",
-    detail: "Papeles y kilometraje auditados",
+    detail: "Papeles y antecedentes auditados",
     mark: (
       <TrustIcon>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>

@@ -314,7 +314,6 @@ function pdfSpecs(v: Vehicle) {
     { label: "Tracción", value: safeText(v.traction) },
     { label: "Combustible", value: safeText(v.fuel) },
     { label: "Puertas", value: v.doors != null ? String(v.doors) : "—" },
-    { label: "Kilometraje", value: `${(v.km ?? 0).toLocaleString("es-CL")} km` },
     { label: "Carrocería", value: safeText(v.bodyType) },
   ];
 }

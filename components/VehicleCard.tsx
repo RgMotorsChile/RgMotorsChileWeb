@@ -79,8 +79,6 @@ export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
         </div>
 
         <p className="truncate text-[11px] leading-relaxed text-white/50">
-          {card.km.toLocaleString("es-CL")} km
-          <span className="mx-1 text-white/20 sm:mx-1.5">·</span>
           {card.fuel}
           <span className="mx-1 text-white/20 sm:mx-1.5">·</span>
           {card.transmission}

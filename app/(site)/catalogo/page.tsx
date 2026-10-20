@@ -24,7 +24,7 @@ function matchesSelectedBodyType(bodyType: string, selected: string[]): boolean 
 
 const MAX_PRICE = 80000000;
 
-type Sort = "relevancia" | "precio-asc" | "precio-desc" | "km-asc" | "year-desc";
+type Sort = "relevancia" | "precio-asc" | "precio-desc" | "year-desc";
 
 export default function CatalogPage() {
   return (
@@ -101,7 +101,6 @@ function CatalogContent() {
     suv: vehicleList.filter((v) => v.bodyType === "SUV").length,
     sedan: vehicleList.filter((v) => v.bodyType === "Sedán").length,
     camioneta: vehicleList.filter((v) => isCamionetaBody(v.bodyType)).length,
-    "bajo-km": vehicleList.filter((v) => v.km <= 30000).length,
   }), [vehicleList]);
 
   const handleSelectQuickCategory = (cat: CategoryPill) => {
@@ -159,7 +158,6 @@ function CatalogContent() {
 
   const filtered = useMemo(() => {
     let result = vehicleList.filter((v) => {
-      if (activeCat === "bajo-km" && v.km > 30000) return false;
       if (brands.length && !brands.includes(v.brand)) return false;
       if (!matchesSelectedBodyType(v.bodyType, types)) return false;
       if (fuels.length && !fuels.includes(v.fuel)) return false;
@@ -180,9 +178,6 @@ function CatalogContent() {
         break;
       case "precio-desc":
         result = [...result].sort((a, b) => b.price - a.price);
-        break;
-      case "km-asc":
-        result = [...result].sort((a, b) => a.km - b.km);
         break;
       case "year-desc":
         result = [...result].sort((a, b) => b.year - a.year);
@@ -400,7 +395,6 @@ function CatalogContent() {
                 <option value="relevancia" className="bg-ink-900">Relevancia</option>
                 <option value="precio-asc" className="bg-ink-900">Precio ↑</option>
                 <option value="precio-desc" className="bg-ink-900">Precio ↓</option>
-                <option value="km-asc" className="bg-ink-900">Menor km</option>
                 <option value="year-desc" className="bg-ink-900">Más nuevos</option>
               </select>
             </div>

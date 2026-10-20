@@ -13,7 +13,7 @@ const PILLARS = [
   {
     n: "02",
     title: "Informe Autofact",
-    desc: "Dominio, kilometraje y antecedentes al día: sin deudas ni multas que te sorprendan al comprar.",
+    desc: "Dominio y antecedentes al día: sin deudas ni multas que te sorprendan al comprar.",
   },
   {
     n: "03",
