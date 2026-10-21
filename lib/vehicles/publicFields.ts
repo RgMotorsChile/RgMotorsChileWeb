@@ -88,6 +88,6 @@ export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
     traction: v.traction,
     doors: v.doors,
     galleryCount: v.gallery?.length ?? 0,
-    hasSpin: Boolean(v.spin && v.spin.count > 0),
+    hasSpin: Boolean(v.spin && v.spin.count > 0 && v.spin.status !== "pendiente"),
   };
 }

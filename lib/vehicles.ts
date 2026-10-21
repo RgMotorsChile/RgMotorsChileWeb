@@ -8,6 +8,17 @@ export interface VehicleSpin {
   hiPattern?: string;
   /** Índice (0-based) de la foto que muestra el frente del auto. */
   front?: number;
+  /** Hoja de miniaturas para carga progresiva. */
+  sprite?: { src: string; cols: number; w: number; h: number };
+  /** Resultado del control de calidad del tour: "pendiente" bloquea la publicación. */
+  status?: "ok" | "pendiente";
+  /** Motivos del control de calidad (para el admin). */
+  qa?: string[];
+}
+
+/** El tour solo se publica si existe y pasó el control de calidad. */
+export function spinPublished(v: Pick<Vehicle, "spin">): boolean {
+  return !!v.spin && v.spin.count > 0 && v.spin.status !== "pendiente";
 }
 
 export interface Vehicle {
@@ -1421,7 +1432,7 @@ export function formatKm(km: number): string {
 }
 
 export function spinFramesOf(v: Vehicle): string[] {
-  if (!v.spin || v.spin.count <= 0) return [];
+  if (!v.spin || !spinPublished(v)) return [];
   const ext = v.spin.ext ?? "jpg";
   const pattern = v.spin.pattern ?? `/cars/spin/${v.slug}/{i}.${ext}`;
   return Array.from({ length: v.spin.count }, (_, i) =>
@@ -1430,7 +1441,7 @@ export function spinFramesOf(v: Vehicle): string[] {
 }
 
 export function spinHiFramesOf(v: Vehicle): string[] {
-  if (!v.spin || v.spin.count <= 0 || !v.spin.hiPattern) return [];
+  if (!v.spin || !spinPublished(v) || !v.spin.hiPattern) return [];
   const pattern = v.spin.hiPattern;
   return Array.from({ length: v.spin.count }, (_, i) =>
     pattern.replace("{i}", String(i + 1).padStart(3, "0")),
