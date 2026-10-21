@@ -95,7 +95,7 @@ export async function processVideoToSpin(
 ): Promise<ProcessResult> {
   const { videoPath, slug, onProgress } = opts;
   const frames = Math.max(12, Math.min(48, opts.frames ?? 32));
-  const studio = opts.studio ?? true;
+  const studio = false; // el fondo siempre es el patio real de RG Motors (nunca estudio)
   const report = (stage: string, pct: number, msg?: string) =>
     onProgress?.({ stage, pct, msg });
 

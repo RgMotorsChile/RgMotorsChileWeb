@@ -32,9 +32,13 @@ const HI_CACHE = 8;
 
 type Drawable = ImageBitmap | HTMLImageElement;
 
-const TURN_WIDTHS = 1.15; // una vuelta completa = 1,15 anchos de visor arrastrados
-const AUTO_SECONDS_PER_TURN = 14;
-const FRICTION_PER_MS = 0.9965; // inercia
+const TURN_WIDTHS = 1; // una vuelta completa = un ancho de visor arrastrado (lineal)
+const AUTO_SECONDS_PER_TURN = 11; // Auto-Giro: 10–12 s por vuelta
+const INERTIA_TAU_MS = 90; // inercia exponencial: se detiene antes de 400 ms
+const INERTIA_MAX_MS = 380;
+const AUTO_EASE_MS = 700; // arranque/parada suave del Auto-Giro
+const GOTO_MS = 450; // botones de ángulo (< 600 ms, camino más corto)
+const CROSSFADE_MAX = 0.4; // mezcla con el cuadro vecino (30–50%)
 const MAX_ZOOM = 3;
 
 async function loadDrawable(src: string): Promise<Drawable | null> {
@@ -89,7 +93,7 @@ export default function PhotoSpin360({
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const panDragRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
-  const lastDrawn = useRef({ i: -1, z: 0, px: 0, py: 0, w: 0, h: 0, hi: false });
+  const lastDrawn = useRef({ i: -1, a: 0, z: 0, px: 0, py: 0, w: 0, h: 0, hi: false });
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
   const lastTapRef = useRef(0);
   const idleTimer = useRef<number | null>(null);
@@ -102,6 +106,9 @@ export default function PhotoSpin360({
   const [zoomed, setZoomed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const angleRef = useRef<HTMLSpanElement>(null);
+  const counterRef = useRef<HTMLSpanElement>(null);
+  const releaseRef = useRef(0);
+  const autoSpeedRef = useRef(0);
 
   const idx = (p: number) => ((Math.round(p) % total) + total) % total;
 
@@ -127,8 +134,14 @@ export default function PhotoSpin360({
         for (let d = 1; d < total && !img; d++) img = lowRef.current[(i + d) % total] || lowRef.current[(i - d + total) % total];
         if (!img) return;
       }
+      // crossfade de 1 cuadro hacia el vecino en la dirección del giro
+      const p = posRef.current;
+      const frac = p - Math.round(p);
+      const j = ((Math.round(p) + (frac >= 0 ? 1 : -1)) % total + total) % total;
+      const alpha = srcRect ? 0 : Math.round(Math.min(CROSSFADE_MAX, Math.abs(frac) * 2 * CROSSFADE_MAX) * 20) / 20;
+      const imgJ = alpha > 0 ? (useHi ? hiRef.current.get(j) : lowRef.current[j]) : null;
       const L = lastDrawn.current;
-      if (!force && L.i === i && L.z === z && L.px === panRef.current.x && L.py === panRef.current.y && L.w === w && L.h === h && L.hi === useHi) return;
+      if (!force && L.i === i && L.a === alpha && L.z === z && L.px === panRef.current.x && L.py === panRef.current.y && L.w === w && L.h === h && L.hi === useHi) return;
       const ctx = canvas.getContext("2d", { alpha: false });
       if (!ctx) return;
       const { w: iw, h: ih } = srcRect ? { w: srcRect[2], h: srcRect[3] } : dims(img);
@@ -149,8 +162,13 @@ export default function PhotoSpin360({
       ctx.fillRect(0, 0, cw, ch);
       if (srcRect) ctx.drawImage(img, ...srcRect, (cw - dw) / 2 + px, (ch - dh) / 2 + py, dw, dh);
       else ctx.drawImage(img, (cw - dw) / 2 + px, (ch - dh) / 2 + py, dw, dh);
+      if (imgJ && imgJ !== "loading") {
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(imgJ as Drawable, (cw - dw) / 2 + px, (ch - dh) / 2 + py, dw, dh);
+        ctx.globalAlpha = 1;
+      }
       // con sprite se vuelve a pintar cuando llegue la foto real
-      lastDrawn.current = { i: srcRect ? -1 : i, z, px: panRef.current.x, py: panRef.current.y, w, h, hi: useHi };
+      lastDrawn.current = { i: srcRect ? -1 : i, a: alpha, z, px: panRef.current.x, py: panRef.current.y, w, h, hi: useHi };
       if (canvas.dataset) canvas.dataset.frame = String(i);
       const win = window as unknown as { __spin360Draws?: number };
       win.__spin360Draws = (win.__spin360Draws || 0) + 1;
@@ -251,19 +269,23 @@ export default function PhotoSpin360({
       const an = animRef.current;
       if (an) {
         if (an.t0 < 0) an.t0 = now;
-        const k = Math.min(1, (now - an.t0) / 350);
-        const e = 1 - Math.pow(1 - k, 3);
+        const k = Math.min(1, (now - an.t0) / GOTO_MS);
+        const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
         posRef.current = an.from + (an.to - an.from) * e;
         if (k >= 1) animRef.current = null;
       } else if (ready && !dragRef.current && !pinchRef.current && !panDragRef.current) {
-        if (Math.abs(velRef.current) > 0.00002) {
+        const sinceRelease = now - releaseRef.current;
+        if (velRef.current !== 0 && sinceRelease < INERTIA_MAX_MS) {
           posRef.current += velRef.current * dt;
-          velRef.current *= Math.pow(FRICTION_PER_MS, dt);
+          velRef.current *= Math.exp(-dt / INERTIA_TAU_MS);
         } else {
           velRef.current = 0;
-          if (autoRef.current && zoomRef.current <= 1.01) {
-            posRef.current += (total / (AUTO_SECONDS_PER_TURN * 1000)) * dt;
-          }
+        }
+        // Auto-Giro con easing: la velocidad sube/baja suave hacia su objetivo
+        const target = autoRef.current && zoomRef.current <= 1.01 && velRef.current === 0 ? 1 : 0;
+        autoSpeedRef.current += (target - autoSpeedRef.current) * Math.min(1, dt / (AUTO_EASE_MS / 4));
+        if (autoSpeedRef.current > 0.001) {
+          posRef.current += autoSpeedRef.current * (total / (AUTO_SECONDS_PER_TURN * 1000)) * dt;
         }
       }
       draw();
@@ -272,6 +294,8 @@ export default function PhotoSpin360({
         uiFrame = i;
         const a = Math.round(((((i - start) % total) + total) % total) * (360 / total));
         if (angleRef.current) angleRef.current.textContent = `${String(a).padStart(3, "0")}°`;
+        if (counterRef.current) counterRef.current.textContent = `${((i - start + total) % total) + 1}/${total}`;
+        if (wrapRef.current) wrapRef.current.dataset.angle = String(a);
       }
       raf = requestAnimationFrame(loop);
     };
@@ -310,6 +334,7 @@ export default function PhotoSpin360({
   const stopAuto = useCallback(() => {
     autoRef.current = false;
     setAuto(false);
+    autoSpeedRef.current = 0;
     setInteracted(true);
     if (idleTimer.current) window.clearTimeout(idleTimer.current);
   }, []);
@@ -327,7 +352,11 @@ export default function PhotoSpin360({
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!firstShown) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* puntero sintético o ya liberado: el arrastre funciona igual */
+    }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     stopAuto();
     velRef.current = 0;
@@ -382,6 +411,7 @@ export default function PhotoSpin360({
     panDragRef.current = null;
     const d = dragRef.current;
     dragRef.current = null;
+    releaseRef.current = performance.now();
     if (!d || d.samples.length < 2) return;
     const a = d.samples[0]!;
     const b = d.samples[d.samples.length - 1]!;
@@ -419,7 +449,10 @@ export default function PhotoSpin360({
     const next = !autoRef.current;
     autoRef.current = next;
     setAuto(next);
-    if (next) setZoom(1);
+    if (next) {
+      autoSpeedRef.current = 0; // arranca con easing
+      setZoom(1);
+    }
   };
 
   const goTo = (target: number) => {
@@ -456,7 +489,7 @@ export default function PhotoSpin360({
   ];
 
   const btn =
-    "grid h-9 w-9 place-items-center rounded-full bg-black/55 text-white/90 ring-1 ring-white/15 backdrop-blur-md transition hover:bg-black/75 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60";
+    "grid h-7 w-7 place-items-center rounded-full bg-black/35 text-white/85 ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-black/75 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60";
 
   return (
     <div
@@ -491,15 +524,15 @@ export default function PhotoSpin360({
       )}
 
       {/* Controles superiores */}
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-        <button type="button" className={btn} onClick={toggleAuto} aria-label={auto ? "Pausar giro" : "Girar automáticamente"} title={auto ? "Pausar giro" : "Girar automáticamente"}>
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-80 transition-opacity hover:opacity-100">
+        <button type="button" data-testid="spin360-auto" aria-pressed={auto} className={btn} onClick={toggleAuto} aria-label={auto ? "Pausar giro" : "Girar automáticamente"} title={auto ? "Pausar giro" : "Girar automáticamente"}>
           {auto ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
           ) : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></svg>
           )}
         </button>
-        <button type="button" className={btn} onClick={() => { stopAuto(); setZoom(zoomed ? 1 : 2); }} aria-label={zoomed ? "Quitar zoom" : "Acercar"} title={zoomed ? "Quitar zoom" : "Acercar (doble toque)"}>
+        <button type="button" data-testid="spin360-zoom" aria-pressed={zoomed} className={btn} onClick={() => { stopAuto(); setZoom(zoomed ? 1 : 2); }} aria-label={zoomed ? "Quitar zoom" : "Acercar"} title={zoomed ? "Quitar zoom" : "Acercar (doble toque)"}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />{!zoomed && <path d="M11 8v6" />}<path d="M8 11h6" /></svg>
         </button>
         <button type="button" className={btn} onClick={toggleFullscreen} aria-label="Pantalla completa" title="Pantalla completa">
@@ -510,15 +543,17 @@ export default function PhotoSpin360({
       </div>
 
       {/* Insignia */}
-      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-white/90 ring-1 ring-white/15 backdrop-blur-md">
-        360° · <span ref={angleRef} className="font-mono">000°</span>
+      <div className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-medium tracking-wide text-white/85 ring-1 ring-white/10 backdrop-blur-sm">
+        360° · <span ref={angleRef} data-testid="spin360-angle" className="font-mono">000°</span>
+        <span className="mx-1 text-white/40">·</span>
+        <span ref={counterRef} data-testid="spin360-counter" className="font-mono">1/{total}</span>
       </div>
 
       {/* Pista de arrastre */}
       {ready && !interacted && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-14 z-10 flex justify-center sm:bottom-16">
-          <div className="flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-xs font-medium text-white ring-1 ring-white/15 backdrop-blur-md">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-[spinhint_1.6s_ease-in-out_infinite]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
+          <div className="flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white/90 ring-1 ring-white/10 backdrop-blur-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-[spinhint_1.6s_ease-in-out_infinite]">
               <path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12" /><path d="M11 11.5v-2a1.5 1.5 0 0 1 3 0V12" /><path d="M14 10.5a1.5 1.5 0 0 1 3 0V12" /><path d="M17 11.5a1.5 1.5 0 0 1 3 0V16a6 6 0 0 1-6 6h-2c-2.2 0-3.6-.9-4.8-2.4L4.5 16a1.6 1.6 0 0 1 2.4-2l1.1 1.1" />
             </svg>
             Arrastra para girar
@@ -529,14 +564,15 @@ export default function PhotoSpin360({
 
       {/* Accesos rápidos */}
       {ready && (
-        <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center">
-          <div className="flex gap-1 rounded-full bg-black/55 p-1 ring-1 ring-white/15 backdrop-blur-md">
+        <div className="absolute inset-x-0 bottom-2 z-10 flex justify-center">
+          <div className="flex gap-0.5 rounded-full bg-black/35 p-0.5 ring-1 ring-white/10 opacity-80 backdrop-blur-sm transition-opacity hover:opacity-100">
             {presets.map((p, k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => goTo(p.at)}
-                className="rounded-full px-3 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/15 hover:text-white"
+                data-testid={`spin360-goto-${k}`}
+                className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white/80 transition hover:bg-white/15 hover:text-white"
               >
                 {p.label}
               </button>

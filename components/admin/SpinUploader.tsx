@@ -130,12 +130,13 @@ export default function SpinUploader() {
         <details open className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/75">
           <summary className="cursor-pointer font-semibold text-white">Cómo grabar el video 360° (leer antes)</summary>
           <ul className="mt-3 list-disc space-y-1.5 pl-5">
-            <li>Grabar siempre en el patio de RG Motors (Av. Cardonal). El fondo real del patio se mantiene.</li>
-            <li>Auto limpio, luz pareja (día nublado o sombra completa); sin personas caminando detrás.</li>
-            <li>Celular en horizontal, 4K o 1080p a 60 fps. Sin zoom.</li>
-            <li>Altura de los focos y a unos 3 m del auto, siempre a la misma distancia.</li>
-            <li>Una vuelta completa, lenta y pareja: 40–60 segundos, terminando donde empezaste.</li>
-            <li>El auto entero dentro del cuadro en todo momento (no acercarse en los costados).</li>
+            <li>Siempre en el patio de RG Motors (Av. Cardonal). El fondo real se mantiene; nunca estudio.</li>
+            <li>Sin gente alrededor ni caminando detrás del auto.</li>
+            <li>Celular en horizontal, 4K a 60 fps, sin zoom.</li>
+            <li>Cámara a la altura de los focos.</li>
+            <li>Marcar en el piso un círculo de ~3 m alrededor del auto y caminarlo a distancia constante.</li>
+            <li>Una sola vuelta lenta y pareja de ~60 s, terminando exactamente donde empezaste (frente).</li>
+            <li>El auto entero dentro del cuadro todo el tiempo: si la cámara se acerca, el tour queda en «pendiente».</li>
           </ul>
         </details>
 

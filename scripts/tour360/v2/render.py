@@ -14,7 +14,7 @@ for r in runs:
 tex=cv2.imread('rgplate.png');th,tw=tex.shape[:2]
 src=np.float32([[0,0],[tw,0],[tw,th],[0,th]])
 def apply(f,q):
-    c=q.mean(0);q=(q-c)*1.07+c
+    c=q.mean(0);q=(q-c)*1.02+c
     M=cv2.getPerspectiveTransform(src,q.astype(np.float32))
     reg=np.zeros(f.shape[:2],np.uint8);cv2.fillConvexPoly(reg,q.astype(np.int32),255)
     vals=cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)[reg>0]
@@ -24,9 +24,9 @@ def apply(f,q):
     a=cv2.warpPerspective(np.full((th,tw),255,np.uint8),M,(f.shape[1],f.shape[0])).astype(np.float32)/255
     a=cv2.GaussianBlur(a,(0,0),0.5)[...,None]
     return (f*(1-a)+w*a).astype(np.uint8)
-N=1861;T=120;sel=[round(i*(N-1)/T) for i in range(T)]
+sel=json.load(open('newsel.json'))
 os.makedirs('masked',exist_ok=True)
-cap=cv2.VideoCapture('../tour360_rg.mp4');i=0;si=0;want=set(sel)
+cap=cv2.VideoCapture('../../tour360_rg.mp4');i=0;si=0;want=set(sel)
 while True:
     ok,f=cap.read()
     if not ok:break

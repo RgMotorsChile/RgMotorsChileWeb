@@ -259,6 +259,21 @@ export function VehiclesSection({
         </div>
       </div>
 
+      {vehicleList.some((v) => v.spin?.status === "pendiente") && (
+        <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <p className="font-semibold">Tour 360 pendiente (no se publica hasta pasar el control de calidad)</p>
+          <ul className="mt-1 list-disc pl-5">
+            {vehicleList
+              .filter((v) => v.spin?.status === "pendiente")
+              .map((v) => (
+                <li key={v.slug}>
+                  {v.brand} {v.model} {v.year}: {v.spin?.qa?.[0] || "revisar grabación"}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-white/10 bg-ink-900/60 p-3">
         <div className="relative flex-1">
@@ -345,7 +360,14 @@ export function VehiclesSection({
                       <p className="font-bold text-brand-300">{formatCLP(v.price)}</p>
                     </td>
                     <td className="py-3">
-                      {v.spin && v.spin.count > 0 ? (
+                      {v.spin && v.spin.count > 0 && v.spin.status === "pendiente" ? (
+                        <span
+                          title={v.spin.qa?.join("\n") || "El tour no pasó el control de calidad"}
+                          className="rounded-full bg-amber-400/15 border border-amber-500/30 px-2.5 py-0.5 text-xs text-amber-300 font-medium"
+                        >
+                          Tour pendiente
+                        </span>
+                      ) : v.spin && v.spin.count > 0 ? (
                         <span className="rounded-full bg-emerald-400/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs text-emerald-300 font-medium">
                           360° ({v.spin.count})
                         </span>
