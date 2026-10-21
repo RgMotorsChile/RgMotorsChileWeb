@@ -63,3 +63,29 @@ export function looksLikeRasterImage(bytes: Buffer): boolean {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return true;
   return bytes.subarray(0, 4).toString("ascii") === "RIFF";
 }
+
+/** Archivos de Drive que nunca se publican (odómetro, patente visible). */
+export const EXCLUDED_DRIVE_FILE_IDS = new Set<string>([
+  "12D04_wWgeTBDxRV2UDplNHYBVpjiX-rI", // odómetro
+  "1oJ7thS3T9L2BFpllk8LrHHClDXQ15jJd", // patente
+]);
+
+/**
+ * Quita los IDs excluidos y los originales DNG/HEIC "IMG_XXXX" que ya tienen
+ * al lado su versión editada "*_orig_XXXX.jpg" (mismo número).
+ */
+export function filterExcludedDriveImages<T extends { id: string; name: string; mimeType?: string }>(
+  images: T[],
+): T[] {
+  const editedNums = new Set<string>();
+  for (const img of images) {
+    const m = /_orig_(\d+)\.jpe?g$/i.exec(img.name);
+    if (m) editedNums.add(m[1]);
+  }
+  return images.filter((img) => {
+    if (EXCLUDED_DRIVE_FILE_IDS.has(img.id)) return false;
+    const m = /^IMG_(\d+)\.[^.]+$/i.exec(img.name);
+    if (m && editedNums.has(m[1]) && isHeicHeifOrDng(img.name, img.mimeType)) return false;
+    return true;
+  });
+}
