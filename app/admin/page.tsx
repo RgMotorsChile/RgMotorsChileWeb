@@ -10,6 +10,7 @@ import {
   CrmHubSection,
   ConfigSection,
 } from "@/components/admin/AdminSections";
+import BlobCleanupPanel from "@/components/admin/BlobCleanupPanel";
 import { asset } from "@/lib/asset";
 import { Vehicle, formatCLP } from "@/lib/vehicles";
 
@@ -381,7 +382,12 @@ export default function AdminPage() {
           {active === "analitica" && <AnalyticsDashboard />}
 
           {/* MÓDULO 5: CONFIGURACIÓN */}
-          {active === "config" && <ConfigSection />}
+          {active === "config" && (
+            <div className="space-y-6">
+              <ConfigSection />
+              <BlobCleanupPanel />
+            </div>
+          )}
         </main>
       </div>
     </div>
