@@ -5,7 +5,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MOVED_TO_OTHER_SITE } from "../lib/vehicles/branch";
 import { publicationDecision } from "../lib/vehicles/publication";
 import { publicVehicleSlug } from "../lib/vehicles/publicSlug";
 
@@ -32,19 +31,6 @@ for (const row of catalog) {
   }
   if (next !== row.slug) {
     redirects.push({ source: `/vehiculo/${row.slug}`, destination: `/vehiculo/${next}` });
-  }
-}
-
-const rhclTargets = [
-  "toyota-new-hilux-4x2-2022-rhcl44",
-  "toyota-hilux-4x2-2022-rhcl44",
-  "toyota-hilux-rhcl44",
-  "toyota-new-hilux-4x2-rhcl44",
-];
-const rhclUrl = MOVED_TO_OTHER_SITE[0]?.url;
-if (rhclUrl) {
-  for (const slug of rhclTargets) {
-    redirects.push({ source: `/vehiculo/${slug}`, destination: rhclUrl });
   }
 }
 

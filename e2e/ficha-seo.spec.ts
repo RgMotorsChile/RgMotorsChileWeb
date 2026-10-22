@@ -53,18 +53,19 @@ test.describe("Ficha, catálogo y SEO", () => {
     await expect(page.locator("body")).not.toContainText("hotmail");
   });
 
-  test("RHCL44 va a Unidades Chile y el Ranger SHYL53 queda en el slug nuevo", async ({ request }) => {
-    const moved = await request.get("/vehiculo/toyota-hilux-rhcl44", { maxRedirects: 0 });
-    expect(moved.status()).toBe(301);
-    expect(moved.headers().location).toContain(
-      "https://www.unidadeschile.cl/catalogo/toyota-new-hilux-4x2-2022-rhcl44",
-    );
+  test("el Ranger queda en RG y el cruce de sitios sigue la planilla", async ({ request }) => {
+    const rhcl = await request.get("/vehiculo/toyota-hilux-rhcl44", { maxRedirects: 0 });
+    expect(rhcl.status()).not.toBe(301);
+    expect(rhcl.status()).not.toBe(410);
     const ranger = await request.get("/vehiculo/ford-ranger-4x4-2023-shyl53", { maxRedirects: 0 });
     expect(ranger.status()).toBe(301);
     expect(ranger.headers().location || "").toContain("/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8");
-    const pending = await request.get("/vehiculo/chevrolet-tracker-mt-2022-rzkv76", { maxRedirects: 0 });
-    expect(pending.status()).not.toBe(301);
-    expect(pending.status()).not.toBe(410);
+    const tracker = await request.get("/vehiculo/chevrolet-tracker-mt-2022-rzkv76", { maxRedirects: 0 });
+    expect(tracker.status()).toBe(301);
+    expect(tracker.headers().location || "").not.toContain("unidadeschile");
+    expect(tracker.headers().location || "").not.toContain("salgado");
+    const tucson = await request.get("/vehiculo/hyundai-tucson-gl-2-0-2014-ghtd24", { maxRedirects: 0 });
+    expect(tucson.status()).toBe(410);
   });
 
   test("axe sin violaciones serias en catálogo y ficha", async ({ page }) => {

@@ -5,7 +5,7 @@ import redirects from "@/lib/vehicles/publicationRedirects.json";
 import { plateInSlug, publicVehicleSlug, scrubPlate } from "@/lib/vehicles/publicSlug";
 import { publicationDecision } from "@/lib/vehicles/publication";
 import { STOCK_SUCURSAL_CSV } from "@/lib/vehicles/stockSucursalCsv";
-import { legacyUrlLocked, stockRowFor } from "@/lib/vehicles/stockSucursal";
+import { stockRowFor } from "@/lib/vehicles/stockSucursal";
 import { vehicleDocumentTitle, vehicleHeadline, vehicleMetaDescription } from "@/lib/seo/vehicleMeta";
 import { vehicleJsonLd } from "@/lib/seo/vehicleJsonLd";
 import { vehicleSpecBar } from "@/lib/vehicles/publicSpecs";
@@ -44,11 +44,6 @@ describe("publicVehicleSlug", () => {
       const plate = plateInSlug(row.slug);
       const slug = publicVehicleSlug(row);
       const decision = publicationDecision(row.slug, row);
-      if (legacyUrlLocked(row)) {
-        expect(slug).toBe(row.slug);
-        expect(decision).toEqual({ type: "render" });
-        continue;
-      }
       expect(slug.includes(plate)).toBe(false);
       if (decision.type === "redirect" && decision.to.startsWith("/")) {
         expect(decision.to.endsWith(slug)).toBe(true);
@@ -66,22 +61,25 @@ describe("publicVehicleSlug", () => {
       to: "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8",
     });
     expect(publicationDecision("ford-ranger-4x4-rojo-2023-7cm3a8", ranger!).type).toBe("render");
-    expect(redirects.gone).toEqual([]);
     expect(redirects.redirects).toContainEqual({
       source: "/vehiculo/ford-ranger-4x4-2023-shyl53",
       destination: "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8",
     });
+    expect(redirects.redirects.some((item) => item.destination.includes("unidadeschile"))).toBe(false);
+    expect(redirects.gone.some((path) => path.includes("shyl53"))).toBe(false);
   });
 
-  it("Tucson, Spark GT y Tracker a confirmar no se redirigen ni se dan de baja", () => {
-    for (const plate of ["ghtd24", "hlxb59", "rzkv76"]) {
+  it("publica en cada pestaña y solo da de baja lo que está en otra planilla", () => {
+    const tracker = catalog.find((item) => item.slug.endsWith("rzkv76"));
+    expect(stockRowFor(tracker!).sitio).toBe("rg+salgado");
+    expect(publicationDecision(tracker!.slug, tracker!).type).toBe("redirect");
+    expect(redirects.gone.some((path) => path.includes("rzkv76"))).toBe(false);
+
+    for (const plate of ["ghtd24", "hlxb59", "jrth26", "lwrs59", "trbx87"]) {
       const row = catalog.find((item) => item.slug.endsWith(plate));
-      expect(row, plate).toBeTruthy();
-      expect(stockRowFor(row!).sitio).toBe("a_confirmar");
-      expect(publicVehicleSlug(row!)).toBe(row!.slug);
-      expect(publicationDecision(row!.slug, row!)).toEqual({ type: "render" });
-      expect(redirects.redirects.some((item) => item.source.includes(plate))).toBe(false);
-      expect(redirects.gone.some((path) => path.includes(plate))).toBe(false);
+      expect(stockRowFor(row!).sitio, plate).toBe("salgado");
+      expect(publicationDecision(row!.slug, row!).type).toBe("gone");
+      expect(redirects.gone.some((path) => path.includes(plate))).toBe(true);
     }
   });
 

@@ -1,8 +1,9 @@
 /**
- * Sucursal física. La tabla docs/stock-sucursal.csv manda.
- * a_confirmar no se mueve. rg se queda. uc y salgado salen de este dominio.
+ * Sucursal física. docs/stock-sucursal.csv lista las pestañas de cada patente.
+ * Si incluye rg, la ficha se queda aquí con canónico propio.
+ * Si solo está en otra pestaña, la URL que sobre en este dominio sale con 301 o 410.
  */
-import { stockRowFor } from "./stockSucursal";
+import { listedOnRg } from "./stockSucursal";
 
 export const BRANCHES = ["rg-motors", "unidades-chile", "salgado"] as const;
 export type BranchId = (typeof BRANCHES)[number];
@@ -18,13 +19,11 @@ export type BranchAssignment = {
 /** Reservado. La sucursal de un duplicado sale de docs/stock-sucursal.csv. */
 export const BRANCH_ASSIGNMENTS: Record<string, BranchAssignment> = {};
 
-/** Hilux que ya no está en este dominio: vive en Unidades Chile. */
-export const MOVED_TO_OTHER_SITE: { plate: string; url: string }[] = [
-  {
-    plate: "rhcl44",
-    url: "https://www.unidadeschile.cl/catalogo/toyota-new-hilux-4x2-2022-rhcl44",
-  },
-];
+/**
+ * Ya no se usa para cruzar sitios. Una patente que está en la pestaña de RG
+ * y en otra se publica en las dos, sin 301.
+ */
+export const MOVED_TO_OTHER_SITE: { plate: string; url: string }[] = [];
 
 export function isBranchId(value: string | undefined | null): value is BranchId {
   return BRANCHES.includes(value as BranchId);
@@ -38,9 +37,9 @@ export function branchOf(vehicle: { slug: string; branch?: string }): BranchId {
 }
 
 export function publishesOnRg(vehicle: { slug: string; plate?: string; branch?: string }): boolean {
-  const site = stockRowFor(vehicle)?.sitio;
-  if (site === "rg" || site === "a_confirmar") return true;
-  if (site === "uc" || site === "salgado") return false;
+  const listed = listedOnRg(vehicle);
+  if (listed === true) return true;
+  if (listed === false) return false;
   return branchOf(vehicle) === "rg-motors";
 }
 
