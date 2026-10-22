@@ -7,9 +7,11 @@ import { createServerSupabase, isSupabaseConfigured, SUPABASE_URL } from "@/lib/
 import {
   VEHICLE_PHOTOS_BUCKET,
   assertDeletableVehiclePhotoBucket,
+  isProtectedStoragePath,
   supabasePublicObjectUrl,
   vehiclePhotoObjectPath,
 } from "@/lib/server/photoObjectPath";
+import { RG_MOTORS_TENANT_SLUG } from "@/lib/supabase/client";
 
 /** Margen para no borrar un archivo que se está subiendo y todavía no está en la base. */
 export const ORPHAN_MIN_AGE_MS = 15 * 60 * 1000;
@@ -36,6 +38,8 @@ export type PhotoGcDeps = {
   isReferenced?: (objectPath: string) => Promise<boolean>;
   removeObjects?: (paths: string[]) => Promise<void>;
   listPrefix?: (prefix: string) => Promise<string[]>;
+  /** Paths ya resueltos (tests). En producción se arman listando el prefijo. */
+  extraPaths?: string[];
   listObjects?: () => Promise<StorageObjectInfo[]>;
   loadReferencedPaths?: () => Promise<Set<string>>;
   loadPendingOrphans?: () => Promise<VehiclePhotoOrphan[]>;
@@ -95,16 +99,93 @@ export function orphanRow(opts: {
   };
 }
 
-function uniquePaths(urls: string[]): string[] {
+function uniquePaths(urls: string[], extraPaths: string[] = []): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const url of urls) {
-    const path = vehiclePhotoObjectPath(url);
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    out.push(path);
-  }
+  const push = (path: string | null | undefined) => {
+    const clean = String(path || "").replace(/^\/+/, "");
+    if (!clean || seen.has(clean) || isProtectedStoragePath(clean)) return;
+    seen.add(clean);
+    out.push(clean);
+  };
+  for (const url of urls) push(vehiclePhotoObjectPath(url));
+  for (const path of extraPaths) push(path);
   return out;
+}
+
+const STORAGE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+
+export type ListedStorageItem = { name?: string | null; id?: string | null };
+
+/** Separa archivos de carpetas. Las carpetas de giro (m900, d1600, versiones) se descienden. */
+export function classifyListedStorage(
+  folder: string,
+  items: ListedStorageItem[],
+): { files: string[]; folders: string[] } {
+  const files: string[] = [];
+  const folders: string[] = [];
+  const base = folder.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!base || isProtectedStoragePath(base)) return { files, folders };
+  for (const item of items) {
+    const name = item?.name || "";
+    if (!name || name === ".emptyFolderPlaceholder" || name === "." || name === "..") continue;
+    if (name.includes("/") || name.includes("..")) continue;
+    const path = `${base}/${name}`;
+    if (isProtectedStoragePath(path) || isProtectedStoragePath(name)) continue;
+    if (!item.id) folders.push(path);
+    else files.push(path);
+  }
+  return { files, folders };
+}
+
+/**
+ * Prefijos de Storage de un auto que sale de la planilla.
+ * Incluye la carpeta del slug (fotos) y spin/ (cada versión, m900, d1600, hiPattern).
+ */
+export function vehicleStoragePrefixes(vehicle: {
+  slug?: string;
+  image?: string;
+  gallery?: string[];
+  spin?: { pattern?: string; hiPattern?: string };
+}): string[] {
+  const prefixes = new Set<string>();
+  const slug = String(vehicle.slug || "").trim().toLowerCase();
+  const safeSlug = STORAGE_SLUG_RE.test(slug) ? slug : "";
+  let tenant = RG_MOTORS_TENANT_SLUG;
+
+  const urls = [vehicle.image, ...(vehicle.gallery || []), vehicle.spin?.pattern, vehicle.spin?.hiPattern];
+  for (const url of urls) {
+    if (!url) continue;
+    const sample = url.replaceAll("{i}", "001").replaceAll("{index}", "001");
+    const objectPath = vehiclePhotoObjectPath(sample);
+    if (!objectPath) {
+      const local = sample.replace(/^\/+/, "");
+      const legacy = local.match(/^cars\/spin\/([a-z0-9-]+)(?:\/|$)/i);
+      if (legacy && STORAGE_SLUG_RE.test(legacy[1])) prefixes.add(`cars/spin/${legacy[1].toLowerCase()}`);
+      continue;
+    }
+    if (isProtectedStoragePath(objectPath)) continue;
+    const [first] = objectPath.split("/");
+    if (first && first !== "cars") tenant = first;
+    const spinAt = objectPath.toLowerCase().indexOf("/spin/");
+    if (spinAt > 0) prefixes.add(objectPath.slice(0, spinAt + "/spin".length));
+  }
+
+  if (safeSlug && !isProtectedStoragePath(safeSlug)) {
+    prefixes.add(`${tenant}/${safeSlug}`);
+    prefixes.add(`cars/spin/${safeSlug}`);
+    prefixes.add(`cars/uploads/${safeSlug}`);
+  }
+
+  const sorted = [...prefixes]
+    .filter((prefix) => prefix && !prefix.includes("..") && !isProtectedStoragePath(prefix))
+    .sort((a, b) => a.length - b.length);
+  const kept: string[] = [];
+  for (const prefix of sorted) {
+    if (kept.some((parent) => prefix === parent || prefix.startsWith(`${parent}/`))) continue;
+    kept.push(prefix);
+  }
+  return kept;
 }
 
 function isAlreadyGone(error: unknown): boolean {
@@ -131,27 +212,42 @@ async function defaultRemove(paths: string[]): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-async function defaultListPrefix(prefix: string): Promise<string[]> {
+async function listFolderPage(folder: string): Promise<ListedStorageItem[]> {
   assertDeletableVehiclePhotoBucket(VEHICLE_PHOTOS_BUCKET);
-  const folder = prefix.replace(/\/+$/, "").replace(/^\/+/, "");
   const sb = createServerSupabase();
-  const paths: string[] = [];
+  const rows: ListedStorageItem[] = [];
   const page = 1000;
-  for (let offset = 0; offset < 20000; offset += page) {
+  for (let offset = 0; offset < 10000; offset += page) {
     const { data, error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).list(folder, {
       limit: page,
       offset,
     });
     if (error) throw new Error(error.message || "No se pudo listar las fotos.");
-    const rows = data || [];
-    for (const item of rows) {
-      if (!item?.name || item.name === ".emptyFolderPlaceholder") continue;
-      if (!item.id) continue;
-      paths.push(`${folder}/${item.name}`);
-    }
-    if (rows.length < page) break;
+    const batch = data || [];
+    for (const item of batch) rows.push({ name: item?.name, id: item?.id });
+    if (batch.length < page) break;
   }
-  return paths;
+  return rows;
+}
+
+/** Lista archivos y baja a carpetas (versiones del 360, m900, d1600). Solo vehicle-photos. */
+async function defaultListPrefix(prefix: string): Promise<string[]> {
+  const root = prefix.replace(/\/+$/, "").replace(/^\/+/, "");
+  if (!root || isProtectedStoragePath(root)) return [];
+  const files: string[] = [];
+  const pending = [root];
+  const seen = new Set<string>();
+  while (pending.length > 0 && files.length < 5000 && seen.size < 400) {
+    const folder = pending.shift()!;
+    if (seen.has(folder) || isProtectedStoragePath(folder)) continue;
+    seen.add(folder);
+    const listed = classifyListedStorage(folder, await listFolderPage(folder));
+    files.push(...listed.files);
+    for (const next of listed.folders) {
+      if (next.split("/").length <= 8) pending.push(next);
+    }
+  }
+  return files;
 }
 
 async function defaultUpsert(rows: VehiclePhotoOrphan[]): Promise<void> {
@@ -212,7 +308,7 @@ export async function deleteUnreferencedVehiclePhotos(
   reason: PhotoDeleteReason,
   deps?: PhotoGcDeps,
 ): Promise<{ deleted: string[]; kept: string[]; orphans: string[] }> {
-  const paths = uniquePaths(urls);
+  const paths = uniquePaths(urls, deps?.extraPaths);
   if (paths.length === 0) return { deleted: [], kept: [], orphans: [] };
   if (!deps && !isSupabaseConfigured()) return { deleted: [], kept: paths, orphans: [] };
 
@@ -295,13 +391,39 @@ function collectPhotoUrls(vehicle: {
   return [...urls];
 }
 
-/** Tras vender o borrar el auto en la base: suelta sus fotos si nadie más las cita. */
+/**
+ * En el mismo sync que saca el auto: borra fotos y el giro completo
+ * (cada versión, m900, d1600 y hiPattern) si ya nadie los cita.
+ * No espera al job diario ni toca boletas ni pagos.
+ */
 export async function releaseVehiclePhotos(
-  vehicle: { image?: string; gallery?: string[]; spin?: { pattern?: string; hiPattern?: string; count?: number } },
+  vehicle: {
+    slug?: string;
+    image?: string;
+    gallery?: string[];
+    spin?: { pattern?: string; hiPattern?: string; count?: number };
+  },
   reason: Extract<PhotoDeleteReason, "sold" | "deleted">,
   deps?: PhotoGcDeps,
 ): Promise<{ deleted: string[]; kept: string[]; orphans: string[] }> {
-  return deleteUnreferencedVehiclePhotos(collectPhotoUrls(vehicle), reason, deps);
+  const listed: string[] = [];
+  const listPrefix = deps?.listPrefix ?? (!deps && isSupabaseConfigured() ? defaultListPrefix : undefined);
+  if (listPrefix) {
+    for (const prefix of vehicleStoragePrefixes(vehicle)) {
+      try {
+        const files = await listPrefix(prefix);
+        for (const file of files) {
+          if (!isProtectedStoragePath(file)) listed.push(file);
+        }
+      } catch (err) {
+        console.warn("[PhotoGc] no se pudo listar", prefix, err);
+      }
+    }
+  }
+  return deleteUnreferencedVehiclePhotos(collectPhotoUrls(vehicle), reason, {
+    ...deps,
+    extraPaths: [...(deps?.extraPaths || []), ...listed],
+  });
 }
 
 async function defaultListObjects(): Promise<StorageObjectInfo[]> {

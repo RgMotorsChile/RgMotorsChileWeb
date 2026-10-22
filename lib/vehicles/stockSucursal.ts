@@ -3,7 +3,8 @@
  * (el mismo texto que STOCK_SUCURSAL_CSV).
  * sitio junta la sucursal de la celda UBICACION con cada pestaña donde está la patente.
  * CARDONAL y RG MOTORS son rg. Patio Salgado es salgado. UNI CHILE es uc.
- * Si incluye rg, la ficha sigue en este dominio. 410 solo cuando ninguna fuente la pone en RG.
+ * sitio no manda un 301 a otro sitio. Si la patente deja la planilla de RG,
+ * el sync la despublica: la URL puede responder 410 en este dominio.
  * a_confirmar queda solo cuando no hay patente y no se puede afirmar que sea el mismo auto.
  */
 import { STOCK_SUCURSAL_CSV } from "./stockSucursalCsv";
@@ -127,13 +128,7 @@ export function listedOnRg(vehicle: { slug?: string; plate?: string }): boolean 
   return stockTokens(row.sitio).includes("rg");
 }
 
-/** 301 a otro sitio solo si ninguna fuente (UBICACION o pestaña) pone la patente en RG. */
-export function offsiteUrlFor(vehicle: { slug?: string; plate?: string }): string | null {
-  const row = stockRowFor(vehicle);
-  if (!row || row.sitio === "a_confirmar") return null;
-  const tokens = stockTokens(row.sitio);
-  if (tokens.includes("rg")) return null;
-  if (tokens.includes("uc") && row.url_uc) return row.url_uc;
-  if (tokens.includes("salgado") && row.url_salgado) return row.url_salgado;
+/** Ningún auto de rgmotorschile.cl redirige a Unidades Chile ni a Salgado. */
+export function offsiteUrlFor(_vehicle: { slug?: string; plate?: string }): string | null {
   return null;
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { Metadata } from "next";
-import { formatCLP, getVehicle, spinFramesOf, spinHiFramesOf, type Vehicle } from "@/lib/vehicles";
+import { formatCLP, spinFramesOf, spinHiFramesOf, type Vehicle } from "@/lib/vehicles";
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getSettings } from "@/lib/server/settingsStore";
 import { verifiedGallery, withVerifiedCover } from "@/lib/server/verifyPhotos";
@@ -25,7 +25,8 @@ import Image from "next/image";
 export const revalidate = 120;
 
 async function loadRaw(slug: string): Promise<Vehicle | null> {
-  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug) || null;
+  // Sin el seed estático: si el sync ya sacó la fila, la ficha no vuelve a publicarse.
+  const raw = await getVehicleBySlug(slug);
   if (!raw || raw.status === "Borrador") return null;
   return raw;
 }

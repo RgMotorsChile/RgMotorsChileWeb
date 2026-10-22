@@ -275,6 +275,22 @@ export interface SyncReport {
   rowsRead?: number;
 }
 
+/**
+ * Un auto que ya no está en la planilla de ESTE sitio se archiva y suelta
+ * fotos y giro en el mismo sync. El anti-wipe no borra. Otro tenant no.
+ * Borrador, vendido y en preparación no se tocan.
+ */
+export function shouldReleaseRemovedVehicle(opts: {
+  plateOnSheet: boolean;
+  status?: string;
+  skipArchive: boolean;
+  tenantSlug: string;
+}): boolean {
+  if (opts.skipArchive || opts.plateOnSheet || opts.tenantSlug !== "rg-motors") return false;
+  const status = opts.status || "Disponible";
+  return status !== "Vendido" && status !== "Borrador" && status !== "En preparación";
+}
+
 export async function syncFromLiveGoogleSheet(
   customSheetId?: string,
   opts?: { tenantSlug?: string },
@@ -528,13 +544,14 @@ export async function syncFromLiveGoogleSheet(
   if (!wipeGuard.skipArchive) {
     for (const [plate, existing] of currentPlateMap.entries()) {
       const st = existing.status || "Disponible";
-      if (
-        !platesOnSheet.has(plate) &&
-        st !== "Vendido" &&
-        st !== "Borrador" &&
-        st !== "En preparación"
-      ) {
-        if (tenantSlug === "rg-motors") {
+      const leftThisSheet = !platesOnSheet.has(plate) && st !== "Vendido" && st !== "Borrador" && st !== "En preparación";
+      if (leftThisSheet) {
+        if (shouldReleaseRemovedVehicle({
+          plateOnSheet: false,
+          status: st,
+          skipArchive: false,
+          tenantSlug,
+        })) {
           await archiveSoldVehicle(
             existing,
             existing.price,
@@ -574,6 +591,7 @@ export async function syncFromLiveGoogleSheet(
   const saved = await replaceAllVehicles(updatedActiveList, { tenantSlug });
   if (saved.success) {
     for (const sold of soldForPhotoRelease) {
+      // La fila ya salió de catalog_vehicles. Fotos y giro (cada versión) se borran ahora.
       await releaseVehiclePhotos(sold, "sold").catch((err) => {
         console.warn(`[GoogleSheetSync] No se pudieron borrar fotos de ${sold.slug}:`, err);
       });

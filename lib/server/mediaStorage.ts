@@ -1,6 +1,7 @@
-import { mkdir, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
+import { isProtectedStoragePath } from "@/lib/server/photoObjectPath";
 import { createServerSupabase, isSupabaseConfigured, SUPABASE_URL } from "@/lib/supabase/client";
 import { isVercelProduction } from "@/lib/server/storageHealth";
 import {
@@ -151,40 +152,19 @@ export async function deleteLocalVehicleFiles(vehicle: {
   gallery?: string[];
 }): Promise<number> {
   let deletedLocal = 0;
-  const uploadDir = join(
-    /*turbopackIgnore: true*/ process.cwd(),
-    "public",
-    "cars",
-    "uploads",
-    vehicle.slug,
-  );
-  const spinDir = join(
-    /*turbopackIgnore: true*/ process.cwd(),
-    "public",
-    "cars",
-    "spins",
-    vehicle.slug,
-  );
-
-  for (const dir of [uploadDir, spinDir]) {
-    try {
-      if (!existsSync(dir)) continue;
-      const files = await readdir(dir);
-      for (const file of files) {
-        try {
-          await unlink(join(dir, file));
-          deletedLocal++;
-        } catch {
-          /* ignore */
-        }
-      }
+  const carsRoot = resolve(/*turbopackIgnore: true*/ process.cwd(), "public", "cars");
+  const slug = vehicle.slug;
+  if (/^[a-z0-9-]+$/i.test(slug)) {
+    for (const kind of ["uploads", "spin", "spins"] as const) {
+      const dir = resolve(carsRoot, kind, slug);
+      if (dir !== carsRoot && !dir.startsWith(carsRoot + sep)) continue;
       try {
-        await rmdir(dir);
-      } catch {
-        /* ignore */
+        if (!existsSync(dir)) continue;
+        await rm(dir, { recursive: true, force: true });
+        deletedLocal++;
+      } catch (err) {
+        console.error(`[Media] Error borrando disco de ${vehicle.slug}:`, err);
       }
-    } catch (err) {
-      console.error(`[Media] Error borrando disco de ${vehicle.slug}:`, err);
     }
   }
 
@@ -194,7 +174,7 @@ export async function deleteLocalVehicleFiles(vehicle: {
     if (g) urls.add(g.split("?")[0]);
   }
   for (const url of urls) {
-    if (!url.startsWith("/") || url.includes("placeholder")) continue;
+    if (!url.startsWith("/") || url.includes("placeholder") || isProtectedStoragePath(url)) continue;
     const abs = join(/*turbopackIgnore: true*/ process.cwd(), "public", url.replace(/^\/+/, ""));
     if (!existsSync(abs)) continue;
     try {

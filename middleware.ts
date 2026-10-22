@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
   const method = request.method;
 
   if (pathname.startsWith("/vehiculo/")) {
+    // 410 en este mismo dominio. No hay redirección a otro sitio.
     if (publication.gone.includes(pathname)) {
       return applySecurityHeaders(
         new NextResponse("Este vehículo ya no está publicado en RG Motors.", {

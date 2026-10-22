@@ -1,9 +1,10 @@
 /**
- * Sucursal física. docs/stock-sucursal.csv junta la celda UBICACION y las pestañas.
- * Si incluye rg, la ficha se queda aquí con canónico propio y entra al sitemap.
- * 410 solo cuando ninguna fuente pone el auto en RG.
+ * Sucursal física. La tabla docs/stock-sucursal.csv anota dónde aparece cada patente.
+ * Un auto que sigue en el catálogo de este sitio se queda con su ficha.
+ * El que sale de la planilla de RG lo retira el sync: deja de publicarse
+ * y su URL no redirige a otro sitio.
  */
-import { listedOnRg } from "./stockSucursal";
+
 
 export const BRANCHES = ["rg-motors", "unidades-chile", "salgado"] as const;
 export type BranchId = (typeof BRANCHES)[number];
@@ -12,7 +13,7 @@ export type BranchAssignment = {
   branch: BranchId;
   /** Por qué no se publica en rgmotorschile.cl */
   reason: string;
-  /** Ficha en el sitio correcto. Sin URL, la ruta de este dominio responde 410. */
+  /** Reservado. Este dominio no redirige la ficha a otro sitio. */
   externalUrl?: string;
 };
 
@@ -36,11 +37,9 @@ export function branchOf(vehicle: { slug: string; branch?: string }): BranchId {
   return BRANCH_ASSIGNMENTS[vehicle.slug]?.branch || (isBranchId(vehicle.branch) ? vehicle.branch : "rg-motors");
 }
 
-export function publishesOnRg(vehicle: { slug: string; plate?: string; branch?: string }): boolean {
-  const listed = listedOnRg(vehicle);
-  if (listed === true) return true;
-  if (listed === false) return false;
-  return branchOf(vehicle) === "rg-motors";
+/** Mientras la fila siga en el catálogo de este sitio, la ficha se publica aquí. */
+export function publishesOnRg(_vehicle: { slug: string; plate?: string; branch?: string }): boolean {
+  return true;
 }
 
 export function externalUrlForPlate(plate: string): string | null {

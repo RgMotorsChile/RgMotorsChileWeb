@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVehicleBySlug } from "@/lib/server/vehiclesStore";
-import { getVehicle } from "@/lib/vehicles";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
 import { publishesOnRg } from "@/lib/vehicles/branch";
 import TestDriveForm from "@/components/TestDriveForm";
@@ -14,7 +13,7 @@ export default async function PruebaManejoPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
+  const raw = await getVehicleBySlug(slug);
   if (!raw || !publishesOnRg(raw)) notFound();
   const v = stripPlateForPublic(raw);
 

@@ -3,9 +3,10 @@ import catalog from "@/lib/vehicles/data/rgCatalog.json";
 import { readFileSync } from "node:fs";
 import redirects from "@/lib/vehicles/publicationRedirects.json";
 import { plateInSlug, publicVehicleSlug, scrubPlate } from "@/lib/vehicles/publicSlug";
+import { publishesOnRg } from "@/lib/vehicles/branch";
 import { publicationDecision } from "@/lib/vehicles/publication";
 import { STOCK_SUCURSAL_CSV } from "@/lib/vehicles/stockSucursalCsv";
-import { stockRowFor } from "@/lib/vehicles/stockSucursal";
+import { offsiteUrlFor, stockRowFor } from "@/lib/vehicles/stockSucursal";
 import { vehicleDocumentTitle, vehicleHeadline, vehicleMetaDescription } from "@/lib/seo/vehicleMeta";
 import { vehicleJsonLd } from "@/lib/seo/vehicleJsonLd";
 import { vehicleSpecBar } from "@/lib/vehicles/publicSpecs";
@@ -91,6 +92,23 @@ describe("publicVehicleSlug", () => {
       expect(redirects.gone.some((path) => path.includes(plate)), plate).toBe(false);
     }
     expect(redirects.gone).toEqual([]);
+    for (const item of redirects.redirects) {
+      expect(item.destination.startsWith("/vehiculo/"), item.source).toBe(true);
+    }
+
+    const navara = {
+      slug: "nissan-navara-4x2-2023-sjtd29",
+      brand: "Nissan",
+      model: "Navara",
+      year: 2023,
+      plate: "SJTD29",
+    };
+    expect(stockRowFor(navara).sitio).toBe("uc");
+    expect(offsiteUrlFor(navara)).toBeNull();
+    expect(publishesOnRg(navara)).toBe(true);
+    const decision = publicationDecision(navara.slug, navara);
+    expect(decision.type).not.toBe("gone");
+    if (decision.type === "redirect") expect(decision.to.startsWith("/vehiculo/")).toBe(true);
   });
 
   it("el CSV de docs es el que lee el sitio", () => {
