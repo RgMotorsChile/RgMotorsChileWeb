@@ -7,6 +7,7 @@ vi.mock("@/lib/auth/requireAdmin", () => ({ requireAdminSession }));
 
 import { POST as uploadUrls } from "./route";
 import { POST as commit } from "../commit/route";
+import { POST as abort } from "../abort/route";
 
 function post(url: string, body: unknown) {
   return new NextRequest(url, {
@@ -27,8 +28,10 @@ describe("rutas admin del giro", () => {
       post("https://www.rgmotorschile.cl/api/spin/upload-urls", {}),
     );
     const deniedCommit = await commit(post("https://www.rgmotorschile.cl/api/spin/commit", {}));
+    const deniedAbort = await abort(post("https://www.rgmotorschile.cl/api/spin/abort", {}));
     expect(deniedUpload.status).toBe(401);
     expect(deniedCommit.status).toBe(401);
+    expect(deniedAbort.status).toBe(401);
   });
 
   it("no firma un set que no está permitido", async () => {

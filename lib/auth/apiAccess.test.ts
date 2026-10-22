@@ -53,6 +53,7 @@ describe("isPublicApi — política de acceso", () => {
     expect(isPublicApi("/api/spin", "POST")).toBe(false);
     expect(isPublicApi("/api/spin/upload-urls", "POST")).toBe(false);
     expect(isPublicApi("/api/spin/commit", "POST")).toBe(false);
+    expect(isPublicApi("/api/spin/abort", "POST")).toBe(false);
     expect(isPublicApi("/api/spin/upload-urls", "GET")).toBe(false);
     expect(isPublicApi("/api/spin/commit", "GET")).toBe(false);
   });

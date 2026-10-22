@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Vehicle } from "@/lib/vehicles";
 import {
+  abortSpinUpload,
   commitSpinUpload,
   createSpinUploadUrls,
   legacySpinPrefix,
@@ -122,6 +123,44 @@ describe("rutas firmadas del giro", () => {
     expect(signed.some((path) => path.startsWith("cars/spin/") || path.includes(".."))).toBe(false);
     expect(signed.every((path) => /^rg-motors\/hilux-2020\/spin\/ab12cd34\/(m900|d1600)\/\d{3}\.(webp|avif)$/.test(path))).toBe(true);
   });
+
+  it("no firma 142 fotogramas de una vez y sí firma el rango pedido", async () => {
+    const sign = vi.fn(async (path: string) => ({ signedUrl: `https://sign.test/${path}`, token: "tok", path }));
+    const huge = await createSpinUploadUrls(body([{ name: "m900", ext: "webp", count: 142 }]), {
+      findVehicle: async () => vehicle(),
+      createSignedUploadUrl: sign,
+    });
+    expect(huge.status).toBe(400);
+    expect(String(huge.body.error)).toMatch(/lotes/);
+    expect(sign).not.toHaveBeenCalled();
+
+    const signed: string[] = [];
+    const slice = await createSpinUploadUrls(
+      {
+        slug: SLUG,
+        version: VERSION,
+        sets: [{ name: "m900", ext: "webp", count: 142, from: 3, to: 5 }],
+      },
+      {
+        findVehicle: async () => vehicle(),
+        createSignedUploadUrl: async (path) => {
+          signed.push(path);
+          return { signedUrl: `https://sign.test/${path}`, token: "tok", path };
+        },
+      },
+    );
+    expect(slice.status).toBe(200);
+    expect(signed).toEqual([3, 4, 5].map((index) =>
+      spinFrameObjectPath({
+        tenant: "rg-motors",
+        slug: SLUG,
+        version: VERSION,
+        set: "m900",
+        index,
+        ext: "webp",
+      }),
+    ));
+  });
 });
 
 describe("commit del giro", () => {
@@ -218,5 +257,59 @@ describe("commit del giro", () => {
     expect(result.status).toBe(500);
     expect(drop).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("abort del giro", () => {
+  it("no borra la versión publicada ni toca la base", async () => {
+    const remove = vi.fn();
+    const published = vehicle();
+    published.spin = {
+      count: 142,
+      front: 0,
+      pattern: photo(`rg-motors/${SLUG}/spin/mvjnpp9vui5jn5/m900/{i}.webp`),
+    };
+    const result = await abortSpinUpload(
+      { slug: SLUG, version: "mvjnpp9vui5jn5" },
+      {
+        findVehicle: async () => published,
+        listFolder: async () => [{ name: "001.webp", folder: false }],
+        removeObjects: remove,
+      },
+    );
+    expect(result.status).toBe(409);
+    expect(String(result.body.error)).toMatch(/publicada/);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("borra solo los archivos de la versión que falló", async () => {
+    const removed: string[][] = [];
+    const result = await abortSpinUpload(
+      { slug: SLUG, version: "intento2" },
+      {
+        findVehicle: async () => vehicle(),
+        listFolder: async (prefix) => {
+          if (prefix === `rg-motors/${SLUG}/spin/intento2`) return [{ name: "m900", folder: true }];
+          if (prefix === `rg-motors/${SLUG}/spin/intento2/m900`) {
+            return [
+              { name: "001.webp", folder: false },
+              { name: "002.webp", folder: false },
+            ];
+          }
+          return [{ name: "001.webp", folder: false }];
+        },
+        removeObjects: async (paths) => {
+          removed.push(paths);
+        },
+      },
+    );
+    expect(result.status).toBe(200);
+    expect(result.body.deleted).toBe(2);
+    expect(removed).toEqual([[
+      `rg-motors/${SLUG}/spin/intento2/m900/001.webp`,
+      `rg-motors/${SLUG}/spin/intento2/m900/002.webp`,
+    ]]);
+    expect(JSON.stringify(removed)).not.toContain("oldver");
+    expect(JSON.stringify(removed)).not.toContain("mvjnpp9vui5jn5");
   });
 });

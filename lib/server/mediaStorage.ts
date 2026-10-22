@@ -31,7 +31,7 @@ export function resetVehiclePhotoBucketCacheForTests(): void {
   bucketReady = false;
 }
 
-async function ensureVehiclePhotosBucket(): Promise<void> {
+export async function ensureVehiclePhotosBucket(): Promise<void> {
   if (bucketReady) return;
   const sb = createServerSupabase();
   const existing = await sb.storage.getBucket(VEHICLE_PHOTOS_BUCKET);

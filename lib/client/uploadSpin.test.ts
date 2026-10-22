@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SPIN_PUT_ATTEMPTS,
   SPIN_UPLOAD_CONCURRENCY,
+  createSpinVersion,
   prepareHdFrame,
   prepareStandardFrame,
   sortFramesByNumber,
@@ -134,10 +135,17 @@ describe("fotogramas del giro", () => {
     const standard = numbered(24, "webp", "image/webp");
     const bodies: unknown[] = [];
     let commits = 0;
+    let aborts = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        if (url.includes("/api/spin/abort")) {
+          aborts += 1;
+          const payload = JSON.parse(String(init?.body));
+          expect(payload.version).toMatch(/^[a-z0-9]+$/);
+          return json({ success: true, deleted: 0 });
+        }
         if (url.includes("/api/spin/upload-urls")) return json(signedPlan(24, false));
         if (url.includes("/api/spin/commit")) {
           commits += 1;
@@ -152,6 +160,123 @@ describe("fotogramas del giro", () => {
       uploadSpinSets({ slug: "hilux-2020", standard, retryDelayMs: 0 }),
     ).rejects.toThrow(/fotograma/);
     expect(commits).toBe(0);
+    expect(aborts).toBe(1);
     expect(bodies.filter((body) => body === standard[0])).toHaveLength(SPIN_PUT_ATTEMPTS);
+  });
+
+  it("firma por lotes con una sola versión y no borra si el giro se confirma", async () => {
+    const standard = numbered(24, "webp", "image/webp");
+    const versions: string[] = [];
+    const ranges: Array<[number, number]> = [];
+    let aborts = 0;
+    let commits = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/spin/abort")) {
+          aborts += 1;
+          return json({ deleted: 0 });
+        }
+        if (url.includes("/api/spin/upload-urls")) {
+          const payload = JSON.parse(String(init?.body)) as {
+            version: string;
+            sets: Array<{ from: number; to: number; count: number }>;
+          };
+          versions.push(payload.version);
+          const set = payload.sets[0]!;
+          ranges.push([set.from, set.to]);
+          const uploads = [];
+          for (let index = set.from; index <= set.to; index += 1) {
+            uploads.push({
+              index,
+              signedUrl: `https://sign.test/${index}`,
+              contentType: "image/webp",
+              path: `p/${index}`,
+            });
+          }
+          return json({
+            version: payload.version,
+            sets: [{ name: "m900", ext: "webp", count: set.count, uploads }],
+          });
+        }
+        if (url.includes("/api/spin/commit")) {
+          commits += 1;
+          const payload = JSON.parse(String(init?.body)) as { version: string };
+          expect(payload.version).toBe(versions[0]);
+          return json({ success: true });
+        }
+        return new Response(null, { status: 200 });
+      }),
+    );
+
+    await uploadSpinSets({
+      slug: "hilux-2020",
+      standard,
+      signBatchSize: 8,
+      retryDelayMs: 0,
+    });
+    expect(ranges).toEqual([
+      [1, 8],
+      [9, 16],
+      [17, 24],
+    ]);
+    expect(new Set(versions).size).toBe(1);
+    expect(commits).toBe(1);
+    expect(aborts).toBe(0);
+  });
+
+  it("si firmar no responde, muestra el tiempo agotado y borra esa versión", async () => {
+    const standard = numbered(24, "webp", "image/webp");
+    let abortVersion = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/spin/abort")) {
+          abortVersion = JSON.parse(String(init?.body)).version;
+          return json({ success: true, deleted: 4 });
+        }
+        if (url.includes("/api/spin/upload-urls")) {
+          return new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+            });
+          });
+        }
+        throw new Error("no debía subir ni confirmar");
+      }),
+    );
+
+    await expect(
+      uploadSpinSets({
+        slug: "hilux-2020",
+        standard,
+        signTimeoutMs: 30,
+      }),
+    ).rejects.toThrow(/Se agotó el tiempo al firmar las subidas/);
+    expect(abortVersion).toMatch(/^[a-z0-9]+$/);
+  });
+
+  it("cada intento pide una versión distinta", async () => {
+    const versions: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/spin/abort")) return json({ deleted: 0 });
+        if (url.includes("/api/spin/upload-urls")) {
+          versions.push(JSON.parse(String(init?.body)).version);
+          return json({ error: "rechazado" }, 400);
+        }
+        throw new Error("no debía subir");
+      }),
+    );
+    const standard = numbered(24, "webp", "image/webp");
+    await expect(uploadSpinSets({ slug: "hilux-2020", standard })).rejects.toThrow(/rechazado/);
+    await expect(uploadSpinSets({ slug: "hilux-2020", standard })).rejects.toThrow(/rechazado/);
+    expect(versions).toHaveLength(2);
+    expect(versions[0]).not.toBe(versions[1]);
+    expect(versions[0]).not.toBe(createSpinVersion());
   });
 });
