@@ -1,0 +1,95 @@
+# Re-sync de fotos Blob → Supabase. workflow_dispatch, sin secretos nuevos:
+# usa CRON_SECRET, el mismo de /api/cron/sync. Llama en bucle hasta que
+# los dos tenants devuelvan done.
+name: Re-sync fotos
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Autos por lote (1-8)
+        required: false
+        default: "4"
+        type: string
+
+jobs:
+  photos-resync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Re-sincronizar rg-motors y unidades-chile
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Falta el secret CRON_SECRET en GitHub Actions." >&2
+            echo "Tiene que ser el mismo valor que CRON_SECRET en Vercel." >&2
+            exit 1
+          fi
+
+          limit="${LIMIT:-4}"
+          case "${limit}" in
+            1|2|3|4|5|6|7|8) ;;
+            *)
+              echo "limit inválido: ${limit}. Usá un entero de 1 a 8." >&2
+              exit 1
+              ;;
+          esac
+
+          cursor=""
+          # Cada lote cabe en 60s. 160 vueltas alcanzan para los dos catálogos.
+          for round in $(seq 1 160); do
+            url="https://www.rgmotorschile.cl/api/cron/photos-resync?limit=${limit}"
+            if [ -n "${cursor}" ]; then
+              encoded=$(jq -nr --arg c "${cursor}" '$c|@uri')
+              url="${url}&cursor=${encoded}"
+            fi
+            echo "GET ${url}"
+
+            set +e
+            http_code=$(curl --silent --show-error --max-time 75 \
+              -o /tmp/photos-resync.json \
+              -w "%{http_code}" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${url}")
+            curl_status=$?
+            set -e
+
+            if [ "${curl_status}" -ne 0 ]; then
+              echo "curl falló (exit ${curl_status})" >&2
+              cat /tmp/photos-resync.json >&2 || true
+              exit 1
+            fi
+
+            echo "HTTP ${http_code} ronda ${round}"
+            cat /tmp/photos-resync.json
+            echo
+            if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+              echo "El re-sync respondió ${http_code}." >&2
+              exit 1
+            fi
+
+            done_flag=$(jq -r '.done' /tmp/photos-resync.json)
+            next=$(jq -r '.nextCursor // empty' /tmp/photos-resync.json)
+            downloaded=$(jq -r '.newPhotosDownloaded // 0' /tmp/photos-resync.json)
+            deferred=$(jq -r '.deferredVehicles // 0' /tmp/photos-resync.json)
+
+            if [ "${done_flag}" = "true" ]; then
+              echo "Re-sync terminado."
+              exit 0
+            fi
+            if [ -z "${next}" ]; then
+              echo "La respuesta no trajo nextCursor." >&2
+              exit 1
+            fi
+            if [ "${next}" = "${cursor}" ] && [ "${downloaded}" = "0" ] && [ "${deferred}" = "0" ]; then
+              echo "El lote no avanzó. Cursor ${cursor}." >&2
+              exit 1
+            fi
+            cursor="${next}"
+          done
+
+          echo "Se agotaron las rondas y el re-sync no terminó." >&2
+          exit 1

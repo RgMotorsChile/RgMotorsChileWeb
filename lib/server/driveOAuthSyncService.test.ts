@@ -781,6 +781,34 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(listImagesInFolder).toHaveBeenCalledWith("folder-same");
   });
 
+  it("onlySlugs no toca los otros autos del tenant", async () => {
+    getVehicles.mockResolvedValue([fresh, second]);
+    readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
+    listPlateFolders.mockResolvedValue([
+      { id: "folder-a", name: "AAAA11" },
+      { id: "folder-b", name: "BBBB22" },
+    ]);
+    listImagesInFolder.mockImplementation(async (folderId: string) => [
+      {
+        id: folderId === "folder-a" ? "file-a" : "file-b",
+        name: "1.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+
+    await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      migrateBlobUrls: true,
+      maxBlobHeadChecks: 0,
+      onlySlugs: ["fresh-car"],
+    });
+
+    const slugs = saveVehicle.mock.calls.map((call) => call[0]?.slug);
+    expect(slugs).toContain("fresh-car");
+    expect(slugs).not.toContain("second-car");
+  });
+
   it("no baja nada si el plazo de la corrida ya venció", async () => {
     getVehicles.mockResolvedValue([fresh]);
     readJson.mockResolvedValue({ lastRunAt: null, files: {}, folders: {} });
