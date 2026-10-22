@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, writeFile, readdir, unlink, stat } from "node:fs/promises";
+import { readdir, unlink, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { getVehicleBySlug, saveVehicle } from "@/lib/server/vehiclesStore";
@@ -214,7 +214,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Sube una o múltiples fotos para un vehículo (galería, portada o fotogramas 360°).
+ * Sube una o múltiples fotos de galería o portada. El giro 360 no entra por aquí.
  */
 export async function POST(req: NextRequest) {
   if (!(await requireAdminSession())) {
@@ -244,7 +244,17 @@ export async function POST(req: NextRequest) {
   }
 
   const slug = String(form.get("slug") || "").trim();
-  const type = String(form.get("type") || "gallery").trim(); // 'gallery' | 'cover' | 'spin'
+  const type = String(form.get("type") || "gallery").trim(); // 'gallery' | 'cover'
+
+  if (type === "spin") {
+    return NextResponse.json(
+      {
+        error:
+          "El giro 360 se sube con /api/spin/upload-urls y se confirma en /api/spin/commit.",
+      },
+      { status: 400 },
+    );
+  }
 
   if (!slug || !/^[a-z0-9-]+$/i.test(slug)) {
     return NextResponse.json({ error: "Slug de vehículo no válido." }, { status: 400 });
@@ -295,115 +305,54 @@ export async function POST(req: NextRequest) {
   const savedFiles: string[] = [];
 
   try {
-    if (type === "spin") {
-      const sorted = [...rawFiles].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true }),
-      );
-      const publicUrls: string[] = [];
+    const newPaths: string[] = [];
 
-      for (let i = 0; i < sorted.length; i++) {
-        const file = sorted[i]!;
-        const num = String(i + 1).padStart(3, "0");
-        const prepared = await fileToStoredBytes(file);
-        const relativePath = `cars/spin/${slug}/${num}.${prepared.ext}`;
-        const stored = await storeMediaFile({
-          bytes: prepared.bytes,
-          relativePath,
-          contentType: prepared.contentType,
-        });
-        publicUrls.push(publicMediaUrl(stored));
-        savedFiles.push(stored.relativePath);
-      }
-
-      const manifest = {
+    for (const file of rawFiles) {
+      const prepared = await fileToStoredBytes(file);
+      const contentHash = photoContentHash(prepared.bytes);
+      const filename = `${contentHash}.${prepared.ext}`;
+      const relativePath = vehiclePhotoRelativePath({
+        tenantSlug: RG_MOTORS_TENANT_SLUG,
         slug,
-        count: sorted.length,
-        updatedAt: new Date().toISOString(),
-        manualUpload: true,
-        storage: photosStorageLabel(),
-        frames: publicUrls,
-      };
-      const manifestStored = await storeMediaFile({
-        bytes: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
-        relativePath: `cars/spin/${slug}/manifest.json`,
-        contentType: "application/json",
+        contentHash,
+        ext: prepared.ext,
       });
-      if (manifestStored.storage !== "local") {
-        try {
-          const spinDir = join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "spin", slug);
-          await mkdir(spinDir, { recursive: true });
-          await writeFile(join(spinDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
-        } catch {
-          /* noop */
-        }
-      }
+      const stored = await storeMediaFile({
+        bytes: prepared.bytes,
+        relativePath,
+        contentType: prepared.contentType,
+      });
+      savedFiles.push(filename);
+      newPaths.push(publicMediaUrl(stored));
+    }
 
-      const saved = await saveVehicle({
-        ...vehicle,
-        spin: {
-          count: sorted.length,
-          pattern: publicUrls[0]?.startsWith("http")
-            ? publicUrls[0].replace(/\d{3}\.[a-z0-9]+$/i, "{i}.jpg")
-            : `/cars/spin/${slug}/{i}.jpg`,
-          ext: "jpg",
+    // Releer fresco por si otra subida concurrente ya escribió
+    const fresh = (await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" })) || vehicle;
+    const currentGallery = Array.isArray(fresh.gallery) ? [...fresh.gallery] : [];
+    const updatedGallery = [...currentGallery, ...newPaths];
+
+    let updatedImage = fresh.image;
+    if (type === "cover" || !updatedImage || updatedImage.includes("placeholder")) {
+      updatedImage = newPaths[0] || updatedImage;
+    }
+
+    const saved = await saveVehicle({
+      ...fresh,
+      image: updatedImage,
+      gallery: updatedGallery,
+      hasRealPhotos: true,
+    });
+    if (!saved.success) {
+      return NextResponse.json(
+        {
+          error:
+            saved.error ||
+            "Las fotos se subieron al storage pero falló guardar el inventario. Reintenta; no subas el mismo lote de nuevo sin revisar.",
+          saved: savedFiles,
+          urls: newPaths,
         },
-      });
-      if (!saved.success) {
-        return NextResponse.json(
-          { error: saved.error || "Fotos 360 subidas pero no se actualizó el inventario." },
-          { status: 500 },
-        );
-      }
-    } else {
-      const newPaths: string[] = [];
-
-      for (const file of rawFiles) {
-        const prepared = await fileToStoredBytes(file);
-        const contentHash = photoContentHash(prepared.bytes);
-        const filename = `${contentHash}.${prepared.ext}`;
-        const relativePath = vehiclePhotoRelativePath({
-          tenantSlug: RG_MOTORS_TENANT_SLUG,
-          slug,
-          contentHash,
-          ext: prepared.ext,
-        });
-        const stored = await storeMediaFile({
-          bytes: prepared.bytes,
-          relativePath,
-          contentType: prepared.contentType,
-        });
-        savedFiles.push(filename);
-        newPaths.push(publicMediaUrl(stored));
-      }
-
-      // Releer fresco por si otra subida concurrente ya escribió
-      const fresh = (await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" })) || vehicle;
-      const currentGallery = Array.isArray(fresh.gallery) ? [...fresh.gallery] : [];
-      const updatedGallery = [...currentGallery, ...newPaths];
-
-      let updatedImage = fresh.image;
-      if (type === "cover" || !updatedImage || updatedImage.includes("placeholder")) {
-        updatedImage = newPaths[0] || updatedImage;
-      }
-
-      const saved = await saveVehicle({
-        ...fresh,
-        image: updatedImage,
-        gallery: updatedGallery,
-        hasRealPhotos: true,
-      });
-      if (!saved.success) {
-        return NextResponse.json(
-          {
-            error:
-              saved.error ||
-              "Las fotos se subieron al storage pero falló guardar el inventario. Reintenta; no subas el mismo lote de nuevo sin revisar.",
-            saved: savedFiles,
-            urls: newPaths,
-          },
-          { status: 500 },
-        );
-      }
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
@@ -525,15 +474,19 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json();
     const { slug, filename, type = "gallery" } = body;
 
+    if (type === "spin") {
+      return NextResponse.json(
+        { error: "El giro 360 no se elimina por /api/photos." },
+        { status: 400 },
+      );
+    }
+
     if (!slug || !filename || !/^[a-z0-9-]+$/i.test(slug)) {
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
     const safeFilename = String(filename).replace(/[^a-zA-Z0-9._-]/g, "");
-    const isSpin = type === "spin";
-    const targetDir = isSpin
-      ? join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "spin", slug)
-      : join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "uploads", slug);
+    const targetDir = join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "uploads", slug);
 
     const targetFile = join(targetDir, safeFilename);
 
@@ -542,7 +495,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const v = await getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
-    if (v && !isSpin) {
+    if (v) {
       const currentGallery = v.gallery || [];
       const urlHint =
         typeof body.url === "string" ? normalizeMediaUrl(body.url) : "";

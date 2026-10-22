@@ -51,6 +51,10 @@ describe("isPublicApi — política de acceso", () => {
 
   it("bloquea POST /api/spin (solo admin)", () => {
     expect(isPublicApi("/api/spin", "POST")).toBe(false);
+    expect(isPublicApi("/api/spin/upload-urls", "POST")).toBe(false);
+    expect(isPublicApi("/api/spin/commit", "POST")).toBe(false);
+    expect(isPublicApi("/api/spin/upload-urls", "GET")).toBe(false);
+    expect(isPublicApi("/api/spin/commit", "GET")).toBe(false);
   });
 
   it("protege APIs admin no listadas (ej. sync-sheet)", () => {

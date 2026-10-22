@@ -15,6 +15,15 @@ export type StoredMedia = {
   storage: "supabase" | "local";
 };
 
+const VEHICLE_PHOTO_MIME = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+  "application/json",
+] as const;
+
 let bucketReady = false;
 
 /** Solo tests: el proceso real cachea el alta del bucket. */
@@ -27,6 +36,22 @@ async function ensureVehiclePhotosBucket(): Promise<void> {
   const sb = createServerSupabase();
   const existing = await sb.storage.getBucket(VEHICLE_PHOTOS_BUCKET);
   if (!existing.error && existing.data) {
+    const storage = sb.storage as {
+      updateBucket?: (
+        id: string,
+        options: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] },
+      ) => Promise<{ error: { message: string } | null }>;
+    };
+    if (typeof storage.updateBucket === "function") {
+      const updated = await storage.updateBucket(VEHICLE_PHOTOS_BUCKET, {
+        public: true,
+        fileSizeLimit: 20 * 1024 * 1024,
+        allowedMimeTypes: [...VEHICLE_PHOTO_MIME],
+      });
+      if (updated.error) {
+        console.warn("[Media] MIME del bucket:", updated.error.message);
+      }
+    }
     bucketReady = true;
     return;
   }
@@ -37,7 +62,7 @@ async function ensureVehiclePhotosBucket(): Promise<void> {
   const created = await sb.storage.createBucket(VEHICLE_PHOTOS_BUCKET, {
     public: true,
     fileSizeLimit: 20 * 1024 * 1024,
-    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif", "application/json"],
+    allowedMimeTypes: [...VEHICLE_PHOTO_MIME],
   });
   if (created.error && !/already exists|duplicate/i.test(created.error.message)) {
     throw new Error(`No se pudo crear el bucket ${VEHICLE_PHOTOS_BUCKET}: ${created.error.message}`);
@@ -103,6 +128,8 @@ function guessContentType(path: string): string {
       return "image/png";
     case "webp":
       return "image/webp";
+    case "avif":
+      return "image/avif";
     case "gif":
       return "image/gif";
     case "json":

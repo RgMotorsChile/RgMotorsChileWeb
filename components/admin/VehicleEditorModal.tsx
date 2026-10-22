@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Vehicle, BRANDS, BODY_TYPES, FUELS, TRANSMISSIONS } from "@/lib/vehicles";
+import { Vehicle, BRANDS, BODY_TYPES, FUELS, TRANSMISSIONS, spinMetadataForEditorSave } from "@/lib/vehicles";
 import { asset } from "@/lib/asset";
 import { SALE_SUPPLIERS, type SaleSupplier } from "@/lib/sales/suppliers";
 import { mediaUrlsEqual, normalizeMediaUrl } from "@/lib/vehicles/frontCoverMap";
@@ -253,7 +253,7 @@ export default function VehicleEditorModal({
       gallery: updatedGallery,
       hasRealPhotos: !!formData.image && !formData.image.includes("placeholder"),
       coverLocked: !!formData.image && !formData.image.includes("placeholder"),
-      spin: hasSpin ? { count: spinCount, ext: "jpg" } : undefined,
+      spin: spinMetadataForEditorSave(hasSpin, spinCount, formData.spin ?? vehicle?.spin),
     };
 
     try {
@@ -826,14 +826,21 @@ export default function VehicleEditorModal({
                     </label>
                     <input
                       type="number"
-                      min={12}
-                      max={72}
+                      min={24}
+                      max={200}
                       value={spinCount}
                       onChange={(e) => setSpinCount(parseInt(e.target.value, 10))}
                       className="w-40 rounded-xl border border-white/15 bg-ink-900 px-3 py-2 text-sm text-white focus:border-brand-500 outline-none"
                     />
                     <p className="mt-1 text-[11px] text-white/40">
-                      Las fotos se buscarán en: <code className="text-brand-300">/cars/spin/{formData.slug || "slug"}/001.jpg</code>
+                      {vehicle?.spin?.pattern ? (
+                        <>
+                          El visor usa el patrón ya subido:{" "}
+                          <code className="break-all text-brand-300">{vehicle.spin.pattern}</code>
+                        </>
+                      ) : (
+                        "Los fotogramas se cargan en Fotos → 360° y quedan en Supabase. Guardar esta ficha no cambia la extensión ni la ruta."
+                      )}
                     </p>
                   </div>
                 )}
