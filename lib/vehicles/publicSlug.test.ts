@@ -69,18 +69,28 @@ describe("publicVehicleSlug", () => {
     expect(redirects.gone.some((path) => path.includes("shyl53"))).toBe(false);
   });
 
-  it("publica en cada pestaña y solo da de baja lo que está en otra planilla", () => {
-    const tracker = catalog.find((item) => item.slug.endsWith("rzkv76"));
-    expect(stockRowFor(tracker!).sitio).toBe("rg+salgado");
-    expect(publicationDecision(tracker!.slug, tracker!).type).toBe("redirect");
-    expect(redirects.gone.some((path) => path.includes("rzkv76"))).toBe(false);
+  it("la UBICACION manda y el Edge sigue activo en RG", () => {
+    const edge = catalog.find((item) => item.slug.endsWith("jrth26"));
+    expect(stockRowFor(edge!).sitio).toBe("rg+salgado");
+    expect(publicVehicleSlug(edge!)).toBe("ford-edge-negro-2017-y55fqc");
+    expect(publicationDecision(edge!.slug, edge!)).toEqual({
+      type: "redirect",
+      to: "/vehiculo/ford-edge-negro-2017-y55fqc",
+    });
+    expect(publicationDecision("ford-edge-negro-2017-y55fqc", edge!).type).toBe("render");
+    expect(redirects.redirects).toContainEqual({
+      source: "/vehiculo/ford-edge-2017-jrth26",
+      destination: "/vehiculo/ford-edge-negro-2017-y55fqc",
+    });
 
-    for (const plate of ["ghtd24", "hlxb59", "jrth26", "lwrs59", "trbx87"]) {
-      const row = catalog.find((item) => item.slug.endsWith(plate));
-      expect(stockRowFor(row!).sitio, plate).toBe("salgado");
-      expect(publicationDecision(row!.slug, row!).type).toBe("gone");
-      expect(redirects.gone.some((path) => path.includes(plate))).toBe(true);
+    const tracker = catalog.find((item) => item.slug.endsWith("rzkv76"));
+    expect(stockRowFor(tracker!).sitio).toBe("rg+uc+salgado");
+    expect(publicationDecision(tracker!.slug, tracker!).type).toBe("redirect");
+
+    for (const plate of ["ghtd24", "hlxb59", "jrth26", "lwrs59", "trbx87", "rzkv76", "y55fqc"]) {
+      expect(redirects.gone.some((path) => path.includes(plate)), plate).toBe(false);
     }
+    expect(redirects.gone).toEqual([]);
   });
 
   it("el CSV de docs es el que lee el sitio", () => {

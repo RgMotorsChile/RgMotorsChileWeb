@@ -1,7 +1,7 @@
 /**
- * Sucursal física. docs/stock-sucursal.csv lista las pestañas de cada patente.
- * Si incluye rg, la ficha se queda aquí con canónico propio.
- * Si solo está en otra pestaña, la URL que sobre en este dominio sale con 301 o 410.
+ * Sucursal física. docs/stock-sucursal.csv junta la celda UBICACION y las pestañas.
+ * Si incluye rg, la ficha se queda aquí con canónico propio y entra al sitemap.
+ * 410 solo cuando ninguna fuente pone el auto en RG.
  */
 import { listedOnRg } from "./stockSucursal";
 

@@ -1,8 +1,9 @@
 /**
  * Tabla maestra de sucursal. La fuente es docs/stock-sucursal.csv
  * (el mismo texto que STOCK_SUCURSAL_CSV).
- * sitio lista las pestañas donde está la patente (rg, uc, salgado, unidas con +).
- * Si está en más de una, se publica en todas y no hay 301 ni 410 entre sitios.
+ * sitio junta la sucursal de la celda UBICACION con cada pestaña donde está la patente.
+ * CARDONAL y RG MOTORS son rg. Patio Salgado es salgado. UNI CHILE es uc.
+ * Si incluye rg, la ficha sigue en este dominio. 410 solo cuando ninguna fuente la pone en RG.
  * a_confirmar queda solo cuando no hay patente y no se puede afirmar que sea el mismo auto.
  */
 import { STOCK_SUCURSAL_CSV } from "./stockSucursalCsv";
@@ -126,7 +127,7 @@ export function listedOnRg(vehicle: { slug?: string; plate?: string }): boolean 
   return stockTokens(row.sitio).includes("rg");
 }
 
-/** 301 a otro sitio solo si la patente no está en la pestaña de RG. */
+/** 301 a otro sitio solo si ninguna fuente (UBICACION o pestaña) pone la patente en RG. */
 export function offsiteUrlFor(vehicle: { slug?: string; plate?: string }): string | null {
   const row = stockRowFor(vehicle);
   if (!row || row.sitio === "a_confirmar") return null;

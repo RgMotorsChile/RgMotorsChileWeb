@@ -41,6 +41,18 @@
       "destination": "/vehiculo/chevrolet-colorado-4x4-aut-blanco-2022-52c4sd"
     },
     {
+      "source": "/vehiculo/hyundai-tucson-gl-2-0-2014-ghtd24",
+      "destination": "/vehiculo/hyundai-tucson-gl-2-0-blanco-2014-u7skaq"
+    },
+    {
+      "source": "/vehiculo/jac-t6-2020-lwrs59",
+      "destination": "/vehiculo/jac-t6-gris-2020-kvdspe"
+    },
+    {
+      "source": "/vehiculo/chevrolet-spark-gt-lt-1-2-2016-hlxb59",
+      "destination": "/vehiculo/chevrolet-spark-gt-lt-1-2-verde-cocktail-2016-23kwsa"
+    },
+    {
       "source": "/vehiculo/hyundai-porter-2022-rpsv20",
       "destination": "/vehiculo/hyundai-porter-blanco-2022-6jqyxz"
     },
@@ -67,6 +79,10 @@
     {
       "source": "/vehiculo/ford-raptor-f150-2020-lrjy32",
       "destination": "/vehiculo/ford-raptor-f150-rojo-2020-qe7hau"
+    },
+    {
+      "source": "/vehiculo/ford-edge-2017-jrth26",
+      "destination": "/vehiculo/ford-edge-negro-2017-y55fqc"
     },
     {
       "source": "/vehiculo/hyundai-gran-i10-2022-sbjr89",
@@ -99,18 +115,11 @@
     {
       "source": "/vehiculo/peugeot-expert-2022-scdw37",
       "destination": "/vehiculo/peugeot-expert-blanco-2022-vjsvpm"
+    },
+    {
+      "source": "/vehiculo/mg-zs-2024-trbx87",
+      "destination": "/vehiculo/mg-zs-gris-2024-ek6yan"
     }
   ],
-  "gone": [
-    "/vehiculo/hyundai-tucson-gl-2-0-2014-ghtd24",
-    "/vehiculo/hyundai-tucson-gl-2-0-blanco-2014-u7skaq",
-    "/vehiculo/jac-t6-2020-lwrs59",
-    "/vehiculo/jac-t6-gris-2020-kvdspe",
-    "/vehiculo/chevrolet-spark-gt-lt-1-2-2016-hlxb59",
-    "/vehiculo/chevrolet-spark-gt-lt-1-2-verde-cocktail-2016-23kwsa",
-    "/vehiculo/ford-edge-2017-jrth26",
-    "/vehiculo/ford-edge-negro-2017-y55fqc",
-    "/vehiculo/mg-zs-2024-trbx87",
-    "/vehiculo/mg-zs-gris-2024-ek6yan"
-  ]
+  "gone": []
 }

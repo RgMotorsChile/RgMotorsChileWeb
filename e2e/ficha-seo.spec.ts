@@ -64,8 +64,14 @@ test.describe("Ficha, catálogo y SEO", () => {
     expect(tracker.status()).toBe(301);
     expect(tracker.headers().location || "").not.toContain("unidadeschile");
     expect(tracker.headers().location || "").not.toContain("salgado");
+    const edge = await request.get("/vehiculo/ford-edge-2017-jrth26", { maxRedirects: 0 });
+    expect(edge.status()).toBe(301);
+    expect(edge.headers().location || "").toContain("/vehiculo/ford-edge-negro-2017-y55fqc");
+    const edgePage = await request.get("/vehiculo/ford-edge-negro-2017-y55fqc", { maxRedirects: 0 });
+    expect(edgePage.status()).not.toBe(410);
     const tucson = await request.get("/vehiculo/hyundai-tucson-gl-2-0-2014-ghtd24", { maxRedirects: 0 });
-    expect(tucson.status()).toBe(410);
+    expect(tucson.status()).toBe(301);
+    expect(tucson.status()).not.toBe(410);
   });
 
   test("axe sin violaciones serias en catálogo y ficha", async ({ page }) => {
