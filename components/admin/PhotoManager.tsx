@@ -844,13 +844,17 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
           <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-5">
             <h3 className="mb-2 font-semibold text-white">Visor 360° en vivo</h3>
             {spinCount > 0 ? (
-              <PhotoSpin360
-                frames={Array.from(
-                  { length: spinCount },
-                  (_, i) =>
-                    `/cars/spin/${selectedSlug}/${String(i + 1).padStart(3, "0")}.jpg`,
-                )}
-              />
+              <div className="aspect-video overflow-hidden rounded-xl bg-black">
+                <PhotoSpin360
+                  frames={Array.from(
+                    { length: spinCount },
+                    (_, i) =>
+                      `/cars/spin/${selectedSlug}/${String(i + 1).padStart(3, "0")}.jpg`,
+                  )}
+                  autoPlay={false}
+                  className="h-full w-full"
+                />
+              </div>
             ) : (
               <div className="grid h-64 place-items-center rounded-xl border border-white/10 bg-ink-900/50 text-xs text-white/40">
                 Este vehículo aún no tiene fotogramas 360° cargados.
