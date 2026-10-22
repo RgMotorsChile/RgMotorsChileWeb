@@ -460,15 +460,18 @@ export async function syncDrivePhotosViaOAuth(opts?: {
    * solo cuando la URL nueva ya se escribió. No borra filas.
    */
   migrateBlobUrls?: boolean;
+  /** Si viene, solo estos slugs. El resto del catálogo no entra en la corrida. */
+  onlySlugs?: string[];
   folderId?: string;
   tenantSlug?: string;
 }): Promise<SyncResult> {
   const tenantSlug = opts?.tenantSlug || "rg-motors";
-  const existingList = await getVehicles({
+  const onlySlugs = opts?.onlySlugs ? new Set(opts.onlySlugs) : null;
+  const existingList = (await getVehicles({
     tenantSlug,
     bypassCache: true,
     scope: "staff",
-  });
+  })).filter((vehicle) => !onlySlugs || onlySlugs.has(vehicle.slug));
 
   if (!isGoogleDriveOAuthConfigured()) {
     const msg =

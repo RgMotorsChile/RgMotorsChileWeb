@@ -2,15 +2,15 @@
  * Vuelve a bajar las fotos de Drive y reemplaza las URLs de Vercel Blob
  * recién cuando la URL nueva quedó guardada en catalog_vehicles.
  *
- * Uso:
+ * En producción no hace falta este script: GitHub Actions → "Re-sync fotos"
+ * llama a /api/cron/photos-resync con el CRON_SECRET que ya está en Vercel.
+ *
+ * Uso local (hace falta .env.local con SUPABASE_SERVICE_ROLE_KEY y GOOGLE_DRIVE_*):
  *   npm run photos:resync
  *   npm run photos:resync -- rg-motors
  *   npm run photos:resync -- unidades-chile
  *
- * Lee .env.local / .env antes de importar el sync (hace falta
- * SUPABASE_SERVICE_ROLE_KEY y GOOGLE_DRIVE_*). No borra filas.
- * Los reemplazos manuales (manualReplacedAt) no se pisan: el Blob viejo
- * no se puede leer, hay que volver a subirlos desde el admin.
+ * No borra filas. Los reemplazos manuales (manualReplacedAt) no se pisan.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -32,39 +32,28 @@ loadEnvFile(resolve(process.cwd(), ".env.local"));
 loadEnvFile(resolve(process.cwd(), ".env"));
 
 const arg = process.argv[2];
-const tenants =
-  arg === "rg-motors" || arg === "unidades-chile"
-    ? [arg]
-    : ["rg-motors", "unidades-chile"];
+const onlyTenant = arg === "rg-motors" || arg === "unidades-chile" ? arg : undefined;
 
-const { syncDrivePhotosViaOAuth } = await import("../lib/server/driveOAuthSyncService");
+const { runPhotosResyncBatch } = await import("../lib/server/photosResync");
 
-for (const tenantSlug of tenants) {
-  console.log(`Re-sync ${tenantSlug}`);
-  for (let round = 1; round <= 40; round += 1) {
-    const result = await syncDrivePhotosViaOAuth({
-      tenantSlug,
-      migrateBlobUrls: true,
-      maxBlobHeadChecks: 0,
-      maxNewPhotos: 400,
-      maxVehicles: 400,
-      photosPerVehicle: 40,
-      maxFolderLists: 400,
-    });
-    const deferred = result.deferredVehicles || 0;
-    const downloaded = result.newPhotosDownloaded || 0;
-    console.log(
-      JSON.stringify({
-        tenantSlug,
-        round,
-        success: result.success,
-        syncedVehicles: result.syncedVehicles,
-        newPhotosDownloaded: downloaded,
-        deferredVehicles: deferred,
-        message: result.message,
-      }),
-    );
-    if (!result.success) process.exitCode = 1;
-    if (!result.success || (downloaded === 0 && deferred === 0)) break;
+let cursor: string | null = onlyTenant ?? null;
+for (let round = 1; round <= 160; round += 1) {
+  const result = await runPhotosResyncBatch({
+    cursor,
+    limit: 8,
+    deadlineAt: Number.POSITIVE_INFINITY,
+    stopAfterTenant: onlyTenant,
+  });
+  console.log(JSON.stringify({ round, ...result }));
+  if (!result.ok) process.exitCode = 1;
+  if (!result.ok || result.done || !result.nextCursor) break;
+  if (
+    result.nextCursor === cursor &&
+    result.newPhotosDownloaded === 0 &&
+    result.deferredVehicles === 0
+  ) {
+    process.exitCode = 1;
+    break;
   }
+  cursor = result.nextCursor;
 }
