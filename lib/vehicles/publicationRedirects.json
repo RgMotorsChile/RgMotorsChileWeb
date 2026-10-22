@@ -13,40 +13,24 @@
       "destination": "/vehiculo/peugeot-partner-1-5-blanco-2023-stexz6"
     },
     {
-      "source": "/vehiculo/peugeot-partner-2022-rlvr63",
-      "destination": "/vehiculo/peugeot-partner-blanco-2022-enjmz9"
+      "source": "/vehiculo/ford-ranger-4x4-2023-shyl53",
+      "destination": "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8"
     },
     {
       "source": "/vehiculo/ford-ranger-xlt-4x4-3-2-2021-prkk70",
       "destination": "/vehiculo/ford-ranger-xlt-4x4-3-2-gris-2021-tfue4e"
     },
     {
-      "source": "/vehiculo/ram-700-2022-rgbp23",
-      "destination": "/vehiculo/ram-700-blanco-2022-6nute6"
-    },
-    {
       "source": "/vehiculo/peugeot-partner-2023-svfd42",
       "destination": "/vehiculo/peugeot-partner-blanco-2023-a4bzqg"
-    },
-    {
-      "source": "/vehiculo/toyota-raize-4x2-1-2-2025-tsgl82",
-      "destination": "/vehiculo/toyota-raize-4x2-1-2-gris-2025-avxzkq"
     },
     {
       "source": "/vehiculo/chevrolet-colorado-4x4-aut-2022-sfyb29",
       "destination": "/vehiculo/chevrolet-colorado-4x4-aut-blanco-2022-52c4sd"
     },
     {
-      "source": "/vehiculo/hyundai-tucson-gl-2-0-2014-ghtd24",
-      "destination": "/vehiculo/hyundai-tucson-gl-2-0-blanco-2014-u7skaq"
-    },
-    {
       "source": "/vehiculo/jac-t6-2020-lwrs59",
       "destination": "/vehiculo/jac-t6-gris-2020-kvdspe"
-    },
-    {
-      "source": "/vehiculo/chevrolet-spark-gt-lt-1-2-2016-hlxb59",
-      "destination": "/vehiculo/chevrolet-spark-gt-lt-1-2-verde-cocktail-2016-23kwsa"
     },
     {
       "source": "/vehiculo/hyundai-porter-2022-rpsv20",
@@ -65,24 +49,12 @@
       "destination": "/vehiculo/volkswagen-amarok-4x4-mt-blanco-2022-xc4y2h"
     },
     {
-      "source": "/vehiculo/hyundai-porter-2022-rryj47",
-      "destination": "/vehiculo/hyundai-porter-blanco-2022-5g8c9c"
-    },
-    {
-      "source": "/vehiculo/hino-xzu-617-dc-2023-sklf13",
-      "destination": "/vehiculo/hino-xzu-617-dc-blanco-2023-5cqd5q"
-    },
-    {
       "source": "/vehiculo/ford-raptor-f150-2020-lrjy32",
       "destination": "/vehiculo/ford-raptor-f150-rojo-2020-qe7hau"
     },
     {
       "source": "/vehiculo/ford-edge-2017-jrth26",
       "destination": "/vehiculo/ford-edge-negro-2017-y55fqc"
-    },
-    {
-      "source": "/vehiculo/hyundai-gran-i10-2022-sbjr89",
-      "destination": "/vehiculo/hyundai-gran-i10-blanco-2022-s4vbg9"
     },
     {
       "source": "/vehiculo/mitsubishi-katana-work-4x2-2022-rggz96",
@@ -129,10 +101,5 @@
       "destination": "https://www.unidadeschile.cl/catalogo/toyota-new-hilux-4x2-2022-rhcl44"
     }
   ],
-  "gone": [
-    "/vehiculo/ford-ranger-4x4-2023-shyl53",
-    "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8",
-    "/vehiculo/chevrolet-tracker-mt-2022-rzkv76",
-    "/vehiculo/chevrolet-tracker-mt-blanco-2022-h6cvc4"
-  ]
+  "gone": []
 }

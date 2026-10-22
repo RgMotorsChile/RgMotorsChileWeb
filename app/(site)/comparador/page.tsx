@@ -5,6 +5,7 @@ import Link from "next/link";
 import { asset } from "@/lib/asset";
 import { vehicles as initialVehicles, Vehicle, formatCLP } from "@/lib/vehicles";
 import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
+import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 
 const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
   { label: "Precio", get: (v) => formatCLP(v.price) },
@@ -20,7 +21,7 @@ const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
 
 export default function ComparadorPage() {
   const [vehiclesData, setVehiclesData] = useState<Vehicle[]>(() =>
-    initialVehicles.map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
+    initialVehicles.filter(isPublicCatalogVehicle).map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
   );
   
   useEffect(() => {

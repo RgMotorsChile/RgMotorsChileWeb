@@ -5,6 +5,8 @@
  * El slug de almacenamiento no se reescribe: las fotos siguen en su ruta.
  */
 
+import { legacyUrlLocked } from "./stockSucursal";
+
 const PLATE_RE = /^[a-z]{2,4}\d{2,4}$/i;
 const ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 
@@ -76,6 +78,8 @@ export function plateInSlug(slug: string): string {
 }
 
 export function publicVehicleSlug(vehicle: SlugSource): string {
+  // a_confirmar conserva la URL de hoy. No hay 301 al slug sin patente.
+  if (legacyUrlLocked(vehicle)) return vehicle.slug;
   const plate = plateInSlug(vehicle.slug);
   if (!plate) return vehicle.slug;
 

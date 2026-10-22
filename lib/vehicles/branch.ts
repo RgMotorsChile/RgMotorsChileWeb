@@ -1,8 +1,8 @@
 /**
- * Sucursal física. Cada dominio publica solo los autos que están en su patio.
- * "Cardonal" a secas no alcanza: RG y Salgado están en la misma avenida.
- * La asignación de abajo sale de la ubicación que Salgado publica para la misma patente.
+ * Sucursal física. La tabla docs/stock-sucursal.csv manda.
+ * a_confirmar no se mueve. rg se queda. uc y salgado salen de este dominio.
  */
+import { stockRowFor } from "./stockSucursal";
 
 export const BRANCHES = ["rg-motors", "unidades-chile", "salgado"] as const;
 export type BranchId = (typeof BRANCHES)[number];
@@ -15,16 +15,8 @@ export type BranchAssignment = {
   externalUrl?: string;
 };
 
-export const BRANCH_ASSIGNMENTS: Record<string, BranchAssignment> = {
-  "ford-ranger-4x4-2023-shyl53": {
-    branch: "unidades-chile",
-    reason: "Salgado Automotriz marca la ubicación física como Uni Chile y no hay ficha en unidadeschile.cl.",
-  },
-  "chevrolet-tracker-mt-2022-rzkv76": {
-    branch: "unidades-chile",
-    reason: "Salgado Automotriz marca la ubicación física como Unidades De Chile y no hay ficha en unidadeschile.cl.",
-  },
-};
+/** Reservado. La sucursal de un duplicado sale de docs/stock-sucursal.csv. */
+export const BRANCH_ASSIGNMENTS: Record<string, BranchAssignment> = {};
 
 /** Hilux que ya no está en este dominio: vive en Unidades Chile. */
 export const MOVED_TO_OTHER_SITE: { plate: string; url: string }[] = [
@@ -45,7 +37,10 @@ export function branchOf(vehicle: { slug: string; branch?: string }): BranchId {
   return BRANCH_ASSIGNMENTS[vehicle.slug]?.branch || (isBranchId(vehicle.branch) ? vehicle.branch : "rg-motors");
 }
 
-export function publishesOnRg(vehicle: { slug: string; branch?: string }): boolean {
+export function publishesOnRg(vehicle: { slug: string; plate?: string; branch?: string }): boolean {
+  const site = stockRowFor(vehicle)?.sitio;
+  if (site === "rg" || site === "a_confirmar") return true;
+  if (site === "uc" || site === "salgado") return false;
   return branchOf(vehicle) === "rg-motors";
 }
 

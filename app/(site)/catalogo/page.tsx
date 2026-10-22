@@ -8,7 +8,7 @@ import {
   formatCLP,
   Vehicle,
 } from "@/lib/vehicles";
-import { isCamionetaBody } from "@/lib/vehicles/publicCatalog";
+import { isCamionetaBody, isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 import VehicleCard from "@/components/VehicleCard";
 import CatalogCardSkeleton from "@/components/CatalogCardSkeleton";
@@ -38,7 +38,7 @@ export default function CatalogPage() {
 
 function CatalogContent() {
   const [vehicleList, setVehicleList] = useState<Vehicle[]>(() =>
-    initialVehicles.map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
+    initialVehicles.filter(isPublicCatalogVehicle).map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
   );
   const [catalogReady, setCatalogReady] = useState(false);
 

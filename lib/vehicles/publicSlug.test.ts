@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import catalog from "@/lib/vehicles/data/rgCatalog.json";
+import { readFileSync } from "node:fs";
+import redirects from "@/lib/vehicles/publicationRedirects.json";
 import { plateInSlug, publicVehicleSlug, scrubPlate } from "@/lib/vehicles/publicSlug";
 import { publicationDecision } from "@/lib/vehicles/publication";
+import { STOCK_SUCURSAL_CSV } from "@/lib/vehicles/stockSucursalCsv";
+import { legacyUrlLocked, stockRowFor } from "@/lib/vehicles/stockSucursal";
 import { vehicleDocumentTitle, vehicleHeadline, vehicleMetaDescription } from "@/lib/seo/vehicleMeta";
 import { vehicleJsonLd } from "@/lib/seo/vehicleJsonLd";
 import { vehicleSpecBar } from "@/lib/vehicles/publicSpecs";
@@ -39,12 +43,50 @@ describe("publicVehicleSlug", () => {
     for (const row of catalog) {
       const plate = plateInSlug(row.slug);
       const slug = publicVehicleSlug(row);
-      expect(slug.includes(plate)).toBe(false);
       const decision = publicationDecision(row.slug, row);
+      if (legacyUrlLocked(row)) {
+        expect(slug).toBe(row.slug);
+        expect(decision).toEqual({ type: "render" });
+        continue;
+      }
+      expect(slug.includes(plate)).toBe(false);
       if (decision.type === "redirect" && decision.to.startsWith("/")) {
         expect(decision.to.endsWith(slug)).toBe(true);
       }
     }
+  });
+
+  it("el Ranger SHYL53 queda en RG con el slug nuevo", () => {
+    const ranger = catalog.find((row) => row.slug.endsWith("shyl53"));
+    expect(ranger).toBeTruthy();
+    expect(stockRowFor(ranger!).sitio).toBe("rg");
+    expect(publicVehicleSlug(ranger!)).toBe("ford-ranger-4x4-rojo-2023-7cm3a8");
+    expect(publicationDecision(ranger!.slug, ranger!)).toEqual({
+      type: "redirect",
+      to: "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8",
+    });
+    expect(publicationDecision("ford-ranger-4x4-rojo-2023-7cm3a8", ranger!).type).toBe("render");
+    expect(redirects.gone).toEqual([]);
+    expect(redirects.redirects).toContainEqual({
+      source: "/vehiculo/ford-ranger-4x4-2023-shyl53",
+      destination: "/vehiculo/ford-ranger-4x4-rojo-2023-7cm3a8",
+    });
+  });
+
+  it("Tucson, Spark GT y Tracker a confirmar no se redirigen ni se dan de baja", () => {
+    for (const plate of ["ghtd24", "hlxb59", "rzkv76"]) {
+      const row = catalog.find((item) => item.slug.endsWith(plate));
+      expect(row, plate).toBeTruthy();
+      expect(stockRowFor(row!).sitio).toBe("a_confirmar");
+      expect(publicVehicleSlug(row!)).toBe(row!.slug);
+      expect(publicationDecision(row!.slug, row!)).toEqual({ type: "render" });
+      expect(redirects.redirects.some((item) => item.source.includes(plate))).toBe(false);
+      expect(redirects.gone.some((path) => path.includes(plate))).toBe(false);
+    }
+  });
+
+  it("el CSV de docs es el que lee el sitio", () => {
+    expect(readFileSync("docs/stock-sucursal.csv", "utf8")).toBe(STOCK_SUCURSAL_CSV);
   });
 });
 

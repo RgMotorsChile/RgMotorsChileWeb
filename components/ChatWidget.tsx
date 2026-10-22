@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { asset } from "@/lib/asset";
 import { vehicles as staticVehicles, formatCLP } from "@/lib/vehicles";
 import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
+import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { getTrafficSource } from "@/lib/trafficTracking";
 import { trackEvent } from "@/lib/googleAnalytics";
 import { COMPANY } from "@/lib/company";
@@ -33,7 +34,7 @@ export default function ChatWidget() {
   const [showTeaser, setShowTeaser] = useState(false);
   const [input, setInput] = useState("");
   const [vehiclesData, setVehiclesData] = useState<ChatVehicle[]>(() =>
-    staticVehicles.map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
+    staticVehicles.filter(isPublicCatalogVehicle).map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
   );
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [greeted, setGreeted] = useState(false);

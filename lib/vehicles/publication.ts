@@ -1,4 +1,5 @@
 import { BRANCH_ASSIGNMENTS, externalUrlForPlate, publishesOnRg } from "./branch";
+import { offsiteUrlFor } from "./stockSucursal";
 import { plateToken, publicVehicleSlug, slugMatchesVehicle, type SlugSource } from "./publicSlug";
 
 export type PublicationHit =
@@ -20,7 +21,8 @@ export function publicationDecision(
   }
   if (!publishesOnRg(vehicle)) {
     const assigned = BRANCH_ASSIGNMENTS[vehicle.slug];
-    if (assigned?.externalUrl) return { type: "redirect", to: assigned.externalUrl };
+    const external = offsiteUrlFor(vehicle) || assigned?.externalUrl;
+    if (external) return { type: "redirect", to: external };
     return { type: "gone" };
   }
   const next = publicVehicleSlug(vehicle);
