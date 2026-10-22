@@ -253,6 +253,7 @@ describe("fotogramas del giro", () => {
         slug: "hilux-2020",
         standard,
         signTimeoutMs: 30,
+        retryDelayMs: 0,
       }),
     ).rejects.toThrow(/Se agotó el tiempo al firmar las subidas/);
     expect(abortVersion).toMatch(/^[a-z0-9]+$/);
@@ -278,5 +279,128 @@ describe("fotogramas del giro", () => {
     expect(versions).toHaveLength(2);
     expect(versions[0]).not.toBe(versions[1]);
     expect(versions[0]).not.toBe(createSpinVersion());
+  });
+
+  it("simula 284 fotogramas: lotes en serie, reintenta el pool y confirma una sola vez", async () => {
+    const standard = numbered(142, "webp", "image/webp");
+    const hd = numbered(142, "avif", "image/avif");
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let signedFrames = 0;
+    let puts = 0;
+    let commits = 0;
+    let aborts = 0;
+    const attempts = new Map<string, number>();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/spin/abort")) {
+          aborts += 1;
+          return json({ deleted: 0 });
+        }
+        if (url.includes("/api/spin/commit")) {
+          commits += 1;
+          const payload = JSON.parse(String(init?.body)) as {
+            version: string;
+            sets: Array<{ name: string; ext: string; count: number }>;
+          };
+          expect(payload.sets).toEqual([
+            { name: "m900", ext: "webp", count: 142 },
+            { name: "d1600", ext: "avif", count: 142 },
+          ]);
+          return json({ success: true });
+        }
+        if (url.includes("/api/spin/upload-urls")) {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          try {
+            const payload = JSON.parse(String(init?.body)) as {
+              version: string;
+              sets: Array<{ name: string; ext: string; count: number; from: number; to: number }>;
+            };
+            expect(payload.sets).toHaveLength(1);
+            const set = payload.sets[0]!;
+            const key = `${set.name}:${set.from}-${set.to}`;
+            const n = (attempts.get(key) ?? 0) + 1;
+            attempts.set(key, n);
+            if (set.name === "m900" && set.from === 97 && n === 1) {
+              return json({ error: "Too many connections issued to the database" }, 500);
+            }
+            const uploads = [];
+            for (let index = set.from; index <= set.to; index += 1) {
+              uploads.push({
+                index,
+                signedUrl: `https://sign.test/${set.name}/${index}`,
+                contentType: set.ext === "avif" ? "image/avif" : "image/webp",
+                path: `p/${set.name}/${index}`,
+              });
+            }
+            signedFrames += set.to - set.from + 1;
+            return json({
+              version: payload.version,
+              sets: [{ name: set.name, ext: set.ext, count: set.count, uploads }],
+            });
+          } finally {
+            inFlight -= 1;
+          }
+        }
+        puts += 1;
+        return new Response(null, { status: 200 });
+      }),
+    );
+
+    const progress: string[] = [];
+    await uploadSpinSets({
+      slug: "ford-edge-2017-jrth26",
+      standard,
+      hd,
+      signBatchSize: 24,
+      retryDelayMs: 0,
+      onProgress: (done, total, phase) => progress.push(`${phase ?? "upload"} ${done}/${total}`),
+    });
+
+    expect(maxInFlight).toBe(1);
+    expect(signedFrames).toBe(284);
+    expect(puts).toBe(284);
+    expect(commits).toBe(1);
+    expect(aborts).toBe(0);
+    expect(attempts.get("m900:97-120")).toBe(2);
+    expect(progress).toContain("sign 192/284");
+    expect(progress.at(-1)).toBe("upload 284/284");
+  });
+
+  it("si el pool sigue lleno, no confirma y borra el intento", async () => {
+    const standard = numbered(24, "webp", "image/webp");
+    let signs = 0;
+    let commits = 0;
+    let aborts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/spin/abort")) {
+          aborts += 1;
+          return json({ success: true, deleted: 4 });
+        }
+        if (url.includes("/api/spin/commit")) {
+          commits += 1;
+          return json({ success: true });
+        }
+        if (url.includes("/api/spin/upload-urls")) {
+          signs += 1;
+          return json({ error: "Too many connections issued to the database" }, 503);
+        }
+        throw new Error("no debía subir");
+      }),
+    );
+
+    await expect(
+      uploadSpinSets({ slug: "ford-edge-2017-jrth26", standard, retryDelayMs: 0 }),
+    ).rejects.toThrow(/Too many connections issued to the database/);
+    expect(signs).toBe(4);
+    expect(commits).toBe(0);
+    expect(aborts).toBe(1);
   });
 });

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createServerSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  createServerSupabase,
+  isSupabaseConfigured,
+  resetServerSupabaseForTests,
+} from "@/lib/supabase/client";
 
 const ROLE = "SUPABASE_SERVICE_ROLE_KEY";
 const ANON = "NEXT_PUBLIC_SUPABASE_ANON_KEY";
@@ -9,6 +13,7 @@ describe("createServerSupabase", () => {
   const prevAnon = process.env[ANON];
 
   afterEach(() => {
+    resetServerSupabaseForTests();
     if (prevRole === undefined) delete process.env[ROLE];
     else process.env[ROLE] = prevRole;
     if (prevAnon === undefined) delete process.env[ANON];
@@ -20,5 +25,13 @@ describe("createServerSupabase", () => {
     process.env[ANON] = "anon-public-key";
     expect(isSupabaseConfigured()).toBe(false);
     expect(() => createServerSupabase()).toThrow("Falta SUPABASE_SERVICE_ROLE_KEY");
+  });
+
+  it("devuelve el mismo cliente mientras no cambie la llave", () => {
+    process.env[ROLE] = "service-role-test-key";
+    resetServerSupabaseForTests();
+    const first = createServerSupabase();
+    const second = createServerSupabase();
+    expect(second).toBe(first);
   });
 });
