@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { Vehicle } from "@/lib/vehicles";
 import {
   abortSpinUpload,
+  clearSpinVehicleCache,
   commitSpinUpload,
   createSpinUploadUrls,
   legacySpinPrefix,
+  lookupSpinVehicle,
   parseSpinUploadBody,
+  SPIN_SIGN_CONCURRENCY,
   spinFrameObjectPath,
   spinSetPrefix,
 } from "@/lib/server/spinUpload";
@@ -161,6 +164,41 @@ describe("rutas firmadas del giro", () => {
       }),
     ));
   });
+
+  it("firma de a una y reintenta si la base no acepta más conexiones", async () => {
+    expect(SPIN_SIGN_CONCURRENCY).toBe(1);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const calls = new Map<string, number>();
+    const result = await createSpinUploadUrls(
+      {
+        slug: SLUG,
+        version: VERSION,
+        sets: [{ name: "m900", ext: "webp", count: 24, from: 1, to: 8 }],
+      },
+      {
+        findVehicle: async () => vehicle(),
+        signRetryDelayMs: 0,
+        createSignedUploadUrl: async (path) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          inFlight -= 1;
+          const n = (calls.get(path) ?? 0) + 1;
+          calls.set(path, n);
+          if (path.endsWith("/003.webp") && n === 1) {
+            throw new Error("Too many connections issued to the database");
+          }
+          return { signedUrl: `https://sign.test/${path}`, token: "tok", path };
+        },
+      },
+    );
+    expect(result.status).toBe(200);
+    expect(maxInFlight).toBe(1);
+    const retried = [...calls.entries()].find(([path]) => path.endsWith("/003.webp"));
+    expect(retried?.[1]).toBe(2);
+    expect([...calls.values()].filter((n) => n === 1)).toHaveLength(7);
+  });
 });
 
 describe("commit del giro", () => {
@@ -311,5 +349,19 @@ describe("abort del giro", () => {
     ]]);
     expect(JSON.stringify(removed)).not.toContain("oldver");
     expect(JSON.stringify(removed)).not.toContain("mvjnpp9vui5jn5");
+  });
+});
+
+describe("caché del vehículo al firmar", () => {
+  it("no vuelve a leer el catálogo en los lotes siguientes", async () => {
+    clearSpinVehicleCache();
+    const load = vi.fn(async () => vehicle());
+    const first = await lookupSpinVehicle(SLUG, load, 1_000);
+    const second = await lookupSpinVehicle(SLUG, load, 1_000 + 5_000);
+    expect(second?.slug).toBe(first?.slug);
+    expect(load).toHaveBeenCalledTimes(1);
+    clearSpinVehicleCache();
+    await lookupSpinVehicle(SLUG, load, 1_000);
+    expect(load).toHaveBeenCalledTimes(2);
   });
 });

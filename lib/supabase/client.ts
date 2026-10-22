@@ -20,20 +20,38 @@ export function createBrowserSupabase(): SupabaseClient {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
+let serverClient: SupabaseClient | null = null;
+let serverClientKey = "";
+
+/** Tests: el proceso real conserva un solo cliente. */
+export function resetServerSupabaseForTests(): void {
+  serverClient = null;
+  serverClientKey = "";
+}
+
 /**
- * Cliente de servidor. Exige service role.
- * No cae a la anon key: en la base compartida anon no puede escribir
- * `catalog_vehicles` (migración 20260930145942) y un fallback silencioso
- * haría que lecturas/escrituras corran con el rol equivocado.
+ * Un solo cliente por proceso. Crear uno por firma o por lote abre conexiones
+ * de más en el pool de Supabase («Too many connections issued to the database»).
+ * Exige service role. No cae a la anon key: en la base compartida anon no puede
+ * escribir `catalog_vehicles` (migración 20260930145942).
  */
 export function createServerSupabase(): SupabaseClient {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) {
     throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY");
   }
-  return createClient(SUPABASE_URL, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const cacheKey = `${SUPABASE_URL}\n${key}`;
+  if (!serverClient || serverClientKey !== cacheKey) {
+    serverClient = createClient(SUPABASE_URL, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+    serverClientKey = cacheKey;
+  }
+  return serverClient;
 }
 
 /** True solo si el servidor puede usar service role. La anon key es del browser. */

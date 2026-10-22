@@ -4,6 +4,7 @@
  * Los bytes van directo a la URL firmada de Supabase. El commit es al final.
  */
 import { readApiError } from "@/lib/client/uploadPhotos";
+import { isRetryableSpinFailure, spinRetryDelayMs } from "@/lib/spinRetry";
 
 export const SPIN_UPLOAD_CONCURRENCY = 6;
 /** Intento inicial + 3 reintentos. */
@@ -13,6 +14,7 @@ export const SPIN_FRAME_MAX = 200;
 /** Fotogramas que se firman en cada POST /api/spin/upload-urls. */
 export const SPIN_SIGN_BATCH = 24;
 export const SPIN_SIGN_TIMEOUT_MS = 25_000;
+export const SPIN_SIGN_ATTEMPTS = 4;
 export const SPIN_PUT_TIMEOUT_MS = 30_000;
 export const SPIN_COMMIT_TIMEOUT_MS = 50_000;
 const MAX_SPIN_BYTES = 20 * 1024 * 1024;
@@ -195,6 +197,15 @@ async function putOnce(url: string, file: File, contentType: string, timeoutMs: 
     throw err instanceof Error ? err : new Error("Sin conexión al subir un fotograma.");
   }
   if (!res.ok) {
+    let detail = "";
+    try {
+      detail = (await res.text()).slice(0, 300);
+    } catch {
+      detail = "";
+    }
+    if (/too many connections|too many clients|remaining connection slots/i.test(detail)) {
+      throw new Error("Too many connections issued to the database");
+    }
     throw new Error(`No se pudo subir un fotograma (HTTP ${res.status}).`);
   }
 }
@@ -257,6 +268,7 @@ export async function uploadSpinSets(opts: {
   concurrency?: number;
   signBatchSize?: number;
   signTimeoutMs?: number;
+  signAttempts?: number;
   putTimeoutMs?: number;
   commitTimeoutMs?: number;
 }): Promise<{ count: number; message: string }> {
@@ -274,8 +286,10 @@ export async function uploadSpinSets(opts: {
   const version = createSpinVersion();
   const batchSize = Math.max(1, opts.signBatchSize ?? SPIN_SIGN_BATCH);
   const signTimeoutMs = opts.signTimeoutMs ?? SPIN_SIGN_TIMEOUT_MS;
+  const signAttempts = opts.signAttempts ?? SPIN_SIGN_ATTEMPTS;
   const putTimeoutMs = opts.putTimeoutMs ?? SPIN_PUT_TIMEOUT_MS;
   const commitTimeoutMs = opts.commitTimeoutMs ?? SPIN_COMMIT_TIMEOUT_MS;
+  const retryDelayMs = opts.retryDelayMs ?? 250;
 
   try {
     const jobs = await signInBatches({
@@ -285,6 +299,8 @@ export async function uploadSpinSets(opts: {
       hd,
       batchSize,
       signTimeoutMs,
+      signAttempts,
+      retryDelayMs,
       onProgress: opts.onProgress,
     });
 
@@ -292,7 +308,6 @@ export async function uploadSpinSets(opts: {
     const total = jobs.length;
     opts.onProgress?.(0, total, "upload");
     const concurrency = opts.concurrency ?? SPIN_UPLOAD_CONCURRENCY;
-    const retryDelayMs = opts.retryDelayMs ?? 250;
     await runPool(jobs, concurrency, async (job) => {
       await putWithRetries(job.signedUrl, job.file, job.contentType, retryDelayMs, putTimeoutMs);
       done += 1;
@@ -342,44 +357,111 @@ async function signInBatches(opts: {
   hd: PreparedFrame[];
   batchSize: number;
   signTimeoutMs: number;
+  signAttempts: number;
+  retryDelayMs: number;
   onProgress?: (done: number, total: number, phase?: "sign" | "upload") => void;
 }) {
   const total = opts.standard.length + opts.hd.length;
   const jobs: Array<{ signedUrl: string; file: File; contentType: string }> = [];
   let signed = 0;
   opts.onProgress?.(0, total, "sign");
+  const groups: Array<{ name: "m900" | "d1600"; frames: PreparedFrame[] }> = [
+    { name: "m900", frames: opts.standard },
+  ];
+  if (opts.hd.length > 0) groups.push({ name: "d1600", frames: opts.hd });
+
   for (let from = 1; from <= opts.standard.length; from += opts.batchSize) {
     const to = Math.min(opts.standard.length, from + opts.batchSize - 1);
-    const sets: Array<{ name: "m900" | "d1600"; ext: SpinExt; count: number; from: number; to: number }> = [
-      { name: "m900", ext: opts.standard[0]!.ext, count: opts.standard.length, from, to },
-    ];
-    if (opts.hd.length > 0) {
-      sets.push({ name: "d1600", ext: opts.hd[0]!.ext, count: opts.hd.length, from, to });
+    for (const group of groups) {
+      const plan = await requestSignedBatch({
+        slug: opts.slug,
+        version: opts.version,
+        name: group.name,
+        ext: group.frames[0]!.ext,
+        count: group.frames.length,
+        from,
+        to,
+        timeoutMs: opts.signTimeoutMs,
+        attempts: opts.signAttempts,
+        retryDelayMs: opts.retryDelayMs,
+      });
+      jobs.push(...jobsFromSlice(plan.sets ?? [], group.name, group.frames, from, to));
+      signed += to - from + 1;
+      opts.onProgress?.(signed, total, "sign");
     }
-    const planRes = await fetchWithTimeout(
-      "/api/spin/upload-urls",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: opts.slug, version: opts.version, sets }),
-      },
-      opts.signTimeoutMs,
-      "Se agotó el tiempo al firmar las subidas. No se subió este intento.",
-      "Sin conexión al preparar el giro.",
-    );
-    if (!planRes.ok) throw new Error(await readApiError(planRes));
-    const plan = (await planRes.json()) as { sets?: SignedSet[]; version?: string };
-    if (plan.version && plan.version !== opts.version) {
-      throw new Error("El servidor cambió la versión del giro. Reintenta.");
-    }
-    jobs.push(...jobsFromSlice(plan.sets ?? [], "m900", opts.standard, from, to));
-    if (opts.hd.length > 0) {
-      jobs.push(...jobsFromSlice(plan.sets ?? [], "d1600", opts.hd, from, to));
-    }
-    signed += (to - from + 1) * (opts.hd.length > 0 ? 2 : 1);
-    opts.onProgress?.(signed, total, "sign");
   }
   return jobs;
+}
+
+/** Una petición de firma a la vez, aunque haya dos subidas en el admin. */
+let signQueue: Promise<void> = Promise.resolve();
+
+function enqueueSign<T>(task: () => Promise<T>): Promise<T> {
+  const run = signQueue.then(task, task);
+  signQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function requestSignedBatch(opts: {
+  slug: string;
+  version: string;
+  name: "m900" | "d1600";
+  ext: SpinExt;
+  count: number;
+  from: number;
+  to: number;
+  timeoutMs: number;
+  attempts: number;
+  retryDelayMs: number;
+}): Promise<{ sets?: SignedSet[]; version?: string }> {
+  return enqueueSign(async () => {
+    let last = "No se pudo firmar las subidas.";
+    for (let attempt = 1; attempt <= opts.attempts; attempt += 1) {
+      try {
+        const res = await fetchWithTimeout(
+          "/api/spin/upload-urls",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              slug: opts.slug,
+              version: opts.version,
+              sets: [{ name: opts.name, ext: opts.ext, count: opts.count, from: opts.from, to: opts.to }],
+            }),
+          },
+          opts.timeoutMs,
+          "Se agotó el tiempo al firmar las subidas. No se subió este intento.",
+          "Sin conexión al preparar el giro.",
+        );
+        if (!res.ok) {
+          last = await readApiError(res);
+          if (!isRetryableSpinFailure(res.status, last) || attempt === opts.attempts) {
+            throw new Error(last);
+          }
+        } else {
+          const plan = (await res.json()) as { sets?: SignedSet[]; version?: string };
+          if (plan.version && plan.version !== opts.version) {
+            throw new Error("El servidor cambió la versión del giro. Reintenta.");
+          }
+          return plan;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : last;
+        last = message;
+        const timedOut = /agotó el tiempo|Sin conexión/i.test(message);
+        const retryable = timedOut || isRetryableSpinFailure(undefined, message);
+        if (!retryable || attempt === opts.attempts) {
+          throw err instanceof Error ? err : new Error(message);
+        }
+      }
+      const wait = spinRetryDelayMs(attempt, opts.retryDelayMs);
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    throw new Error(last);
+  });
 }
 
 async function discardFailedAttempt(slug: string, version: string): Promise<string> {

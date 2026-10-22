@@ -21,6 +21,7 @@ import {
   createServerSupabase,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
+import { isRetryableSpinFailure, spinRetryDelayMs } from "@/lib/spinRetry";
 
 export const SPIN_SET_NAMES = ["m900", "d1600"] as const;
 export const SPIN_EXTS = ["webp", "avif"] as const;
@@ -28,6 +29,11 @@ export const SPIN_FRAME_MIN = 24;
 export const SPIN_FRAME_MAX = 200;
 /** Tope por petición. 142+142 en una sola llamada no cabe en el límite de la función. */
 export const SPIN_SIGN_BATCH_MAX = 48;
+/** Una firma a la vez: cada URL firmada consulta el pool de la base. */
+export const SPIN_SIGN_CONCURRENCY = 1;
+export const SPIN_SIGN_ATTEMPTS = 4;
+/** El slug ya validado no se vuelve a leer en cada lote. */
+export const SPIN_VEHICLE_CACHE_MS = 10 * 60 * 1000;
 
 export type SpinSetName = (typeof SPIN_SET_NAMES)[number];
 export type SpinExt = (typeof SPIN_EXTS)[number];
@@ -72,6 +78,8 @@ export type SpinUploadDeps = {
   deleteUnreferenced?: typeof deleteUnreferencedVehiclePhotos;
   removeLocalSpin?: (slug: string) => Promise<void>;
   removeObjects?: (paths: string[]) => Promise<void>;
+  /** 0 en tests. En producción, espera creciente si el pool de la base está lleno. */
+  signRetryDelayMs?: number;
 };
 
 const SETS = new Set<string>(SPIN_SET_NAMES);
@@ -196,10 +204,31 @@ function absoluteSignedUrl(signedUrl: string): string {
 }
 
 async function defaultFindVehicle(slug: string): Promise<Vehicle | null> {
-  return getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
+  return lookupSpinVehicle(slug, (next) =>
+    getVehicleBySlug(next, { bypassCache: true, scope: "staff" }),
+  );
 }
 
-let signingClient: ReturnType<typeof createServerSupabase> | null = null;
+const spinVehicleCache = new Map<string, { vehicle: Vehicle; at: number }>();
+
+export function clearSpinVehicleCache(): void {
+  spinVehicleCache.clear();
+}
+
+/** La primera firma lee el catálogo. Los lotes siguientes reutilizan esa ficha. */
+export async function lookupSpinVehicle(
+  slug: string,
+  load: (slug: string) => Promise<Vehicle | null>,
+  now = Date.now(),
+): Promise<Vehicle | null> {
+  const hit = spinVehicleCache.get(slug);
+  if (hit && now - hit.at < SPIN_VEHICLE_CACHE_MS) return hit.vehicle;
+  const vehicle = await load(slug);
+  if (vehicle) spinVehicleCache.set(slug, { vehicle, at: now });
+  else spinVehicleCache.delete(slug);
+  return vehicle;
+}
+
 let mimeReady: Promise<void> | null = null;
 
 async function defaultSign(path: string): Promise<SignedSpinUpload> {
@@ -213,8 +242,7 @@ async function defaultSign(path: string): Promise<SignedSpinUpload> {
     throw err;
   });
   await mimeReady;
-  signingClient ??= createServerSupabase();
-  const sb = signingClient;
+  const sb = createServerSupabase();
   const { data, error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
   });
@@ -262,22 +290,6 @@ export async function removeLocalSpinDir(slug: string): Promise<void> {
   await rm(dir, { recursive: true, force: true });
 }
 
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-  const workers = Math.max(1, Math.min(limit, items.length));
-  async function worker() {
-    for (;;) {
-      const index = cursor;
-      cursor += 1;
-      if (index >= items.length) return;
-      results[index] = await fn(items[index]!);
-    }
-  }
-  await Promise.all(Array.from({ length: workers }, () => worker()));
-  return results;
-}
-
 function statusOf(err: unknown): number {
   if (typeof err === "object" && err && "status" in err && typeof (err as { status: unknown }).status === "number") {
     return (err as { status: number }).status;
@@ -303,6 +315,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
       },
     );
   });
+}
+
+async function signPathWithRetry(
+  path: string,
+  sign: (path: string) => Promise<SignedSpinUpload>,
+  retryDelayMs: number,
+): Promise<SignedSpinUpload> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= SPIN_SIGN_ATTEMPTS; attempt += 1) {
+    try {
+      return await withTimeout(sign(path), 8_000, "Se agotó el tiempo al firmar una subida.");
+    } catch (err) {
+      last = err;
+      const message = err instanceof Error ? err.message : "";
+      const status = statusOf(err);
+      const retryable = status === 504 || isRetryableSpinFailure(status === 500 ? undefined : status, message);
+      if (!retryable || attempt === SPIN_SIGN_ATTEMPTS) throw err;
+      const wait = spinRetryDelayMs(attempt, retryDelayMs);
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+  throw last;
 }
 
 export async function createSpinUploadUrls(
@@ -355,9 +389,10 @@ export async function createSpinUploadUrls(
       if (paths.some((path) => !path.startsWith(`${prefix}/`) || path.includes(".."))) {
         return { status: 400, body: { error: "Ruta de giro inválida." } };
       }
-      const signed = await mapPool(paths, 8, (path) =>
-        withTimeout(sign(path), 8_000, "Se agotó el tiempo al firmar una subida."),
-      );
+      const signed: SignedSpinUpload[] = [];
+      for (const path of paths) {
+        signed.push(await signPathWithRetry(path, sign, deps.signRetryDelayMs ?? 200));
+      }
       planned.push({
         name: set.name,
         ext: set.ext,
@@ -598,7 +633,7 @@ async function defaultRemoveObjects(paths: string[]): Promise<void> {
     (error as Error & { status?: number }).status = 503;
     throw error;
   }
-  const sb = signingClient ?? createServerSupabase();
+  const sb = createServerSupabase();
   for (let i = 0; i < paths.length; i += 100) {
     const slice = paths.slice(i, i + 100);
     const { error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).remove(slice);
