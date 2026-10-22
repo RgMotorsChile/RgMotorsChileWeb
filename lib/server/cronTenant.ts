@@ -9,7 +9,7 @@ export type CronTenantResolution =
 
 /**
  * `?tenant=` explícito gana. Sin parámetro se mantiene el fallback por hora
- * de los crons diarios de Vercel (12:00 UTC = Unidades Chile).
+ * de los horarios diarios (12:00 UTC = Unidades Chile). GitHub Actions manda ?tenant=.
  */
 export function resolveCronTenant(
   tenantParam: string | null | undefined,

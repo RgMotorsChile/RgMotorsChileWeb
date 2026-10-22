@@ -14,7 +14,6 @@ import path from "path";
 import https from "https";
 import { fileURLToPath } from "url";
 import { chromium } from "@playwright/test";
-import { createClient } from "@vercel/kv";
 import { pickFrontCoverFile, withFrontCover } from "./lib/front-cover-map.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -337,14 +336,9 @@ async function main() {
   );
   console.log("Actualizado: data/vehicles.json + lib/vehicles.ts");
 
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const kv = createClient({
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN,
-    });
-    await kv.set("vehicles.json", vehicles);
-    console.log("KV sincronizado.");
-  }
+  console.log(
+    "Vercel KV ya no se usa. El catálogo de producción está en Supabase (catalog_vehicles).",
+  );
 }
 
 main().catch((err) => {

@@ -1,6 +1,7 @@
 import { readJson, writeJson } from "./db";
 import { Vehicle } from "@/lib/vehicles";
-import { deleteVehicleMedia } from "./mediaStorage";
+import { deleteLocalVehicleFiles } from "./mediaStorage";
+import { releaseVehiclePhotos } from "./vehiclePhotoGc";
 import { deleteVehicle } from "./vehiclesStore";
 import {
   isSaleSupplier,
@@ -85,14 +86,15 @@ export async function archiveSoldVehicle(
     return { success: false, error: "No se pudo guardar en el registro de ventas." };
   }
 
+  // Las fotos de Storage se borran después de sacar el auto del catálogo
+  // (markVehicleAsSold o el replace de la planilla). Acá solo se limpia disco local.
   try {
-    const media = await deleteVehicleMedia(vehicle);
-    record.photosDeleted = media.deletedBlob > 0 || media.deletedLocal > 0;
-    // Persistir flag photosDeleted
+    const deletedLocal = await deleteLocalVehicleFiles(vehicle);
+    record.photosDeleted = deletedLocal > 0;
     filtered[0] = record;
     await writeJson(SOLD_FILENAME, filtered);
   } catch (err) {
-    console.error(`[ArchiveSold] Error al eliminar fotos de ${vehicle.slug}:`, err);
+    console.error(`[ArchiveSold] Error al limpiar fotos locales de ${vehicle.slug}:`, err);
   }
 
   return { success: true, record };
@@ -127,6 +129,21 @@ export async function markVehicleAsSold(opts: {
   }
 
   const removed = await deleteVehicle(vehicle.slug);
+  if (removed.success) {
+    const released = await releaseVehiclePhotos(vehicle, "sold").catch((err) => {
+      console.error(`[ArchiveSold] No se pudieron borrar fotos de ${vehicle.slug}:`, err);
+      return { deleted: [] as string[], kept: [] as string[] };
+    });
+    if (released.deleted.length > 0) {
+      archived.record.photosDeleted = true;
+      const records = await getSoldVehicles();
+      const idx = records.findIndex((r) => r.id === archived.record?.id);
+      if (idx >= 0) {
+        records[idx] = { ...records[idx], photosDeleted: true };
+        await writeJson(SOLD_FILENAME, records);
+      }
+    }
+  }
   if (!removed.success) {
     return {
       success: false,

@@ -6,7 +6,8 @@
  * cliente la cambiaba por el placeholder: parpadeo + ficha sin fotos.
  *
  * Reglas:
- * - Solo se descarta una URL con respuesta definitiva (404/410/403).
+ * - Solo se descarta una URL con 404 o 410.
+ * - 403 y 5xx NO descartan: una caída o un bloqueo del proveedor no vacía la galería.
  * - Timeouts o errores de red NO descartan (mejor intentar mostrar que ocultar fotos buenas).
  * - Rutas locales (/cars/...) se verifican contra VERCEL_URL; sin él se mantienen.
  * - Resultado cacheado en memoria 10 min por URL para no repetir HEADs en cada render ISR.
@@ -41,7 +42,7 @@ async function urlExists(original: string): Promise<boolean> {
   let ok = true;
   try {
     const res = await fetch(url, { method: "HEAD", signal: ctrl.signal, cache: "no-store" });
-    if (res.status === 404 || res.status === 410 || res.status === 403) ok = false;
+    if (res.status === 404 || res.status === 410) ok = false;
   } catch {
     ok = true;
   } finally {

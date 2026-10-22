@@ -1,15 +1,19 @@
 /**
- * En Vercel Production, KV es obligatorio para no perder inventario/leads.
- * En local/preview se permite filesystem.
+ * En Vercel Production, Supabase (service role) es obligatorio para no perder
+ * documentos del sitio. Las fotos van a Supabase Storage.
  */
+import { isSupabaseConfigured } from "@/lib/supabase/client";
+
 export function isVercelProduction(): boolean {
   return process.env.VERCEL_ENV === "production";
 }
 
+/** @deprecated Vercel KV se retiró. Equivale a tener service role de Supabase. */
 export function isKvReady(): boolean {
-  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  return isSupabaseConfigured();
 }
 
+/** Token del Blob viejo. La subida de fotos ya no lo usa; queda para la limpieza manual. */
 export function isBlobReady(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
@@ -19,18 +23,12 @@ export function assertProductionStorage(): { ok: boolean; warnings: string[] } {
   if (!isVercelProduction()) {
     return { ok: true, warnings };
   }
-  if (!isKvReady()) {
+  if (!isSupabaseConfigured()) {
     warnings.push(
-      "KV_REST_API_URL/TOKEN ausentes: inventario y leads pueden perderse entre deploys.",
+      "SUPABASE_SERVICE_ROLE_KEY ausente: documentos y fotos no se pueden guardar en producción.",
     );
   }
-  if (!isBlobReady()) {
-    warnings.push(
-      "BLOB_READ_WRITE_TOKEN ausente: uploads de fotos/360 están rechazados en producción.",
-    );
-  }
-  // KV es bloqueante; Blob es bloqueante para media pero el sitio puede servir seed.
-  return { ok: isKvReady(), warnings };
+  return { ok: isSupabaseConfigured(), warnings };
 }
 
 export function logStorageHealthOnce(): void {
@@ -42,6 +40,6 @@ export function logStorageHealthOnce(): void {
     console.warn(`[RG Storage] ${w}`);
   }
   if (health.ok && isVercelProduction()) {
-    console.info("[RG Storage] KV OK — persistencia durable habilitada.");
+    console.info("[RG Storage] Supabase OK — documentos y fotos en el proyecto RG.");
   }
 }

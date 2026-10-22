@@ -1,0 +1,137 @@
+import { describe, expect, it, vi } from "vitest";
+import { assertDeletableVehiclePhotoBucket } from "@/lib/server/photoObjectPath";
+import {
+  ORPHAN_MIN_AGE_MS,
+  deleteUnreferencedVehiclePhotos,
+  orphanRow,
+  runVehiclePhotoOrphanCleanup,
+  selectOrphanPhotoPaths,
+} from "@/lib/server/vehiclePhotoGc";
+
+const SUPABASE = "https://tuybpizjeszgwtcvunmp.supabase.co";
+
+function photo(path: string): string {
+  return `${SUPABASE}/storage/v1/object/public/vehicle-photos/${path}`;
+}
+
+describe("vehicle_photo_orphans", () => {
+  it("arma la fila con el esquema de Unidades Chile", () => {
+    const row = orphanRow({
+      objectPath: "unidades-chile/hilux/abc.jpg",
+      reason: "removed",
+      error: "x".repeat(800),
+    });
+    expect(row).toMatchObject({
+      bucket: "vehicle-photos",
+      object_path: "unidades-chile/hilux/abc.jpg",
+      tenant_slug: "unidades-chile",
+      vehicle_slug: "hilux",
+      reason: "removed",
+      purged_at: null,
+    });
+    expect(row.public_url).toBe(photo("unidades-chile/hilux/abc.jpg"));
+    expect(row.error).toHaveLength(500);
+    expect(orphanRow({ objectPath: "unidades-chile/hilux/", reason: "sold" }).public_url).toBe("");
+  });
+
+  it("no borra un path que sigue citado y registra el fallo de Storage", async () => {
+    const upsertOrphans = vi.fn(async () => undefined);
+    const removeObjects = vi.fn(async () => {
+      throw new Error("storage down");
+    });
+    const live = photo("rg-motors/yaris/live.jpg");
+    const dead = photo("rg-motors/yaris/dead.jpg");
+    const result = await deleteUnreferencedVehiclePhotos([live, dead], "replaced", {
+      isReferenced: async (path) => path.endsWith("live.jpg"),
+      removeObjects,
+      upsertOrphans,
+    });
+    expect(result.deleted).toEqual([]);
+    expect(result.kept).toContain("rg-motors/yaris/live.jpg");
+    expect(removeObjects).toHaveBeenCalledTimes(1);
+    expect(removeObjects).toHaveBeenCalledWith(["rg-motors/yaris/dead.jpg"]);
+    expect(result.orphans).toEqual(["rg-motors/yaris/dead.jpg"]);
+    expect(upsertOrphans).toHaveBeenCalledWith([
+      expect.objectContaining({
+        bucket: "vehicle-photos",
+        object_path: "rg-motors/yaris/dead.jpg",
+        tenant_slug: "rg-motors",
+        vehicle_slug: "yaris",
+        reason: "replaced",
+        error: "storage down",
+        purged_at: null,
+      }),
+    ]);
+  });
+
+  it("reintenta pendientes, lista un prefijo y no borra lo que volvió al catálogo", async () => {
+    const removeObjects = vi.fn(async () => undefined);
+    const listPrefix = vi.fn(async () => ["unidades-chile/sold/a.jpg"]);
+    const markPurged = vi.fn(async () => undefined);
+    const result = await runVehiclePhotoOrphanCleanup({
+      deps: {
+        loadPendingOrphans: async () => [
+          orphanRow({ objectPath: "unidades-chile/sold/", reason: "sold", error: "list failed" }),
+          orphanRow({ objectPath: "rg-motors/back/keep.jpg", reason: "deleted", error: "timeout" }),
+        ],
+        isReferenced: async (path) => path.endsWith("keep.jpg"),
+        listPrefix,
+        removeObjects,
+        markPurged,
+        listObjects: async () => [],
+        loadReferencedPaths: async () => new Set<string>(),
+        upsertOrphans: async () => undefined,
+        now: () => Date.parse("2026-10-22T04:00:00.000Z"),
+      },
+    });
+    expect(listPrefix).toHaveBeenCalledWith("unidades-chile/sold/");
+    expect(removeObjects).toHaveBeenCalledWith(["unidades-chile/sold/a.jpg"]);
+    expect(removeObjects).not.toHaveBeenCalledWith(["rg-motors/back/keep.jpg"]);
+    expect(result.deleted).toEqual(["unidades-chile/sold/a.jpg"]);
+    expect(markPurged).toHaveBeenCalledWith(["unidades-chile/sold/"]);
+    expect(markPurged).toHaveBeenCalledWith(["rg-motors/back/keep.jpg"]);
+  });
+
+  it("en dryRun no escribe y salta objetos de menos de 15 minutos", async () => {
+    const now = Date.parse("2026-10-22T04:00:00.000Z");
+    const fresh = new Date(now - 60_000).toISOString();
+    const old = new Date(now - ORPHAN_MIN_AGE_MS - 1000).toISOString();
+    const referenced = new Set(["rg-motors/a/used.jpg"]);
+    expect(
+      selectOrphanPhotoPaths({
+        now,
+        referencedPaths: referenced,
+        objects: [
+          { name: "rg-motors/a/used.jpg", createdAt: old },
+          { name: "rg-motors/a/fresh.jpg", createdAt: fresh },
+          { name: "rg-motors/a/old.jpg", createdAt: old },
+          { name: "rg-motors/a/unknown.jpg", createdAt: null },
+        ],
+      }),
+    ).toEqual(["rg-motors/a/old.jpg"]);
+
+    const removeObjects = vi.fn(async () => undefined);
+    const upsertOrphans = vi.fn(async () => undefined);
+    const dry = await runVehiclePhotoOrphanCleanup({
+      dryRun: true,
+      deps: {
+        loadPendingOrphans: async () => [],
+        listObjects: async () => [{ name: "rg-motors/a/old.jpg", createdAt: old }],
+        loadReferencedPaths: async () => new Set<string>(),
+        removeObjects,
+        upsertOrphans,
+        now: () => now,
+      },
+    });
+    expect(dry.deleted).toEqual(["rg-motors/a/old.jpg"]);
+    expect(removeObjects).not.toHaveBeenCalled();
+    expect(upsertOrphans).not.toHaveBeenCalled();
+  });
+
+  it("rechaza buckets que no son vehicle-photos", () => {
+    for (const bucket of ["boletas-receipts", "app-releases", "vehicle-notes", "box-evidence"]) {
+      expect(() => assertDeletableVehiclePhotoBucket(bucket)).toThrow(/protegido/i);
+    }
+    expect(() => assertDeletableVehiclePhotoBucket("otro")).toThrow(/vehicle-photos/);
+  });
+});

@@ -1,18 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/sync",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/cron/sync",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/sync",
-      "schedule": "0 22 * * *"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -39,7 +25,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.googletagmanager.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://lh3.googleusercontent.com https://drive.google.com https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self' data:; connect-src 'self' https://www.rgmotorschile.cl https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://www.google.com https://cloudflareinsights.com; frame-src 'self' https://maps.google.com https://www.google.com https://www.google.com/maps; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.googletagmanager.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://tuybpizjeszgwtcvunmp.supabase.co https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://lh3.googleusercontent.com https://drive.google.com https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self' data:; connect-src 'self' https://www.rgmotorschile.cl https://*.supabase.co https://tuybpizjeszgwtcvunmp.supabase.co wss://*.supabase.co wss://tuybpizjeszgwtcvunmp.supabase.co https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://www.google.com https://cloudflareinsights.com; frame-src 'self' https://maps.google.com https://www.google.com https://www.google.com/maps; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
         }
       ]
     },

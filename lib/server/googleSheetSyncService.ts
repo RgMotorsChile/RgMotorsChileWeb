@@ -1,5 +1,6 @@
 import { getVehicles, replaceAllVehicles } from "./vehiclesStore";
 import { archiveSoldVehicle, getSoldVehicles } from "./soldVehiclesStore";
+import { releaseVehiclePhotos } from "./vehiclePhotoGc";
 import { Vehicle } from "@/lib/vehicles";
 import {
   evaluateSheetWipeGuard,
@@ -416,6 +417,7 @@ export async function syncFromLiveGoogleSheet(
   let newCount = 0;
   let updatedCount = 0;
   let soldCount = 0;
+  const soldForPhotoRelease: Vehicle[] = [];
 
   const updatedActiveList: Vehicle[] = [];
   // Autos que la sync sacó por error y vuelven: recuperar ficha del historial.
@@ -436,6 +438,7 @@ export async function syncFromLiveGoogleSheet(
           item.price,
           "Marcado como Vendido en planilla Google Sheets",
         );
+        soldForPhotoRelease.push(existing);
         soldCount++;
       }
       continue;
@@ -530,6 +533,7 @@ export async function syncFromLiveGoogleSheet(
             existing.price,
             "Vehículo retirado de inventario activo (Vendido/Entregado)",
           );
+          soldForPhotoRelease.push(existing);
         }
         soldCount++;
       }
@@ -561,6 +565,13 @@ export async function syncFromLiveGoogleSheet(
 
   // Persistencia + invalidación de caché (no reportar éxito si KV falla)
   const saved = await replaceAllVehicles(updatedActiveList, { tenantSlug });
+  if (saved.success) {
+    for (const sold of soldForPhotoRelease) {
+      await releaseVehiclePhotos(sold, "sold").catch((err) => {
+        console.warn(`[GoogleSheetSync] No se pudieron borrar fotos de ${sold.slug}:`, err);
+      });
+    }
+  }
   if (!saved.success) {
     return {
       success: false,

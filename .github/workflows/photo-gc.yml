@@ -1,0 +1,66 @@
+# Borrado de huérfanos en Supabase Storage. No usa pg_cron: el job necesita
+# el runtime de Next (service role) y el mismo CRON_SECRET que ya está en Actions.
+# Nunca toca boletas-receipts, app-releases, vehicle-notes ni box-evidence.
+name: Fotos huérfanas
+
+on:
+  schedule:
+    # 04:15 UTC, una vez al día. El margen de edad vive en el endpoint (15 min).
+    - cron: "15 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Solo listar, sin borrar
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  photo-gc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Disparar el job de huérfanos
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Falta el secret CRON_SECRET en GitHub Actions." >&2
+            echo "Tiene que ser el mismo valor que CRON_SECRET en Vercel." >&2
+            exit 1
+          fi
+
+          query=""
+          if [ "${DRY_RUN}" = "true" ]; then
+            query="?dryRun=1"
+          fi
+          url="https://www.rgmotorschile.cl/api/cron/photo-gc${query}"
+          echo "GET ${url}"
+
+          set +e
+          http_code=$(curl --silent --show-error --max-time 75 \
+            -o /tmp/photo-gc-body.json \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${url}")
+          curl_status=$?
+          set -e
+
+          if [ "${curl_status}" -ne 0 ]; then
+            echo "curl falló (exit ${curl_status})" >&2
+            cat /tmp/photo-gc-body.json >&2 || true
+            exit 1
+          fi
+
+          echo "HTTP ${http_code}"
+          cat /tmp/photo-gc-body.json
+          echo
+          case "${http_code}" in
+            2*) exit 0 ;;
+            *)
+              echo "El job respondió ${http_code}, se esperaba 2xx." >&2
+              exit 1
+              ;;
+          esac

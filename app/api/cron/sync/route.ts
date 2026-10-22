@@ -19,9 +19,8 @@ import { recordCatalogSyncState } from "@/lib/server/syncStateStore";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
- * Hobby permite hasta 60s. Los crons de Vercel siguen siendo diarios
- * (el plan no admite intervalos de minutos). El ritmo de 30 min lo dispara
- * GitHub Actions contra este mismo endpoint.
+ * Hobby permite hasta 60s. El ritmo lo dispara GitHub Actions
+ * (cada 30 min y a las 11:00, 12:00 y 22:00 UTC). Vercel ya no programa crons.
  */
 export const maxDuration = 60;
 
@@ -192,9 +191,9 @@ async function handleCronSync(req: NextRequest) {
 }
 
 /**
- * Vercel Cron llama GET con Authorization: Bearer CRON_SECRET.
- * Sin `tenant`, 12:00 UTC → Unidades Chile y el resto → RG (crons diarios).
- * Con `?tenant=rg-motors|unidades-chile` se ignora la hora (GitHub Actions).
+ * GitHub Actions llama GET con Authorization: Bearer CRON_SECRET.
+ * Sin `tenant`, 12:00 UTC → Unidades Chile y el resto → RG.
+ * Con `?tenant=rg-motors|unidades-chile` se ignora la hora.
  */
 export async function GET(req: NextRequest) {
   if (!authorizeCron(req)) {

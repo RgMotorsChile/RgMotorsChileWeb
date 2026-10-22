@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const XLSX = require('xlsx');
-const { createClient } = require('@vercel/kv');
+console.error("Este script usaba Vercel KV, que ya no está en el proyecto. El stock se sincroniza hacia Supabase.");
+process.exit(1);
 
 // Load environment variables from .env.local
 const envPath = path.join(__dirname, '..', '.env.local');

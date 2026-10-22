@@ -1,49 +1,88 @@
-import { del, put } from "@vercel/blob";
 import { mkdir, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
-import { isBlobReady, isVercelProduction } from "@/lib/server/storageHealth";
+import { createServerSupabase, isSupabaseConfigured, SUPABASE_URL } from "@/lib/supabase/client";
+import { isVercelProduction } from "@/lib/server/storageHealth";
+import {
+  VEHICLE_PHOTOS_BUCKET,
+  supabasePublicObjectUrl,
+} from "@/lib/server/photoObjectPath";
 
 export type StoredMedia = {
-  /** URL pública (Blob) o path relativo (/cars/...) */
+  /** URL pública (Supabase) o path relativo (/...) */
   url: string;
-  /** Path lógico relativo para galería local */
   relativePath: string;
-  storage: "blob" | "local";
+  storage: "supabase" | "local";
 };
+
+let bucketReady = false;
+
+/** Solo tests: el proceso real cachea el alta del bucket. */
+export function resetVehiclePhotoBucketCacheForTests(): void {
+  bucketReady = false;
+}
+
+async function ensureVehiclePhotosBucket(): Promise<void> {
+  if (bucketReady) return;
+  const sb = createServerSupabase();
+  const existing = await sb.storage.getBucket(VEHICLE_PHOTOS_BUCKET);
+  if (!existing.error && existing.data) {
+    bucketReady = true;
+    return;
+  }
+  const notFound = /not found|does not exist/i.test(existing.error?.message || "");
+  if (existing.error && !notFound) {
+    throw new Error(`Supabase Storage: ${existing.error.message}`);
+  }
+  const created = await sb.storage.createBucket(VEHICLE_PHOTOS_BUCKET, {
+    public: true,
+    fileSizeLimit: 20 * 1024 * 1024,
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif", "application/json"],
+  });
+  if (created.error && !/already exists|duplicate/i.test(created.error.message)) {
+    throw new Error(`No se pudo crear el bucket ${VEHICLE_PHOTOS_BUCKET}: ${created.error.message}`);
+  }
+  bucketReady = true;
+}
 
 /**
  * Guarda un archivo de media.
- * - Con BLOB_READ_WRITE_TOKEN → Vercel Blob (durable + CDN).
- * - Sin token en prod Vercel → error (no escribir a disco efímero).
- * - Sin token en local → public/.
+ * - Con SUPABASE_SERVICE_ROLE_KEY → bucket público vehicle-photos.
+ * - Sin service role en producción → error.
+ * - Sin service role en local → public/.
  */
 export async function storeMediaFile(opts: {
   bytes: Buffer;
-  /** Ruta lógica ej. cars/uploads/slug/file.jpg */
+  /** Ruta lógica. Fotos de catálogo: `{tenant}/{slug}/{sha256}.ext`. */
   relativePath: string;
   contentType?: string;
 }): Promise<StoredMedia> {
   const relativePath = opts.relativePath.replace(/^\/+/, "");
   const contentType = opts.contentType || guessContentType(relativePath);
 
-  if (isBlobReady()) {
-    const blob = await put(relativePath, opts.bytes, {
-      access: "public",
+  if (isSupabaseConfigured()) {
+    await ensureVehiclePhotosBucket();
+    const sb = createServerSupabase();
+    const { error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).upload(relativePath, opts.bytes, {
       contentType,
-      addRandomSuffix: false,
-      allowOverwrite: true,
+      upsert: true,
+      cacheControl: "31536000",
     });
+    if (error) {
+      throw new Error(`Supabase Storage: ${error.message}`);
+    }
+    const { data } = sb.storage.from(VEHICLE_PHOTOS_BUCKET).getPublicUrl(relativePath);
+    const url = data.publicUrl || supabasePublicObjectUrl(SUPABASE_URL, relativePath);
     return {
-      url: blob.url,
+      url,
       relativePath: `/${relativePath}`,
-      storage: "blob",
+      storage: "supabase",
     };
   }
 
   if (isVercelProduction()) {
     throw new Error(
-      "BLOB_READ_WRITE_TOKEN es obligatorio en producción para subir fotos/360.",
+      "Falta SUPABASE_SERVICE_ROLE_KEY en producción. Las fotos se guardan en Supabase Storage, no en Vercel Blob.",
     );
   }
 
@@ -75,49 +114,16 @@ function guessContentType(path: string): string {
   }
 }
 
-function collectMediaUrls(vehicle: {
-  image?: string;
-  gallery?: string[];
-}): string[] {
-  const urls = new Set<string>();
-  if (vehicle.image) urls.add(vehicle.image.split("?")[0]);
-  for (const g of vehicle.gallery || []) {
-    if (g) urls.add(g.split("?")[0]);
-  }
-  return [...urls].filter(Boolean);
-}
-
 /**
- * Borra fotos de un vehículo vendido: Vercel Blob (si aplica) + carpeta local.
- * No falla la venta si alguna foto no se pudo borrar.
+ * Borra copias locales de un vehículo. Los objetos de Supabase se borran
+ * aparte, después de confirmar que la base ya no los cita.
  */
-export async function deleteVehicleMedia(vehicle: {
+export async function deleteLocalVehicleFiles(vehicle: {
   slug: string;
   image?: string;
   gallery?: string[];
-}): Promise<{ deletedBlob: number; deletedLocal: number }> {
-  const urls = collectMediaUrls(vehicle);
-  let deletedBlob = 0;
+}): Promise<number> {
   let deletedLocal = 0;
-
-  const blobUrls = urls.filter((u) => /blob\.vercel-storage\.com/i.test(u));
-  if (blobUrls.length && isBlobReady()) {
-    try {
-      await del(blobUrls);
-      deletedBlob = blobUrls.length;
-    } catch (err) {
-      console.error(`[Media] Error borrando Blob de ${vehicle.slug}:`, err);
-      for (const url of blobUrls) {
-        try {
-          await del(url);
-          deletedBlob++;
-        } catch {
-          /* ignore single blob */
-        }
-      }
-    }
-  }
-
   const uploadDir = join(
     /*turbopackIgnore: true*/ process.cwd(),
     "public",
@@ -135,28 +141,31 @@ export async function deleteVehicleMedia(vehicle: {
 
   for (const dir of [uploadDir, spinDir]) {
     try {
-      if (existsSync(dir)) {
-        const files = await readdir(dir);
-        for (const file of files) {
-          try {
-            await unlink(join(dir, file));
-            deletedLocal++;
-          } catch {
-            /* ignore */
-          }
-        }
+      if (!existsSync(dir)) continue;
+      const files = await readdir(dir);
+      for (const file of files) {
         try {
-          await rmdir(dir);
+          await unlink(join(dir, file));
+          deletedLocal++;
         } catch {
           /* ignore */
         }
+      }
+      try {
+        await rmdir(dir);
+      } catch {
+        /* ignore */
       }
     } catch (err) {
       console.error(`[Media] Error borrando disco de ${vehicle.slug}:`, err);
     }
   }
 
-  // Rutas locales sueltas fuera de uploads/<slug>
+  const urls = new Set<string>();
+  if (vehicle.image) urls.add(vehicle.image.split("?")[0]);
+  for (const g of vehicle.gallery || []) {
+    if (g) urls.add(g.split("?")[0]);
+  }
   for (const url of urls) {
     if (!url.startsWith("/") || url.includes("placeholder")) continue;
     const abs = join(/*turbopackIgnore: true*/ process.cwd(), "public", url.replace(/^\/+/, ""));
@@ -168,6 +177,5 @@ export async function deleteVehicleMedia(vehicle: {
       /* ignore */
     }
   }
-
-  return { deletedBlob, deletedLocal };
+  return deletedLocal;
 }

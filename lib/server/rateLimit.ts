@@ -1,8 +1,8 @@
 /**
- * Rate limit: memoria local + KV distribuido cuando está configurado.
+ * Rate limit: memoria local + Supabase cuando hay service role.
  */
-import { kv } from "@vercel/kv";
-import { isKvReady, isVercelProduction } from "@/lib/server/storageHealth";
+import { createServerSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { isVercelProduction } from "@/lib/server/storageHealth";
 
 type Bucket = { count: number; resetAt: number };
 
@@ -31,14 +31,14 @@ export function rateLimit(
 
 export type RateLimitOptions = {
   /**
-   * Si KV falla en producción, denegar (p. ej. login) en lugar de
+   * Si Supabase falla en producción, denegar (p. ej. login) en lugar de
    * multiplicar el cupo por instancia en memoria.
    */
   failClosed?: boolean;
 };
 
 /**
- * Preferido en APIs: usa Vercel KV/Upstash si hay credenciales (multi-instancia).
+ * Preferido en APIs: usa public.rate_limit_hit si hay service role.
  */
 export async function rateLimitAsync(
   key: string,
@@ -46,19 +46,22 @@ export async function rateLimitAsync(
   windowMs = 60_000,
   opts?: RateLimitOptions,
 ): Promise<{ ok: boolean; remaining: number }> {
-  if (isKvReady()) {
+  if (isSupabaseConfigured()) {
     try {
-      const redisKey = `rl:${key}`;
-      const count = await kv.incr(redisKey);
-      if (count === 1) {
-        await kv.expire(redisKey, Math.max(1, Math.ceil(windowMs / 1000)));
-      }
+      const sb = createServerSupabase();
+      const { data, error } = await sb.rpc("rate_limit_hit", {
+        bucket_key: `rl:${key}`,
+        window_seconds: Math.max(1, Math.ceil(windowMs / 1000)),
+      });
+      if (error) throw error;
+      const count = Number(data);
+      if (!Number.isFinite(count)) throw new Error("rate_limit_hit sin contador");
       if (count > limit) {
         return { ok: false, remaining: 0 };
       }
       return { ok: true, remaining: Math.max(0, limit - count) };
     } catch (err) {
-      console.warn("[rateLimit] KV falló:", err);
+      console.warn("[rateLimit] Supabase falló:", err);
       if (opts?.failClosed && isVercelProduction()) {
         return { ok: false, remaining: 0 };
       }
