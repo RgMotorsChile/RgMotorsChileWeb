@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { assertDeletableVehiclePhotoBucket } from "@/lib/server/photoObjectPath";
+import { assertDeletableVehiclePhotoBucket, isProtectedStoragePath } from "@/lib/server/photoObjectPath";
+import { shouldReleaseRemovedVehicle } from "@/lib/server/googleSheetSyncService";
 import {
   ORPHAN_MIN_AGE_MS,
+  classifyListedStorage,
   deleteUnreferencedVehiclePhotos,
   orphanRow,
   releaseVehiclePhotos,
   runVehiclePhotoOrphanCleanup,
   selectOrphanPhotoPaths,
+  vehicleStoragePrefixes,
 } from "@/lib/server/vehiclePhotoGc";
 
 const SUPABASE = "https://tuybpizjeszgwtcvunmp.supabase.co";
@@ -176,6 +179,108 @@ describe("vehicle_photo_orphans", () => {
       "rg-motors/hilux/spin-hi/002.jpg",
     ]);
     expect(result.kept).toEqual([]);
+  });
+
+  it("en el mismo sync borra fotos y cada versión del 360, y no toca boletas ni pagos", async () => {
+    const slug = "ford-edge-negro-2017-y55fqc";
+    const spinFiles = [
+      `rg-motors/${slug}/spin/v1/m900/001.webp`,
+      `rg-motors/${slug}/spin/v1/d1600/001.webp`,
+      `rg-motors/${slug}/spin/v1/d1600/002.webp`,
+      `rg-motors/${slug}/spin/v2/m900/001.webp`,
+      `boletas-receipts/2026/a.pdf`,
+      `payments/2026/a.pdf`,
+    ];
+    const removeObjects = vi.fn(async () => undefined);
+    const listPrefix = vi.fn(async (prefix: string) => {
+      if (prefix === `rg-motors/${slug}`) return [`rg-motors/${slug}/cover.jpg`, ...spinFiles];
+      if (prefix === `cars/spin/${slug}`) return [`cars/spin/${slug}/001.jpg`, `cars/spin/${slug}/manifest.json`];
+      return [];
+    });
+
+    const result = await releaseVehiclePhotos(
+      {
+        slug,
+        image: photo(`rg-motors/${slug}/cover.jpg`),
+        gallery: [
+          photo(`rg-motors/${slug}/cover.jpg`),
+          `${SUPABASE}/storage/v1/object/public/boletas-receipts/2026/a.pdf`,
+          `${SUPABASE}/storage/v1/object/public/payments/2026/a.pdf`,
+        ],
+        spin: {
+          pattern: photo(`rg-motors/${slug}/spin/v1/m900/{i}.webp`),
+          hiPattern: photo(`rg-motors/${slug}/spin/v1/d1600/{i}.webp`),
+          count: 1,
+        },
+      },
+      "sold",
+      { isReferenced: async () => false, removeObjects, listPrefix },
+    );
+
+    expect(vehicleStoragePrefixes({ slug, image: photo(`rg-motors/${slug}/cover.jpg`) })).toEqual(
+      expect.arrayContaining([`rg-motors/${slug}`, `cars/spin/${slug}`]),
+    );
+    expect(listPrefix).toHaveBeenCalledWith(`rg-motors/${slug}`);
+    expect(listPrefix).toHaveBeenCalledWith(`cars/spin/${slug}`);
+    expect(result.deleted).toEqual(expect.arrayContaining([
+      `rg-motors/${slug}/cover.jpg`,
+      `rg-motors/${slug}/spin/v1/m900/001.webp`,
+      `rg-motors/${slug}/spin/v1/d1600/001.webp`,
+      `rg-motors/${slug}/spin/v1/d1600/002.webp`,
+      `rg-motors/${slug}/spin/v2/m900/001.webp`,
+      `cars/spin/${slug}/001.jpg`,
+      `cars/spin/${slug}/manifest.json`,
+    ]));
+    const touched = removeObjects.mock.calls.flat().flat() as string[];
+    expect(touched.some((path) => /boletas|payments/i.test(path))).toBe(false);
+    expect(result.deleted.some((path) => /boletas|payments/i.test(path))).toBe(false);
+    expect(isProtectedStoragePath("boletas-receipts/2026/a.pdf")).toBe(true);
+    expect(isProtectedStoragePath("payments/2026/a.pdf")).toBe(true);
+  });
+
+  it("al listar el giro trata m900 y d1600 como carpetas y descarta boletas", () => {
+    const listed = classifyListedStorage("rg-motors/edge/spin/v1", [
+      { name: "m900", id: null },
+      { name: "d1600", id: null },
+      { name: "manifest.json", id: "file-1" },
+      { name: "boletas-receipts", id: null },
+      { name: "payments", id: "file-2" },
+    ]);
+    expect(listed.folders).toEqual(["rg-motors/edge/spin/v1/m900", "rg-motors/edge/spin/v1/d1600"]);
+    expect(listed.files).toEqual(["rg-motors/edge/spin/v1/manifest.json"]);
+  });
+
+  it("el sync suelta el auto que salió de la planilla de RG y conserva el resto", () => {
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "Disponible",
+      skipArchive: false,
+      tenantSlug: "rg-motors",
+    })).toBe(true);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: true,
+      status: "Disponible",
+      skipArchive: false,
+      tenantSlug: "rg-motors",
+    })).toBe(false);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "Disponible",
+      skipArchive: true,
+      tenantSlug: "rg-motors",
+    })).toBe(false);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "Borrador",
+      skipArchive: false,
+      tenantSlug: "rg-motors",
+    })).toBe(false);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "Disponible",
+      skipArchive: false,
+      tenantSlug: "unidades-chile",
+    })).toBe(false);
   });
 
   it("rechaza buckets que no son vehicle-photos", () => {

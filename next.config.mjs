@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const isGhPages = process.env.GITHUB_PAGES === "true";
 const basePath = isGhPages ? "/RGmotors" : "";
+const publication = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "lib/vehicles/publicationRedirects.json"), "utf8"),
+);
 
 const nextConfig = {
   reactStrictMode: true,
@@ -34,6 +41,11 @@ const nextConfig = {
     if (isGhPages) return [];
     return [
       { source: "/simulador", destination: "/catalogo", permanent: true },
+      ...publication.redirects.map((item) => ({
+        source: item.source,
+        destination: item.destination,
+        statusCode: 301,
+      })),
       // Dominio raíz → www con 301 (una sola URL canónica para Google).
       {
         source: "/:path*",
@@ -55,8 +67,10 @@ const nextConfig = {
     : {
         images: {
           formats: ["image/avif", "image/webp"],
-          // Calidades usadas por <Image> (hero/ficha 85, tarjetas 82); sin esto Next avisa y degrada.
-          qualities: [75, 82, 85],
+          deviceSizes: [480, 800, 1200, 1600],
+          imageSizes: [160, 256, 480, 800],
+          minimumCacheTTL: 31536000,
+          qualities: [45, 55, 60, 62, 70, 75, 82, 85],
           remotePatterns: [
             { protocol: "https", hostname: "drive.google.com" },
             { protocol: "https", hostname: "lh3.googleusercontent.com" },

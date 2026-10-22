@@ -43,6 +43,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/eslintrc": "^3.3.6",
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.0",

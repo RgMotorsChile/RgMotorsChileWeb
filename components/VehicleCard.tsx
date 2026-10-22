@@ -2,14 +2,32 @@
 
 import Link from "next/link";
 import { Vehicle, formatCLP } from "@/lib/vehicles";
+import { isKnownSpec } from "@/lib/vehicles/publicSpecs";
+import { plateToken, publicVehicleSlug, scrubPlate } from "@/lib/vehicles/publicSlug";
 import SafeImage from "@/components/SafeImage";
+
+function CardFacts({ fuel, transmission }: { fuel?: string; transmission?: string }) {
+  const parts = [fuel, transmission].filter((value) => isKnownSpec(value));
+  if (!parts.length) return null;
+  return (
+    <p className="truncate text-[11px] leading-relaxed text-white/50">
+      {parts.join(" · ")}
+    </p>
+  );
+}
 
 type CardVehicle = Vehicle & {
   galleryCount?: number;
   hasSpin?: boolean;
 };
 
-export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
+export default function VehicleCard({
+  vehicle: v,
+  priority = false,
+}: {
+  vehicle: Vehicle;
+  priority?: boolean;
+}) {
   const card = v as CardVehicle;
   const has360 = Boolean((card.spin && card.spin.count > 0) || card.hasSpin);
   const galleryCount = card.gallery?.length ?? card.galleryCount ?? 0;
@@ -26,7 +44,7 @@ export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
 
   return (
     <Link
-      href={`/vehiculo/${card.slug}`}
+      href={`/vehiculo/${publicVehicleSlug(card)}`}
       className="rg-card-lift group relative flex overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0e1016] shadow-[0_16px_40px_-18px_rgba(0,0,0,0.8)] transition duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-brand-400/35 hover:shadow-[0_28px_60px_-20px_rgba(0,0,0,0.9)] active:scale-[0.985] sm:flex-col"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-60" />
@@ -35,11 +53,19 @@ export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
       <div className="relative aspect-[4/3] w-[42%] max-w-[9.5rem] shrink-0 overflow-hidden bg-ink-900 sm:aspect-[16/10] sm:w-full sm:max-w-none">
         <SafeImage
           src={displayImage}
-          alt={`${card.brand} ${card.model}`}
-          fill
-          sizes="(max-width: 640px) 42vw, (max-width: 1024px) 50vw, 33vw"
-          quality={82}
-          className="object-cover object-center transition-transform duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.05]"
+          alt={scrubPlate(
+            `${card.brand} ${card.model}${card.year ? ` ${card.year}` : ""}`,
+            plateToken(card),
+          )}
+          width={800}
+          height={600}
+          sizes="(max-width: 480px) 480px, (max-width: 800px) 800px, 800px"
+          quality={60}
+          priority={priority}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "low"}
+          className="absolute inset-0 object-cover object-center transition-transform duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.05]"
+          style={{ width: "100%", height: "100%" }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0e1016]/40 via-transparent to-black/10 opacity-80 sm:opacity-80" />
         <div className="absolute inset-0 hidden translate-x-[-120%] bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-[120%] sm:block" />
@@ -63,30 +89,26 @@ export default function VehicleCard({ vehicle: v }: { vehicle: Vehicle }) {
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 border-l border-white/[0.06] bg-[#12141c] p-3 sm:gap-3 sm:border-l-0 sm:border-t sm:p-5">
+      <div className="flex h-[7.5rem] min-w-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden border-l border-white/[0.06] bg-[#12141c] p-3 sm:h-[9.5rem] sm:gap-3 sm:border-l-0 sm:border-t sm:p-5">
         <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-[14px] font-bold tracking-tight text-white transition-colors group-hover:text-brand-200 sm:text-base">
               {card.brand} {card.model}
             </h3>
             {card.version ? (
-              <p className="mt-0.5 truncate text-[11px] text-white/45 sm:text-xs">{card.version}</p>
+              <p className="mt-0.5 truncate text-[11px] text-white/75 sm:text-xs">{card.version}</p>
             ) : null}
           </div>
-          <span className="shrink-0 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-medium text-white/45 sm:px-2 sm:text-xs">
+          <span className="shrink-0 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-medium text-white/80 sm:px-2 sm:text-xs">
             {card.year}
           </span>
         </div>
 
-        <p className="truncate text-[11px] leading-relaxed text-white/50">
-          {card.fuel}
-          <span className="mx-1 text-white/20 sm:mx-1.5">·</span>
-          {card.transmission}
-        </p>
+        <CardFacts fuel={card.fuel} transmission={card.transmission} />
 
         <div className="mt-auto flex items-end justify-between gap-2 pt-0.5 sm:gap-3 sm:pt-1">
           <div className="min-w-0">
-            <p className="text-[9px] font-medium uppercase tracking-wider text-white/35 sm:text-[11px]">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-white/75">
               Precio
             </p>
             <p className="truncate text-[15px] font-extrabold tracking-tight text-white sm:text-xl">

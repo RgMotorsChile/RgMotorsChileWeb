@@ -38,6 +38,7 @@ export const PUBLIC_CATALOG_COLUMNS = [
   "status",
   "has_real_photos",
   "highlights",
+  "branch",
 ] as const;
 
 /**
@@ -89,6 +90,7 @@ function rowToVehicle(row: Record<string, unknown>, scope: CatalogReadScope): Ve
     highlights: Array.isArray(row.highlights)
       ? (row.highlights as string[])
       : undefined,
+    ...(typeof row.branch === "string" ? { branch: row.branch as Vehicle["branch"] } : {}),
   };
 
   if (scope === "staff") {
@@ -118,12 +120,23 @@ export async function getCatalogVehiclesFromSupabase(
       .maybeSingle();
     if (tErr || !tenant) return null;
 
-    const { data, error } = await sb
+    const columns = catalogSelectList(scope);
+    let { data, error } = await sb
       .from("catalog_vehicles")
-      .select(catalogSelectList(scope))
+      .select(columns)
       .eq("tenant_id", tenant.id)
       .order("featured", { ascending: false })
       .order("updated_at", { ascending: false });
+    if (error && /branch/i.test(error.message)) {
+      const fallback = await sb
+        .from("catalog_vehicles")
+        .select(columns.replace(",branch", ""))
+        .eq("tenant_id", tenant.id)
+        .order("featured", { ascending: false })
+        .order("updated_at", { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error || !data) return null;
     return data.map((r) =>
       rowToVehicle(r as unknown as Record<string, unknown>, scope),
@@ -170,12 +183,18 @@ export function buildCatalogUpsertRow(v: Vehicle, tenantId: string): Record<stri
     tech_review: v.techReview ?? null,
     circ_permit: v.circPermit ?? null,
     highlights: v.highlights ?? [],
+    branch: v.branch || null,
     updated_at: new Date().toISOString(),
   };
   const spin = (v as { spin?: Vehicle["spin"] | null }).spin;
   if (spin === null) row.spin = null;
   else if (spin && spin.count > 0) row.spin = spin;
   return row;
+}
+
+function withoutBranch(row: Record<string, unknown>): Record<string, unknown> {
+  const { branch: _branch, ...rest } = row;
+  return rest;
 }
 
 /** Upsert catálogo por tenant (sync Sheet / import). */
@@ -201,9 +220,15 @@ export async function upsertCatalogVehiclesToSupabase(
     const chunk = 50;
     for (let i = 0; i < rows.length; i += chunk) {
       const slice = rows.slice(i, i + chunk);
-      const { error } = await sb.from("catalog_vehicles").upsert(slice, {
+      let { error } = await sb.from("catalog_vehicles").upsert(slice, {
         onConflict: "tenant_id,slug",
       });
+      if (error && /branch/i.test(error.message)) {
+        const retry = await sb.from("catalog_vehicles").upsert(slice.map(withoutBranch), {
+          onConflict: "tenant_id,slug",
+        });
+        error = retry.error;
+      }
       if (error) {
         return { ok: false, count: i, error: error.message };
       }

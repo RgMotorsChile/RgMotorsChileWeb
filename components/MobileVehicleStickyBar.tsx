@@ -25,7 +25,7 @@ export default function MobileVehicleStickyBar({ vehicle: v }: { vehicle: Vehicl
           href={wa}
           target="_blank"
           rel="noopener noreferrer"
-          className="touch-target inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#25D366] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+          className="touch-target inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#25D366] px-4 text-[13px] font-bold text-[#052e16] active:scale-[0.98]"
         >
           WhatsApp
         </a>

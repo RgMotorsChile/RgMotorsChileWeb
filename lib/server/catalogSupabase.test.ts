@@ -84,6 +84,7 @@ describe("stripPlateForPublic", () => {
     expect(pub).not.toHaveProperty("payload");
     expect(pub).not.toHaveProperty("owners");
     expect(pub).not.toHaveProperty("ownersCount");
+    expect(pub.km).toBe(1000);
     expect(pub).toMatchObject({
       spin: { count: 142, pattern: "https://cdn.example/spin/{i}.webp" },
     });

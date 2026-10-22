@@ -23,6 +23,19 @@ export function assertDeletableVehiclePhotoBucket(bucket: string): void {
   }
 }
 
+/**
+ * Boletas, pagos y el resto de módulos no se borran aunque aparezcan
+ * en un listado o en una URL armada por error.
+ */
+const PROTECTED_PATH_RE =
+  /(^|\/)(boletas-receipts|boletas|payments|app-releases|vehicle-notes|box-evidence)(\/|$)/i;
+
+export function isProtectedStoragePath(objectPath: string): boolean {
+  const clean = objectPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!clean || clean.includes("..")) return true;
+  return PROTECTED_PATH_RE.test(clean);
+}
+
 /** SHA-256 del archivo ya convertido (JPEG/PNG/WebP). Igual contenido → mismo nombre. */
 export function photoContentHash(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");

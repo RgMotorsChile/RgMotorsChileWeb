@@ -53,7 +53,7 @@ export default function CatalogPdfButton({
     <button
       onClick={handle}
       disabled={loading || vehicles.length === 0}
-      className="flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-[#1a3f86] disabled:text-white"
       title={filterSummary}
     >
       {loading ? (
@@ -65,7 +65,7 @@ export default function CatalogPdfButton({
         <>
           <span aria-hidden>⬇</span>
           Descargar catálogo PDF
-          <span className="hidden text-xs font-normal text-white/70 sm:inline">
+          <span className="hidden w-10 text-right text-xs font-normal tabular-nums text-white/90 sm:inline">
             ({vehicles.length})
           </span>
         </>
