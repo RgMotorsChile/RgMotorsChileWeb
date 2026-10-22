@@ -279,15 +279,16 @@ function expandSpinFrames(pattern: string, count: number | undefined): string[] 
 function collectPhotoUrls(vehicle: {
   image?: string;
   gallery?: string[];
-  spin?: { pattern?: string; count?: number };
+  spin?: { pattern?: string; hiPattern?: string; count?: number };
 }): string[] {
   const urls = new Set<string>();
   if (vehicle.image) urls.add(vehicle.image);
   for (const url of vehicle.gallery || []) {
     if (url) urls.add(url);
   }
-  if (vehicle.spin?.pattern) {
-    for (const frame of expandSpinFrames(vehicle.spin.pattern, vehicle.spin.count)) {
+  for (const pattern of [vehicle.spin?.pattern, vehicle.spin?.hiPattern]) {
+    if (!pattern) continue;
+    for (const frame of expandSpinFrames(pattern, vehicle.spin?.count)) {
       urls.add(frame);
     }
   }
@@ -296,7 +297,7 @@ function collectPhotoUrls(vehicle: {
 
 /** Tras vender o borrar el auto en la base: suelta sus fotos si nadie más las cita. */
 export async function releaseVehiclePhotos(
-  vehicle: { image?: string; gallery?: string[]; spin?: { pattern?: string } },
+  vehicle: { image?: string; gallery?: string[]; spin?: { pattern?: string; hiPattern?: string; count?: number } },
   reason: Extract<PhotoDeleteReason, "sold" | "deleted">,
   deps?: PhotoGcDeps,
 ): Promise<{ deleted: string[]; kept: string[]; orphans: string[] }> {
@@ -331,7 +332,7 @@ async function defaultReferencedPaths(): Promise<Set<string>> {
         gallery: Array.isArray(row.gallery) ? (row.gallery as string[]) : undefined,
         spin:
           row.spin && typeof row.spin === "object"
-            ? (row.spin as { pattern?: string; count?: number })
+            ? (row.spin as { pattern?: string; hiPattern?: string; count?: number })
             : undefined,
       });
       for (const url of urls) {

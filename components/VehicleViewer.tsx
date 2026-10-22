@@ -82,7 +82,6 @@ export default function VehicleViewer({
             hiFrames={spinHiFrames}
             frontIndex={spinFront}
             className="absolute inset-0 h-full w-full"
-            autoPlay={false}
           />
         ) : current ? (
           <>
