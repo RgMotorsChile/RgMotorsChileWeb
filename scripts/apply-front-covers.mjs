@@ -5,7 +5,6 @@
  */
 import fs from "fs";
 import path from "path";
-import { createClient } from "@vercel/kv";
 import { fileURLToPath } from "url";
 import { FRONT_COVER_BY_SLUG, withFrontCover } from "./lib/front-cover-map.mjs";
 
@@ -54,14 +53,9 @@ async function main() {
   console.log(`\nActualizados: ${updated} · Sin mapa: ${noMap} · Archivo faltante: ${missingFile}`);
   console.log("Actualizado data/vehicles.json. Si hace falta: node scripts/import-tiempo-real-inventory.mjs");
 
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const kv = createClient({
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN,
-    });
-    await kv.set("vehicles.json", vehicles);
-    console.log("KV sincronizado con portadas frontales 3/4.");
-  }
+  console.log(
+    "Vercel KV ya no se usa. Si hay que publicar el catálogo, corre el sync de la app contra Supabase.",
+  );
 }
 
 main().catch((err) => {

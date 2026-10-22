@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   assertProductionStorage,
-  isBlobReady,
   isKvReady,
   isVercelProduction,
 } from "@/lib/server/storageHealth";
@@ -27,7 +26,7 @@ export async function GET() {
 
   const ok =
     !isVercelProduction() ||
-    (storage.ok && sessionOk && cronOk && isBlobReady() && isKvReady());
+    (storage.ok && sessionOk && cronOk && isKvReady());
 
   const res = NextResponse.json(
     {

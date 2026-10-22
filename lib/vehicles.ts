@@ -1424,17 +1424,19 @@ export function spinFramesOf(v: Vehicle): string[] {
   if (!v.spin || v.spin.count <= 0) return [];
   const ext = v.spin.ext ?? "jpg";
   const pattern = v.spin.pattern ?? `/cars/spin/${v.slug}/{i}.${ext}`;
-  return Array.from({ length: v.spin.count }, (_, i) =>
-    pattern.replace("{i}", String(i + 1).padStart(3, "0")),
-  );
+  return Array.from({ length: v.spin.count }, (_, i) => {
+    const frame = String(i + 1).padStart(3, "0");
+    return pattern.replaceAll("{index}", frame).replaceAll("{i}", frame);
+  });
 }
 
 export function spinHiFramesOf(v: Vehicle): string[] {
   if (!v.spin || v.spin.count <= 0 || !v.spin.hiPattern) return [];
   const pattern = v.spin.hiPattern;
-  return Array.from({ length: v.spin.count }, (_, i) =>
-    pattern.replace("{i}", String(i + 1).padStart(3, "0")),
-  );
+  return Array.from({ length: v.spin.count }, (_, i) => {
+    const frame = String(i + 1).padStart(3, "0");
+    return pattern.replaceAll("{index}", frame).replaceAll("{i}", frame);
+  });
 }
 
 export function specsOf(v: Vehicle): { label: string; value: string }[] {

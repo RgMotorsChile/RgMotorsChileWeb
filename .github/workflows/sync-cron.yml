@@ -1,7 +1,5 @@
-# Vercel Hobby solo admite crons diarios (vercel.json: 11:00, 12:00 y 22:00 UTC).
-# El intervalo de 30 minutos vive acá. Cada schedule elige un tenant; el
-# endpoint de producción resuelve el tenant por query, no por host, así que
-# RG y Unidades Chile pegan al mismo deployment.
+# Vercel queda solo como hosting: estos horarios reemplazan los crons de vercel.json.
+# Cada schedule elige un tenant. El endpoint resuelve el tenant por query, no por host.
 name: Sync inventario
 
 on:
@@ -10,6 +8,10 @@ on:
     - cron: "5,35 * * * *"
     # UTC. Minutos 20 y 50 → Unidades Chile.
     - cron: "20,50 * * * *"
+    # Los tres horarios que antes estaban en vercel.json.
+    - cron: "0 11 * * *"
+    - cron: "0 12 * * *"
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       tenant:
@@ -45,6 +47,9 @@ jobs:
             case "${EVENT_SCHEDULE}" in
               "5,35 * * * *") tenant="rg-motors" ;;
               "20,50 * * * *") tenant="unidades-chile" ;;
+              "0 11 * * *") tenant="rg-motors" ;;
+              "0 12 * * *") tenant="unidades-chile" ;;
+              "0 22 * * *") tenant="rg-motors" ;;
               *)
                 echo "Schedule no reconocido: ${EVENT_SCHEDULE}" >&2
                 exit 1

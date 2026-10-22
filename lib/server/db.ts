@@ -2,8 +2,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
-import { kv } from "@vercel/kv";
-import { isKvReady, isVercelProduction, logStorageHealthOnce } from "@/lib/server/storageHealth";
+import { createServerSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { isVercelProduction, logStorageHealthOnce } from "@/lib/server/storageHealth";
 
 // Usamos data local si es escribible, o tmpdir en entornos serverless/Vercel
 const LOCAL_DIR = join(/*turbopackIgnore: true*/ process.cwd(), "data");
@@ -13,12 +13,10 @@ function getPossiblePaths(filename: string) {
   return [join(LOCAL_DIR, filename), join(TMP_DIR, filename)];
 }
 
-const isKvConfigured = () => isKvReady();
-
 /**
- * Lee un archivo JSON de forma segura.
- * En desarrollo prioriza data/ local para no pisar el stock nuevo con KV viejo.
- * Si el archivo no existe, devuelve `fallback` y lo almacena (salvo seed=false vía peek).
+ * Lee un documento JSON.
+ * En desarrollo prioriza data/ local.
+ * En producción la fuente es public.app_documents (service role).
  */
 export async function readJsonOptional<T>(filename: string): Promise<T | null> {
   logStorageHealthOnce();
@@ -38,20 +36,21 @@ export async function readJsonOptional<T>(filename: string): Promise<T | null> {
     }
   }
 
-  if (isKvConfigured()) {
+  if (isSupabaseConfigured()) {
     try {
-      let data: unknown = await kv.get(filename);
-      // Defensa: algunos writes REST dejan el valor como string JSON.
-      if (typeof data === "string") {
-        try {
-          data = JSON.parse(data) as unknown;
-        } catch {
-          /* keep string */
-        }
+      const sb = createServerSupabase();
+      const { data, error } = await sb
+        .from("app_documents")
+        .select("value")
+        .eq("key", filename)
+        .maybeSingle();
+      if (error) {
+        console.warn(`Error leyendo ${filename} de Supabase:`, error.message);
+      } else if (data && data.value !== null && data.value !== undefined) {
+        return data.value as T;
       }
-      if (data !== null && data !== undefined) return data as T;
     } catch (error) {
-      console.warn(`Error leyendo ${filename} de Vercel KV:`, error);
+      console.warn(`Error leyendo ${filename} de Supabase:`, error);
     }
   }
 
@@ -70,10 +69,7 @@ export async function readJsonOptional<T>(filename: string): Promise<T | null> {
 }
 
 /**
- * Lee un archivo JSON de forma segura.
- * En desarrollo prioriza data/ local para no pisar el stock nuevo con KV viejo.
- * Si el archivo no existe: en prod NO siembra fallback (evita stock demo / defaults
- * inventados); en local sí escribe el fallback para DX.
+ * Si el documento no existe: en prod NO siembra fallback; en local sí, para DX.
  */
 export async function readJson<T>(filename: string, fallback: T): Promise<T> {
   const existing = await readJsonOptional<T>(filename);
@@ -81,7 +77,7 @@ export async function readJson<T>(filename: string, fallback: T): Promise<T> {
 
   if (isVercelProduction()) {
     console.warn(
-      `[RG Storage] ${filename} ausente en KV — no se siembra fallback en producción.`,
+      `[RG Storage] ${filename} ausente en Supabase — no se siembra fallback en producción.`,
     );
     return fallback;
   }
@@ -91,26 +87,34 @@ export async function readJson<T>(filename: string, fallback: T): Promise<T> {
 }
 
 /**
- * Escribe un archivo JSON de forma segura.
- * En Vercel Production solo cuenta el éxito en KV (disco local es efímero).
+ * Escribe un documento JSON.
+ * En Vercel Production solo cuenta el éxito en Supabase (disco local es efímero).
  */
 export async function writeJson<T>(filename: string, data: T): Promise<boolean> {
   logStorageHealthOnce();
 
-  if (isVercelProduction() && !isKvConfigured()) {
+  if (isVercelProduction() && !isSupabaseConfigured()) {
     console.error(
-      `[RG Storage] Rechazando escritura de ${filename}: KV obligatorio en Vercel Production.`,
+      `[RG Storage] Rechazando escritura de ${filename}: SUPABASE_SERVICE_ROLE_KEY es obligatorio en producción.`,
     );
     return false;
   }
 
-  let kvSuccess = false;
-  if (isKvConfigured()) {
+  let remoteSuccess = false;
+  if (isSupabaseConfigured()) {
     try {
-      await kv.set(filename, data);
-      kvSuccess = true;
+      const sb = createServerSupabase();
+      const { error } = await sb.from("app_documents").upsert(
+        { key: filename, value: data, updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
+      if (error) {
+        console.warn(`Error escribiendo ${filename} en Supabase:`, error.message);
+      } else {
+        remoteSuccess = true;
+      }
     } catch (error) {
-      console.warn(`Error escribiendo ${filename} en Vercel KV:`, error);
+      console.warn(`Error escribiendo ${filename} en Supabase:`, error);
     }
   }
 
@@ -129,13 +133,13 @@ export async function writeJson<T>(filename: string, data: T): Promise<boolean> 
   }
 
   if (isVercelProduction()) {
-    if (!kvSuccess) {
+    if (!remoteSuccess) {
       console.error(
-        `[RG Storage] Escritura de ${filename} falló en KV — no se considera persistida.`,
+        `[RG Storage] Escritura de ${filename} falló en Supabase — no se considera persistida.`,
       );
     }
-    return kvSuccess;
+    return remoteSuccess;
   }
 
-  return kvSuccess || localSuccess;
+  return remoteSuccess || localSuccess;
 }

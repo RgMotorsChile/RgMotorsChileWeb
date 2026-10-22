@@ -7,8 +7,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@vercel/kv";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const PLACEHOLDER = "/images/placeholder-pending-car.svg";
@@ -212,6 +210,10 @@ function mergeVehicle(row, existing) {
 }
 
 async function main() {
+  console.error(
+    "Este script usaba Vercel KV, que ya no está en el proyecto. El stock se sincroniza desde Google Sheets hacia Supabase.",
+  );
+  process.exit(1);
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     console.error("Faltan credenciales KV");
     process.exit(1);

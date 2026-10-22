@@ -4,9 +4,12 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { getVehicleBySlug, saveVehicle } from "@/lib/server/vehiclesStore";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
-import { isBlobReady, isVercelProduction } from "@/lib/server/storageHealth";
+import { isVercelProduction } from "@/lib/server/storageHealth";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import { isSupabaseConfigured, RG_MOTORS_TENANT_SLUG } from "@/lib/supabase/client";
+import { photoContentHash, vehiclePhotoRelativePath } from "@/lib/server/photoObjectPath";
+import { deleteUnreferencedVehiclePhotos } from "@/lib/server/vehiclePhotoGc";
 import {
   driveFileId,
   mediaUrlsEqual,
@@ -71,6 +74,10 @@ async function fileToStoredBytes(file: File): Promise<{
   };
 }
 
+function photosStorageLabel(): "supabase" | "local" {
+  return isSupabaseConfigured() ? "supabase" : "local";
+}
+
 function guessMime(ext: string): string {
   switch (ext) {
     case "png":
@@ -86,7 +93,7 @@ function guessMime(ext: string): string {
 
 /**
  * Obtiene las fotos subidas y recursos multimedia de un vehículo.
- * Fuente de verdad en producción: vehicle.gallery / image en KV (URLs Blob).
+ * Fuente de verdad en producción: vehicle.gallery / image en Supabase.
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -195,7 +202,7 @@ export async function GET(req: NextRequest) {
       spinCount,
       coverImage: currentCover,
       orderedGalleryUrls: gallery.map((g) => g.url),
-      storage: isBlobReady() ? "blob" : "local",
+      storage: photosStorageLabel(),
     },
     {
       headers: {
@@ -213,11 +220,11 @@ export async function POST(req: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
-  if (isVercelProduction() && !isBlobReady()) {
+  if (isVercelProduction() && !isSupabaseConfigured()) {
     return NextResponse.json(
       {
         error:
-          "Falta BLOB_READ_WRITE_TOKEN en Vercel. Sin Blob no se pueden guardar fotos en producción.",
+          "Falta SUPABASE_SERVICE_ROLE_KEY en Vercel. Sin eso no se pueden guardar fotos en producción.",
       },
       { status: 503 },
     );
@@ -313,7 +320,7 @@ export async function POST(req: NextRequest) {
         count: sorted.length,
         updatedAt: new Date().toISOString(),
         manualUpload: true,
-        storage: isBlobReady() ? "blob" : "local",
+        storage: photosStorageLabel(),
         frames: publicUrls,
       };
       const manifestStored = await storeMediaFile({
@@ -335,9 +342,9 @@ export async function POST(req: NextRequest) {
         ...vehicle,
         spin: {
           count: sorted.length,
-          pattern: publicUrls[0]?.includes("blob.vercel")
-            ? publicUrls[0].replace(/001\.[a-z]+$/i, "{index}.jpg")
-            : `/cars/spin/${slug}/{index}.jpg`,
+          pattern: publicUrls[0]?.startsWith("http")
+            ? publicUrls[0].replace(/\d{3}\.[a-z0-9]+$/i, "{i}.jpg")
+            : `/cars/spin/${slug}/{i}.jpg`,
           ext: "jpg",
         },
       });
@@ -352,16 +359,14 @@ export async function POST(req: NextRequest) {
 
       for (const file of rawFiles) {
         const prepared = await fileToStoredBytes(file);
-        const baseName =
-          file.name
-            .replace(/\.[^/.]+$/, "")
-            .toLowerCase()
-            .replace(/[^a-z0-9_-]/g, "_")
-            .slice(0, 30) || "photo";
-
-        const prefix = type === "cover" ? "cover_" : "";
-        const filename = `${prefix}${Date.now()}_${baseName}.${prepared.ext}`;
-        const relativePath = `cars/uploads/${slug}/${filename}`;
+        const contentHash = photoContentHash(prepared.bytes);
+        const filename = `${contentHash}.${prepared.ext}`;
+        const relativePath = vehiclePhotoRelativePath({
+          tenantSlug: RG_MOTORS_TENANT_SLUG,
+          slug,
+          contentHash,
+          ext: prepared.ext,
+        });
         const stored = await storeMediaFile({
           bytes: prepared.bytes,
           relativePath,
@@ -405,7 +410,7 @@ export async function POST(req: NextRequest) {
       success: true,
       count: savedFiles.length,
       saved: savedFiles,
-      storage: isBlobReady() ? "blob" : "local",
+      storage: photosStorageLabel(),
       message: `Se ${savedFiles.length === 1 ? "subió 1 foto" : `subieron ${savedFiles.length} fotos`} con éxito.`,
     });
   } catch (err) {
@@ -483,6 +488,16 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: saved.error || "No se pudo guardar el orden." }, { status: 500 });
       }
 
+      const nextUrls = new Set<string>([...cleanGallery, newCover].filter(Boolean) as string[]);
+      const dropped = [...(v.gallery || []), v.image].filter(
+        (url) => url && ![...nextUrls].some((next) => mediaUrlsEqual(next, url)),
+      );
+      if (dropped.length > 0) {
+        await deleteUnreferencedVehiclePhotos(dropped, "removed").catch((err) => {
+          console.warn("[api/photos PUT] no se borraron fotos que salieron de la galería:", err);
+        });
+      }
+
       return NextResponse.json({
         success: true,
         message: "Orden de la galería actualizado correctamente.",
@@ -557,6 +572,21 @@ export async function DELETE(req: NextRequest) {
           { error: saved.error || "Archivo borrado en disco pero falló actualizar inventario." },
           { status: 500 },
         );
+      }
+      const dropped = currentGallery.filter(
+        (url) => !updatedGallery.some((next) => mediaUrlsEqual(next, url)),
+      );
+      if (
+        v.image &&
+        !mediaUrlsEqual(v.image, updatedImage) &&
+        !updatedGallery.some((url) => mediaUrlsEqual(url, v.image))
+      ) {
+        dropped.push(v.image);
+      }
+      if (dropped.length > 0) {
+        await deleteUnreferencedVehiclePhotos(dropped, "removed").catch((err) => {
+          console.warn("[api/photos DELETE] no se borró la foto en Storage:", err);
+        });
       }
     }
 

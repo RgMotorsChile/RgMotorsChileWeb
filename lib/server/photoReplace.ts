@@ -1,12 +1,11 @@
 /**
  * Reemplazo manual de una foto (admin → "Reemplazar foto").
  *
- * La foto nueva se sube a una ruta nueva `<stem>__r<epoch>.<ext>` (no se
- * sobrescribe el blob viejo: el CDN y los navegadores lo tienen en caché) y
- * se cambia la URL en la misma posición de la galería y en la portada.
- * El sync de Drive reconoce el sufijo `__r<n>` como el mismo archivo de Drive
- * (ver fileIdFromStoredUrl) y además el caché queda marcado manualReplacedAt,
- * así no vuelve a poner la foto original.
+ * La ruta del admin ahora es `{tenant}/{slug}/{sha256}.ext`. Este helper
+ * sigue armando `<stem>__r<epoch>.<ext>` para las fotos viejas: el sync
+ * reconoce ese sufijo y, además, marca manualReplacedAt para no restaurar
+ * el original de Drive. La foto anterior se borra después de guardar, si
+ * ya nadie la cita.
  */
 
 export const REPLACE_MAX_BYTES = 3_200_000;

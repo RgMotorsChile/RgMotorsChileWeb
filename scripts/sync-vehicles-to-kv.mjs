@@ -4,8 +4,12 @@
  */
 import fs from "fs";
 import path from "path";
-import { createClient } from "@vercel/kv";
 import { fileURLToPath } from "url";
+
+console.error(
+  "Este script usaba Vercel KV, que ya no está en el proyecto. El catálogo vive en Supabase (catalog_vehicles).",
+);
+process.exit(1);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");

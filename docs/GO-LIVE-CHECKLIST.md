@@ -4,11 +4,11 @@ Sitio en producción: `https://www.rgmotorschile.cl` (también apex `rgmotorschi
 
 ## Ya OK en producción (verificado)
 
-- KV + Blob + `ADMIN_SESSION_SECRET` + `CRON_SECRET`
+- Supabase (service role) + `ADMIN_SESSION_SECRET` + `CRON_SECRET`. Las fotos van al bucket `vehicle-photos`. Vercel es solo hosting.
 - Dominios www + apex
 - Auth admin, leads, headers de seguridad, CI
-- Cron de Vercel **diario** (plan Hobby: no admite `*/30`). `vercel.json` dispara `/api/cron/sync` a las 11:00, 12:00 y 22:00 UTC. Sin `?tenant=`, las 12:00 UTC sincronizan Unidades Chile y el resto RG Motors
-- GitHub Actions (`.github/workflows/sync-cron.yml`) sincroniza cada 30 minutos: minutos 5 y 35 UTC → `?tenant=rg-motors`; minutos 20 y 50 UTC → `?tenant=unidades-chile`. Los dos pegan a `https://www.rgmotorschile.cl` (el apex redirige 301 y pierde `Authorization`). El tenant se elige por query, no por host
+- Los crons salieron de `vercel.json`. GitHub Actions (`.github/workflows/sync-cron.yml`) sincroniza cada 30 minutos: minutos 5 y 35 UTC → `?tenant=rg-motors`; minutos 20 y 50 UTC → `?tenant=unidades-chile`. Además conserva los tres horarios diarios: 11:00 y 22:00 UTC → RG Motors, 12:00 UTC → Unidades Chile. Pegan a `https://www.rgmotorschile.cl` (el apex redirige 301 y pierde `Authorization`). No se usó pg_cron: el sync necesita el runtime de Next, OAuth de Drive y el `CRON_SECRET` que ya está en Actions; meter ese secreto en la base no aporta.
+- El job diario de fotos huérfanas (`.github/workflows/photo-gc.yml`, 04:15 UTC) llama `GET /api/cron/photo-gc`. Reintenta `public.vehicle_photo_orphans` (la misma tabla que Unidades Chile) y borra objetos de `vehicle-photos` sin uso, con 15 minutos de margen. No toca otros buckets.
 - Cada corrida cabe en 60s (presupuesto de fotos que rota entre autos sin fotos; lo que no entra sigue en la siguiente) y deja una fila en `sync_state` (`catalog_cron`) con leídos / insertados / actualizados / omitidos / fotos / errores / duración, también si falla. HEIC, HEIF y DNG se guardan como el JPEG que ya renderiza Drive
 - Sync omite preparación / incompletos; catálogo público exige precio y km > 0
 - Sitemap solo vehículos públicos (sin vendidos/borrador)
@@ -32,7 +32,7 @@ Project → Settings → Environment Variables (**Production**):
 | `DRIVE_PHOTOS_FOLDER_ID` | Default `1etQDf-_InkLx8m4_AUMnc8xg2O_137St` (FOTOS RG/UNIDADES) |
 
 > **RUT:** no se publica en el sitio (decisión de negocio).
-> **Fotos Drive:** la carpeta está restringida; el sync usa OAuth → Vercel Blob (no scrape público).
+> **Fotos Drive:** la carpeta está restringida; el sync usa OAuth → Supabase Storage `vehicle-photos` (no scrape público). El cron normal no reescribe URLs de Blob. Después del deploy hay que correr `npm run photos:resync` para rg-motors y unidades-chile.
 
 Después de setear: **Redeploy**.
 
@@ -67,7 +67,7 @@ El workflow de 30 minutos llama a producción con el mismo `CRON_SECRET` de Verc
 3. Value: el mismo valor que `CRON_SECRET` en Vercel (Production)
 4. Probar con **Actions → Sync inventario → Run workflow** y elegir el tenant
 
-Sin ese secret el workflow falla antes de llamar al sitio. No hace falta cambiar `vercel.json`: en Hobby un cron `*/30` no se programa.
+Sin ese secret el workflow falla antes de llamar al sitio. `vercel.json` ya no declara crons: Hobby no admite intervalos de minutos y el schedule vive en GitHub Actions.
 
 ### Cuota Vercel (próximo sprint)
 

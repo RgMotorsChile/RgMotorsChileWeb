@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@vercel/kv');
+console.error("Este script usaba Vercel KV, que ya no está en el proyecto.");
+process.exit(1);
 
 // 1. Leer .env.local
 const envPath = path.join(__dirname, '..', '.env.local');

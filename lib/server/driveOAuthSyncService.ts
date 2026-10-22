@@ -7,6 +7,13 @@ import {
 import { readJson, writeJson } from "@/lib/server/db";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
 import { blobStillExists } from "@/lib/server/verifyPhotos";
+import {
+  isLegacyVercelBlobUrl,
+  isSupabaseVehiclePhotoUrl,
+  photoContentHash,
+  vehiclePhotoRelativePath,
+} from "@/lib/server/photoObjectPath";
+import { deleteUnreferencedVehiclePhotos } from "@/lib/server/vehiclePhotoGc";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { isHeicHeifOrDng } from "@/lib/server/driveImageFormats";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
@@ -185,7 +192,7 @@ function isStoredPhotoUrl(url: string | undefined): url is string {
   return !value.includes("placeholder");
 }
 
-/** El sync guarda `cars/uploads/{slug}/{driveFileId}.ext` (sin sufijo aleatorio). */
+/** El nombre nuevo es el hash. Un archivo viejo todavía puede traer el id de Drive en el nombre. */
 function fileIdFromStoredUrl(url: string): string | null {
   const path = url.split("?")[0];
   const base = path.split("/").pop() || "";
@@ -326,8 +333,10 @@ function blobHeadAllowed(budget: BlobHeadBudget): boolean {
 }
 
 /**
- * HEAD de cada URL de galería. Un 404/410/403 (blobStillExists) es un blob
- * perdido. Timeout u otro error cuentan como presente: no se toca la fila.
+ * HEAD de cada URL de galería que todavía es Vercel Blob.
+ * Una foto ya en Supabase (driveFileId en el state o hash en el nombre) no se
+ * vuelve a consultar. 404/410 es un archivo perdido. 403, 5xx, timeout y
+ * otros errores cuentan como presente: no se toca la fila.
  */
 async function galleryBlobsMissing(
   urls: string[],
@@ -337,6 +346,11 @@ async function galleryBlobsMissing(
   const missing = new Set<string>();
   let checked = 0;
   for (const url of urls) {
+    if (isSupabaseVehiclePhotoUrl(url)) {
+      known.set(url, true);
+      checked += 1;
+      continue;
+    }
     if (!blobHeadAllowed(budget)) return { missing, complete: false, checked };
     checked += 1;
     let exists = known.get(url);
@@ -371,6 +385,8 @@ type FolderCandidate = {
   brokenUrlsByDriveId: Map<string, string[]>;
   /** Si la portada era el blob roto, se re-sube ese mismo archivo. */
   brokenCoverDriveId?: string;
+  /** Todas las carpetas de la patente se listaron en esta corrida. */
+  listingComplete: boolean;
 };
 
 function stampDriveFolder(
@@ -386,18 +402,47 @@ function stampDriveFolder(
   };
 }
 
+function sameStoredUrl(a: string, b: string): boolean {
+  return a.split("?")[0] === b.split("?")[0];
+}
+
 function driveImageRepresented(
   image: DriveImageRef,
   state: DrivePhotosSyncState,
   gallery: string[],
 ): boolean {
   const cached = state.files[image.id]?.blobUrl || "";
+  if (cached && gallery.some((url) => sameStoredUrl(url, cached))) return true;
   if (cached && fileIdFromStoredUrl(cached) === image.id) return true;
+  const hash = state.files[image.id]?.contentHash;
+  if (hash && gallery.some((url) => url.includes(`/${hash}.`))) return true;
   return gallery.some((url) => fileIdFromStoredUrl(url) === image.id);
 }
 
 /**
- * Sync autenticado: Drive (cuenta U) → Vercel Blob → KV.
+ * URLs cuyo archivo de Drive ya no está en la carpeta listada por completo.
+ * Solo si el id está en el state (sabemos que era de Drive). Un nombre que
+ * no reconocemos se conserva. Un reemplazo manual tampoco se toca.
+ */
+function urlsRemovedFromDrive(
+  urls: string[],
+  presentIds: Set<string>,
+  state: DrivePhotosSyncState,
+): string[] {
+  const removed: string[] = [];
+  for (const url of urls) {
+    if (!isStoredPhotoUrl(url)) continue;
+    const id = resolveStoredDriveId(url, state);
+    if (!id || !state.files[id]) continue;
+    if (state.files[id]?.manualReplacedAt) continue;
+    if (presentIds.has(id)) continue;
+    removed.push(url);
+  }
+  return removed;
+}
+
+/**
+ * Sync autenticado: Drive (cuenta U) → Supabase Storage → catalog_vehicles.
  * Incremental + tope por corrida para caber en maxDuration Hobby.
  */
 export async function syncDrivePhotosViaOAuth(opts?: {
@@ -408,6 +453,13 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   deadlineAt?: number;
   /** HEAD de blobs de galería por corrida. Por defecto MAX_BLOB_HEAD_CHECKS_PER_RUN. */
   maxBlobHeadChecks?: number;
+  /** Tope de listados de carpeta. El re-sync local lo sube. */
+  maxFolderLists?: number;
+  /**
+   * Vuelve a subir desde Drive las URLs de Vercel Blob y las reemplaza
+   * solo cuando la URL nueva ya se escribió. No borra filas.
+   */
+  migrateBlobUrls?: boolean;
   folderId?: string;
   tenantSlug?: string;
 }): Promise<SyncResult> {
@@ -440,6 +492,8 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const photosPerVehicle = opts?.photosPerVehicle ?? PHOTOS_PER_VEHICLE_PER_RUN;
   const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY;
   const maxBlobHeadChecks = opts?.maxBlobHeadChecks ?? MAX_BLOB_HEAD_CHECKS_PER_RUN;
+  const maxFolderLists = opts?.maxFolderLists ?? MAX_FOLDER_LISTS_PER_RUN;
+  const migrateBlobUrls = opts?.migrateBlobUrls === true;
   const state = await loadDrivePhotosSyncState(tenantSlug);
   const errors: string[] = [];
 
@@ -505,10 +559,23 @@ export async function syncDrivePhotosViaOAuth(opts?: {
   const knownBlobs = new Map<string, boolean>();
   const missingBySlug = new Map<string, Set<string>>();
   const probeOrder = rotateSyncQueue(needingRefresh, state.blobCheckCursor);
+  if (migrateBlobUrls) {
+    for (const vehicle of [...needingRefresh, ...needingPhotos]) {
+      const legacy = storedPhotoUrls(vehicle).filter(isLegacyVercelBlobUrl);
+      if (legacy.length === 0) continue;
+      missingBySlug.set(vehicle.slug, new Set(legacy));
+    }
+  }
   // El sello de carpeta y los IDs ya presentes no ven un blob borrado.
   // Se revisa la galería con HEAD, rotando la patente para no repetir siempre
-  // el mismo auto cuando el cupo se acaba.
-  if (Date.now() < deadlineAt && blobBudget.max > 0 && needingRefresh.length > 0) {
+  // el mismo auto cuando el cupo se acaba. En la migración a Supabase no se
+  // hace HEAD: el Blob está bloqueado y la fuente es Drive.
+  if (
+    !migrateBlobUrls &&
+    Date.now() < deadlineAt &&
+    blobBudget.max > 0 &&
+    needingRefresh.length > 0
+  ) {
     let cursorSet = false;
     let lastComplete: string | null = null;
     for (const vehicle of probeOrder) {
@@ -562,7 +629,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
     const vehicle = orderedQueue[i];
     const outOfBudget =
       Date.now() >= deadlineAt ||
-      folderLists >= MAX_FOLDER_LISTS_PER_RUN ||
+      folderLists >= maxFolderLists ||
       toProcess.length >= maxVehicles;
     if (outOfBudget) {
       deferredVehicles += orderedQueue.length - i;
@@ -594,7 +661,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         skippedThisVehicle += 1;
         continue;
       }
-      if (folderLists >= MAX_FOLDER_LISTS_PER_RUN) {
+      if (folderLists >= maxFolderLists) {
         listingIncomplete = true;
         deferredVehicles += 1;
         break;
@@ -624,6 +691,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       for (const url of missingUrls || []) {
         const id = resolveStoredDriveId(url, state);
         if (!id || !presentIds.has(id)) continue;
+        if (migrateBlobUrls && state.files[id]?.manualReplacedAt) continue;
         appendBrokenUrl(brokenUrlsByDriveId, id, url);
       }
       for (const id of brokenUrlsByDriveId.keys()) {
@@ -662,6 +730,10 @@ export async function syncDrivePhotosViaOAuth(opts?: {
           continue;
         }
         if (known === true) continue;
+        if (isSupabaseVehiclePhotoUrl(cachedUrl)) {
+          knownBlobs.set(cachedUrl, true);
+          continue;
+        }
         // Auto sin fotos (nuevo o re-creado tras salir de la planilla): el
         // caché puede apuntar a blobs borrados al archivarlo. Se verifica
         // siempre, aunque no quede cupo de HEAD.
@@ -678,9 +750,15 @@ export async function syncDrivePhotosViaOAuth(opts?: {
           delete state.files[img.id];
         }
       }
+      const knownFileLeftDrive = storedPhotoUrls(vehicle).some((url) => {
+        const id = resolveStoredDriveId(url, state);
+        if (!id || !state.files[id] || state.files[id]?.manualReplacedAt) return false;
+        return !presentIds.has(id);
+      });
       const needsWork =
         !vehicle.hasRealPhotos ||
         brokenUrlsByDriveId.size > 0 ||
+        knownFileLeftDrive ||
         images.some((img) => driveFileNeedsSync(img, state.files[img.id]));
       if (!needsWork) {
         stampDriveFolder(state, folder.id, folder.modifiedTime, contentHash);
@@ -744,6 +822,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       brokenUrlsByDriveId,
       brokenCoverDriveId:
         coverDriveId && brokenUrlsByDriveId.has(coverDriveId) ? coverDriveId : undefined,
+      listingComplete: !listingIncomplete && plateFolders.every((folder) =>
+        folderWork.some((work) => work.folderId === folder.id),
+      ),
     });
   }
 
@@ -789,6 +870,14 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
     const galleryUrls: string[] = [];
     const replacements = new Map<string, string>();
+    const rememberReplacement = (oldUrl: string | undefined, nextUrl: string) => {
+      if (!oldUrl || oldUrl === nextUrl) return;
+      replacements.set(oldUrl, nextUrl);
+      const broken = [...item.brokenUrlsByDriveId.values()].some((urls) => urls.includes(oldUrl));
+      if (broken || isLegacyVercelBlobUrl(oldUrl)) {
+        replacedBlobUrls.add(oldUrl);
+      }
+    };
     let uploadedThisVehicle = 0;
     let hitSlice = false;
     let attemptedDownload = false;
@@ -803,7 +892,12 @@ export async function syncDrivePhotosViaOAuth(opts?: {
 
     for (const image of uploadOrder) {
       const cached = state.files[image.id];
-      if (!driveFileNeedsSync(image, cached) && cached?.blobUrl) {
+      const legacyCached = Boolean(cached?.blobUrl && isLegacyVercelBlobUrl(cached.blobUrl));
+      if (
+        !driveFileNeedsSync(image, cached) &&
+        cached?.blobUrl &&
+        !(migrateBlobUrls && legacyCached && !cached?.manualReplacedAt)
+      ) {
         galleryUrls.push(cached.blobUrl);
         continue;
       }
@@ -820,7 +914,31 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       attemptedDownload = true;
       try {
         const { bytes, contentType, ext } = await materializeImageBytes(image);
-        const relativePath = `cars/uploads/${item.vehicle.slug}/${image.id}.${ext}`;
+        const contentHash = photoContentHash(bytes);
+        const relativePath = vehiclePhotoRelativePath({
+          tenantSlug,
+          slug: item.vehicle.slug,
+          contentHash,
+          ext,
+        });
+        const reused = galleryUrls.find((url) => url.includes(`/${contentHash}.${ext}`));
+        if (reused) {
+          state.files[image.id] = {
+            modifiedTime: image.modifiedTime,
+            blobUrl: reused,
+            plate: plateKey,
+            contentHash,
+            manualReplacedAt: cached?.manualReplacedAt,
+          };
+          galleryUrls.push(reused);
+          const brokenReuse = item.brokenUrlsByDriveId.get(image.id);
+          if (brokenReuse?.length) {
+            repairedPhotos += 1;
+            for (const oldUrl of brokenReuse) rememberReplacement(oldUrl, reused);
+          }
+          rememberReplacement(cached?.blobUrl, reused);
+          continue;
+        }
         const stored = await storeMediaFile({
           bytes,
           relativePath,
@@ -830,6 +948,7 @@ export async function syncDrivePhotosViaOAuth(opts?: {
           modifiedTime: image.modifiedTime,
           blobUrl: stored.url,
           plate: plateKey,
+          contentHash,
         };
         galleryUrls.push(stored.url);
         uploadedThisVehicle += 1;
@@ -837,11 +956,9 @@ export async function syncDrivePhotosViaOAuth(opts?: {
         const brokenUrls = item.brokenUrlsByDriveId.get(image.id);
         if (brokenUrls?.length) {
           repairedPhotos += 1;
-          for (const oldUrl of brokenUrls) {
-            replacements.set(oldUrl, stored.url);
-            replacedBlobUrls.add(oldUrl);
-          }
+          for (const oldUrl of brokenUrls) rememberReplacement(oldUrl, stored.url);
         }
+        rememberReplacement(cached?.blobUrl, stored.url);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         errors.push(`Falló foto ${image.name}: ${detail}`);
@@ -853,18 +970,27 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       }
     }
 
-    const mergedGallery = mergeGalleryKeepingExisting(
+    let mergedGallery = mergeGalleryKeepingExisting(
       [...(item.vehicle.gallery || []), item.vehicle.image].map(
         (url) => (url && replacements.get(url)) || url,
       ),
       galleryUrls,
     );
-    const everyDriveFileRepresented = item.images.every(
-      (image) =>
-        fileIdFromStoredUrl(
-          state.files[image.id]?.blobUrl || "",
-        ) === image.id ||
-        mergedGallery.some((url) => fileIdFromStoredUrl(url) === image.id),
+    const removedFromDrive = item.listingComplete
+      ? urlsRemovedFromDrive(
+          mergedGallery,
+          new Set(item.images.map((image) => image.id)),
+          state,
+        )
+      : [];
+    if (removedFromDrive.length > 0) {
+      const removedSet = new Set(removedFromDrive);
+      const kept = mergedGallery.filter((url) => !removedSet.has(url));
+      if (kept.length > 0) mergedGallery = kept;
+      else removedFromDrive.length = 0;
+    }
+    const everyDriveFileRepresented = item.images.every((image) =>
+      driveImageRepresented(image, state, mergedGallery),
     );
     const complete = everyDriveFileRepresented && !hitSlice;
     if (
@@ -895,8 +1021,22 @@ export async function syncDrivePhotosViaOAuth(opts?: {
       gallery: orderedGallery,
       image: locked ? coverSource : cover || orderedGallery[0],
     };
-    await saveVehicle(vehicle, { tenantSlug });
+    const savedVehicle = await saveVehicle(vehicle, { tenantSlug });
     synced += 1;
+    if (savedVehicle?.success !== false) {
+      const nextUrls = new Set(storedPhotoUrls(vehicle));
+      const dropped = storedPhotoUrls(item.vehicle).filter((url) => !nextUrls.has(url));
+      for (const url of removedFromDrive) {
+        if (!dropped.includes(url)) dropped.push(url);
+        const id = resolveStoredDriveId(url, state);
+        if (id) delete state.files[id];
+      }
+      if (dropped.length > 0) {
+        await deleteUnreferencedVehiclePhotos(dropped, "removed").catch((err) => {
+          console.warn(`[DriveOAuthSync] No se pudieron borrar fotos en desuso de ${item.vehicle.slug}:`, err);
+        });
+      }
+    }
     if (locked) coverLockedUpdated += 1;
     let pendingFolder = false;
     for (const folder of item.folders) {

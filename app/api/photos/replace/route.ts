@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
 import { getVehicleBySlug, saveVehicle } from "@/lib/server/vehiclesStore";
 import { storeMediaFile } from "@/lib/server/mediaStorage";
-import { isBlobReady, isVercelProduction } from "@/lib/server/storageHealth";
+import { isVercelProduction } from "@/lib/server/storageHealth";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
-import {
-  buildReplacementPath,
-  swapPhotoUrl,
-  validateReplacementFile,
-} from "@/lib/server/photoReplace";
+import { swapPhotoUrl, validateReplacementFile } from "@/lib/server/photoReplace";
 import { markDrivePhotoReplaced } from "@/lib/server/driveOAuthSyncService";
+import { isSupabaseConfigured, RG_MOTORS_TENANT_SLUG } from "@/lib/supabase/client";
+import { photoContentHash, vehiclePhotoRelativePath } from "@/lib/server/photoObjectPath";
+import { deleteUnreferencedVehiclePhotos } from "@/lib/server/vehiclePhotoGc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +28,11 @@ export async function POST(req: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
-  if (isVercelProduction() && !isBlobReady()) {
-    return NextResponse.json({ error: "Falta configurar Blob en Vercel." }, { status: 503 });
+  if (isVercelProduction() && !isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Falta SUPABASE_SERVICE_ROLE_KEY en Vercel." },
+      { status: 503 },
+    );
   }
   let form: FormData;
   try {
@@ -71,7 +73,12 @@ export async function POST(req: NextRequest) {
     }
     const stored = await storeMediaFile({
       bytes,
-      relativePath: buildReplacementPath(slug, oldUrl, ext),
+      relativePath: vehiclePhotoRelativePath({
+        tenantSlug: RG_MOTORS_TENANT_SLUG,
+        slug,
+        contentHash: photoContentHash(bytes),
+        ext,
+      }),
       contentType,
     });
     const newUrl = stored.url.startsWith("http") ? stored.url : stored.relativePath;
@@ -85,7 +92,9 @@ export async function POST(req: NextRequest) {
     if (!saved.success) {
       return NextResponse.json({ error: saved.error || "No se guardó el vehículo." }, { status: 500 });
     }
-    // El blob viejo no se borra (respaldo). El sync de Drive queda avisado.
+    await deleteUnreferencedVehiclePhotos([oldUrl], "replaced").catch((err) => {
+      console.warn("[photos/replace] no se borró la foto anterior:", err);
+    });
     await markDrivePhotoReplaced(oldUrl, newUrl).catch((err) =>
       console.warn("[photos/replace] no se marcó el caché de Drive:", err),
     );

@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Vehicle } from "@/lib/vehicles";
+
+function hashedPhotoUrl(tenant: string, slug: string, bytes: string, ext = "jpg"): string {
+  const hash = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+  return `https://blob.example/${tenant}/${slug}/${hash}.${ext}`;
+}
 
 const getVehicles = vi.hoisted(() => vi.fn());
 const saveVehicle = vi.hoisted(() => vi.fn());
@@ -125,7 +131,7 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
       }
       return [];
     });
-    downloadDriveFileBytes.mockResolvedValue(Buffer.from("img"));
+    downloadDriveFileBytes.mockImplementation(async (id: string) => Buffer.from(`img:${id}`));
     storeMediaFile.mockImplementation(
       async ({ relativePath }: { relativePath: string }) => ({
         url: `https://blob.example/${relativePath}`,
@@ -148,13 +154,13 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
     expect(lockedSave.image).toBe("https://cdn.example/locked-cover.jpg");
     expect(lockedSave.gallery).toContain("https://cdn.example/locked-cover.jpg");
     expect(lockedSave.gallery).toContain(
-      "https://blob.example/cars/uploads/locked-car/file-locked.jpg",
+      hashedPhotoUrl("rg-motors", "locked-car", "img:file-locked"),
     );
     expect(lockedSave.coverLocked).toBe(true);
 
     const openSave = saveVehicle.mock.calls.find((call) => call[0]?.slug === "open-car");
     expect(openSave?.[0].image).toBe(
-      "https://blob.example/cars/uploads/open-car/file-open.jpg",
+      hashedPhotoUrl("rg-motors", "open-car", "img:file-open"),
     );
     expect(openSave?.[1]).toEqual({ tenantSlug: "rg-motors" });
   });
@@ -170,7 +176,7 @@ describe("syncDrivePhotosViaOAuth coverLocked", () => {
     const lockedSave = saveVehicle.mock.calls.find((call) => call[0]?.slug === "locked-car")?.[0];
     expect(lockedSave.image).toBe("https://cdn.example/locked-cover.jpg");
     expect(lockedSave.gallery).toContain(
-      "https://blob.example/cars/uploads/locked-car/file-locked.jpg",
+      hashedPhotoUrl("unidades-chile", "locked-car", "img:file-locked"),
     );
     expect(saveVehicle.mock.calls[0][1]).toEqual({
       tenantSlug: "unidades-chile",
@@ -206,7 +212,7 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     saveVehicle.mockResolvedValue({ success: true });
     writeJson.mockResolvedValue(undefined);
     blobStillExists.mockResolvedValue(true);
-    downloadDriveFileBytes.mockResolvedValue(Buffer.from("img"));
+    downloadDriveFileBytes.mockImplementation(async (id: string) => Buffer.from(`img:${id}`));
     storeMediaFile.mockImplementation(
       async ({ relativePath }: { relativePath: string }) => ({
         url: `https://blob.example/${relativePath}`,
@@ -371,7 +377,7 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
         thumbnailLink: "https://lh3.googleusercontent.com/d/dng-1=s220",
       },
     ]);
-    downloadDriveRenderedJpeg.mockResolvedValue(Buffer.from("jpeg-render"));
+    downloadDriveRenderedJpeg.mockImplementation(async (id: string) => Buffer.from(`jpeg:${id}`));
 
     const result = await syncDrivePhotosViaOAuth({
       tenantSlug: "rg-motors",
@@ -391,8 +397,8 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(downloadDriveFileBytes).not.toHaveBeenCalled();
     expect(convertHeicToJpegBuffer).not.toHaveBeenCalled();
     expect(saveVehicle.mock.calls[0][0].gallery).toEqual([
-      "https://blob.example/cars/uploads/jrth/heic-1.jpg",
-      "https://blob.example/cars/uploads/jrth/dng-1.jpg",
+      hashedPhotoUrl("rg-motors", "jrth", "jpeg:heic-1"),
+      hashedPhotoUrl("rg-motors", "jrth", "jpeg:dng-1"),
     ]);
   });
 
@@ -426,7 +432,7 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(downloadDriveFileBytes).toHaveBeenCalledWith("heic-2");
     expect(convertHeicToJpegBuffer).toHaveBeenCalledTimes(1);
     expect(saveVehicle.mock.calls[0][0].image).toBe(
-      "https://blob.example/cars/uploads/sgyl/heic-2.jpg",
+      hashedPhotoUrl("rg-motors", "sgyl", "jpeg-fallback"),
     );
 
     const dngCar = vehicle({
@@ -591,6 +597,63 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(state.folders["folder-rzsy"]).toBeUndefined();
   });
 
+  it("migrateBlobUrls reemplaza la URL de Vercel Blob sin HEAD y no la vuelve a bajar", async () => {
+    const legacy =
+      "https://old.public.blob.vercel-storage.com/cars/uploads/fresh-car/file-a.jpg";
+    const car = vehicle({
+      slug: "fresh-car",
+      plate: "AAAA 11",
+      hasRealPhotos: true,
+      image: legacy,
+      gallery: [legacy],
+    });
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({
+      lastRunAt: null,
+      files: {
+        "file-a": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: legacy },
+      },
+      folders: {},
+    });
+    listPlateFolders.mockResolvedValue([{ id: "folder-a", name: "AAAA11" }]);
+    listImagesInFolder.mockResolvedValue([
+      {
+        id: "file-a",
+        name: "1.jpg",
+        mimeType: "image/jpeg",
+        modifiedTime: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
+
+    const first = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      migrateBlobUrls: true,
+      maxBlobHeadChecks: 0,
+    });
+    const nextUrl = hashedPhotoUrl("rg-motors", "fresh-car", "img:file-a");
+    expect(blobStillExists).not.toHaveBeenCalled();
+    expect(first.newPhotosDownloaded).toBe(1);
+    expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-a");
+    expect(saveVehicle.mock.calls[0][0].image).toBe(nextUrl);
+    expect(saveVehicle.mock.calls[0][0].gallery).not.toContain(legacy);
+
+    const state = writeJson.mock.calls.at(-1)?.[1];
+    readJson.mockResolvedValue(state);
+    getVehicles.mockResolvedValue([
+      { ...car, image: nextUrl, gallery: [nextUrl], hasRealPhotos: true },
+    ]);
+    downloadDriveFileBytes.mockClear();
+    blobStillExists.mockClear();
+    const second = await syncDrivePhotosViaOAuth({
+      tenantSlug: "rg-motors",
+      migrateBlobUrls: true,
+      maxBlobHeadChecks: 0,
+    });
+    expect(downloadDriveFileBytes).not.toHaveBeenCalled();
+    expect(blobStillExists).not.toHaveBeenCalled();
+    expect(second.newPhotosDownloaded).toBe(0);
+  });
+
   it("con el state del tenant vacío no vuelve a bajar fotos que ya están en la galería", async () => {
     const existing = Array.from(
       { length: 10 },
@@ -681,8 +744,8 @@ describe("syncDrivePhotosViaOAuth presupuesto e idempotencia", () => {
     expect(downloadDriveFileBytes).toHaveBeenCalledWith("b1");
     expect(downloadDriveFileBytes).not.toHaveBeenCalledWith("typo");
     expect(saveVehicle.mock.calls[0][0].gallery).toEqual([
-      "https://blob.example/cars/uploads/pskj/a1.jpg",
-      "https://blob.example/cars/uploads/pskj/b1.jpg",
+      hashedPhotoUrl("rg-motors", "pskj", "img:a1"),
+      hashedPhotoUrl("rg-motors", "pskj", "img:b1"),
     ]);
   });
 
@@ -778,7 +841,7 @@ describe("syncDrivePhotosViaOAuth blobs 404", () => {
     vi.clearAllMocks();
     saveVehicle.mockResolvedValue({ success: true });
     writeJson.mockResolvedValue(undefined);
-    downloadDriveFileBytes.mockResolvedValue(Buffer.from("img"));
+    downloadDriveFileBytes.mockImplementation(async (id: string) => Buffer.from(`img:${id}`));
     storeMediaFile.mockImplementation(async ({ relativePath }: { relativePath: string }) => ({
       url: `https://blob.example/${relativePath}`,
       relativePath: `/${relativePath}`,
@@ -844,7 +907,7 @@ describe("syncDrivePhotosViaOAuth blobs 404", () => {
     expect(saved.image).toBe(front);
     expect(saved.gallery).toEqual([
       front,
-      "https://blob.example/cars/uploads/ssdd57/file-side.jpg",
+      hashedPhotoUrl("unidades-chile", "ssdd57", "img:file-side"),
       rear,
       orphan,
     ]);
@@ -884,7 +947,7 @@ describe("syncDrivePhotosViaOAuth blobs 404", () => {
     expect(downloadDriveFileBytes).toHaveBeenCalledTimes(1);
     expect(downloadDriveFileBytes).toHaveBeenCalledWith("file-cover");
     const saved = saveVehicle.mock.calls[0][0];
-    const fresh = "https://blob.example/cars/uploads/sxdw38/file-cover.jpg";
+    const fresh = hashedPhotoUrl("rg-motors", "sxdw38", "img:file-cover");
     expect(saved.coverLocked).toBe(true);
     expect(saved.image).toBe(fresh);
     expect(saved.gallery).toEqual([fresh, other]);
@@ -925,7 +988,7 @@ describe("syncDrivePhotosViaOAuth blobs 404", () => {
     expect(saved.coverLocked).toBe(true);
     expect(saved.image).toBe(cover);
     expect(saved.gallery).toEqual([
-      "https://blob.example/cars/uploads/sxdw38/file-other.jpg",
+      hashedPhotoUrl("unidades-chile", "sxdw38", "img:file-other"),
       cover,
     ]);
   });
@@ -1022,7 +1085,37 @@ describe("syncDrivePhotosViaOAuth blobs 404", () => {
     expect(repaired.image).toBe(first);
     expect(repaired.gallery).toEqual([
       first,
-      "https://blob.example/cars/uploads/ssdd57/file-b.jpg",
+      hashedPhotoUrl("unidades-chile", "ssdd57", "img:file-b"),
     ]);
+  });
+
+  it("saca de la galería un archivo de Drive que ya no está en un listado completo", async () => {
+    const keep = "https://cdn.example/keep.jpg";
+    const gone = "https://blob.example/rg-motors/drop-car/old.jpg";
+    const car = vehicle({
+      slug: "drop-car",
+      plate: "DROP11",
+      hasRealPhotos: true,
+      image: keep,
+      gallery: [keep, gone],
+    });
+    getVehicles.mockResolvedValue([car]);
+    readJson.mockResolvedValue({
+      lastRunAt: null,
+      files: {
+        "file-keep": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: keep },
+        "file-gone": { modifiedTime: "2026-10-01T00:00:00.000Z", blobUrl: gone },
+      },
+      folders: {},
+    });
+    listPlateFolders.mockResolvedValue([{ id: "folder-drop", name: "DROP11" }]);
+    listImagesInFolder.mockResolvedValue([driveImage("file-keep")]);
+    blobStillExists.mockResolvedValue(true);
+
+    await syncDrivePhotosViaOAuth({ tenantSlug: "rg-motors" });
+
+    const saved = saveVehicle.mock.calls[0][0];
+    expect(saved.gallery).toContain(keep);
+    expect(saved.gallery).not.toContain(gone);
   });
 });

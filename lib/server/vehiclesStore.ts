@@ -182,8 +182,9 @@ export async function deleteVehicle(
   slug: string,
 ): Promise<{ success: boolean; error?: string }> {
   const list = await getVehicles({ bypassCache: true, scope: "staff" });
+  const victim = list.find((v) => v.slug === slug);
   const filtered = list.filter((v) => v.slug !== slug);
-  if (filtered.length === list.length) {
+  if (!victim) {
     return { success: false, error: "Vehículo no encontrado." };
   }
 
@@ -194,6 +195,10 @@ export async function deleteVehicle(
     if (!remote.ok) {
       return { success: false, error: remote.error || "No se pudo borrar en Supabase" };
     }
+    const { releaseVehiclePhotos } = await import("@/lib/server/vehiclePhotoGc");
+    await releaseVehiclePhotos(victim, "deleted").catch((err) => {
+      console.warn("[vehiclesStore] Fotos del auto borrado:", err);
+    });
   } catch (err) {
     console.warn("[vehiclesStore] deleteVehicle Supabase:", err);
     return { success: false, error: "Supabase no disponible" };

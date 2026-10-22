@@ -65,6 +65,8 @@ export type CachedDriveFile = {
   modifiedTime?: string;
   blobUrl?: string;
   plate?: string;
+  /** SHA-256 del JPEG/PNG ya guardado. Mismo hash → no se vuelve a subir. */
+  contentHash?: string;
   /** Reemplazada a mano desde el admin: el sync no la vuelve a bajar. */
   manualReplacedAt?: string;
 };

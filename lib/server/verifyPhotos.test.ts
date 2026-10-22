@@ -5,6 +5,28 @@ import { buildLeadEmailHtml } from "./notify";
 describe("verifiedGallery", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("conserva 403 y 5xx, y descarta 404 y 410", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("missing")) return new Response(null, { status: 404 });
+        if (url.includes("gone")) return new Response(null, { status: 410 });
+        if (url.includes("blocked")) return new Response(null, { status: 403 });
+        if (url.includes("down")) return new Response(null, { status: 503 });
+        return new Response(null, { status: 200 });
+      }),
+    );
+    const b = "https://x.public.blob.vercel-storage.com/";
+    const out = await verifiedGallery(b + "ok.jpg", [
+      b + "ok.jpg",
+      b + "missing.jpg",
+      b + "gone.jpg",
+      b + "blocked.jpg",
+      b + "down.jpg",
+    ]);
+    expect(out).toEqual([b + "ok.jpg", b + "blocked.jpg", b + "down.jpg"]);
+  });
+
   it("quita URLs Blob 404, duplicados y placeholders; conserva errores de red", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("gone")) return new Response(null, { status: 404 });

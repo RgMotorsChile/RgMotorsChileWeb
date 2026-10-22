@@ -9,10 +9,10 @@ import { getCarRequests } from "@/lib/server/carRequestsStore";
 import { getPriceAlerts } from "@/lib/server/priceAlertsStore";
 import {
   assertProductionStorage,
-  isBlobReady,
   isKvReady,
   isVercelProduction,
 } from "@/lib/server/storageHealth";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { isGoogleDriveOAuthConfigured } from "@/lib/server/googleDriveClient";
 import type { NotificationEvent } from "@/lib/server/notify";
 
@@ -186,20 +186,20 @@ export async function buildTelemetryReport() {
   }[] = [
     {
       id: "kv",
-      label: "Base de datos",
+      label: "Documentos",
       plain: isKvReady()
-        ? "Los datos del sitio se guardan correctamente."
-        : "No hay conexión a la base de datos. El catálogo puede no actualizarse.",
+        ? "Los datos del sitio se guardan en Supabase."
+        : "Falta SUPABASE_SERVICE_ROLE_KEY. El catálogo puede no actualizarse.",
       ok: isKvReady(),
       severity: "critical",
     },
     {
       id: "blob",
-      label: "Fotos y archivos",
-      plain: isBlobReady()
-        ? "El almacenamiento de fotos está operativo."
-        : "Falta el almacenamiento de fotos (Blob).",
-      ok: isBlobReady(),
+      label: "Fotos",
+      plain: isSupabaseConfigured()
+        ? "Las fotos del catálogo se guardan en Supabase Storage."
+        : "Falta SUPABASE_SERVICE_ROLE_KEY: no se pueden guardar fotos.",
+      ok: isSupabaseConfigured(),
       severity: "critical",
     },
     {
@@ -235,7 +235,7 @@ export async function buildTelemetryReport() {
       id: "drive-oauth",
       label: "Fotos Google Drive (OAuth)",
       plain: driveOAuthOk
-        ? "OAuth de Drive configurado: el cron puede bajar fotos a Blob."
+        ? "OAuth de Drive configurado: el cron puede bajar fotos a Supabase Storage."
         : "Falta OAuth de Drive (GOOGLE_DRIVE_*). Sin eso no se sincronizan fotos de la carpeta restringida.",
       ok: driveOAuthOk || !isVercelProduction(),
       severity: "warn",
