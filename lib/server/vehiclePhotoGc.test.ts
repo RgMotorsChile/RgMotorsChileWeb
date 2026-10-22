@@ -129,6 +129,33 @@ describe("vehicle_photo_orphans", () => {
     expect(upsertOrphans).not.toHaveBeenCalled();
   });
 
+  it("cita tanto pattern como hiPattern del giro en Supabase", async () => {
+    const seen: string[] = [];
+    await releaseVehiclePhotos(
+      {
+        spin: {
+          count: 2,
+          pattern: photo("rg-motors/hilux/spin/v1/m900/{i}.webp"),
+          hiPattern: photo("rg-motors/hilux/spin/v1/d1600/{i}.avif"),
+        },
+      },
+      "sold",
+      {
+        isReferenced: async (path) => {
+          seen.push(path);
+          return true;
+        },
+        removeObjects: async () => undefined,
+      },
+    );
+    expect(seen).toEqual([
+      "rg-motors/hilux/spin/v1/m900/001.webp",
+      "rg-motors/hilux/spin/v1/m900/002.webp",
+      "rg-motors/hilux/spin/v1/d1600/001.avif",
+      "rg-motors/hilux/spin/v1/d1600/002.avif",
+    ]);
+  });
+
   it("al soltar un auto también suelta los fotogramas de spin.hiPattern", async () => {
     const removeObjects = vi.fn(async () => undefined);
     const result = await releaseVehiclePhotos(

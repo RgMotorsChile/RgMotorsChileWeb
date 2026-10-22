@@ -75,6 +75,10 @@ const PUBLIC_RULES: PublicRule[] = [
       ) {
         return false;
       }
+      // El listado público es solo GET /api/spin. Firmar y confirmar un giro es admin.
+      if (matchesPrefix(p, "/api/spin") && p !== "/api/spin") {
+        return false;
+      }
       return true;
     },
   },

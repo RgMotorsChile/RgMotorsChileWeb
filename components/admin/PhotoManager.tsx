@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { vehicles, Vehicle } from "@/lib/vehicles";
+import { vehicles, Vehicle, spinFramesOf, spinHiFramesOf } from "@/lib/vehicles";
 import { asset } from "@/lib/asset";
 import PhotoSpin360 from "@/components/PhotoSpin360";
 import SpinUploader from "@/components/admin/SpinUploader";
@@ -11,6 +11,7 @@ import {
   convertImageToWebp,
   formatBytes,
 } from "@/lib/client/uploadPhotos";
+import { sortFramesByNumber, uploadSpinSets } from "@/lib/client/uploadSpin";
 import { mediaUrlsEqual, normalizeMediaUrl } from "@/lib/vehicles/frontCoverMap";
 
 type PhotoItem = {
@@ -76,7 +77,10 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spinInputRef = useRef<HTMLInputElement>(null);
+  const hdInputRef = useRef<HTMLInputElement>(null);
   const galleryPanelRef = useRef<HTMLDivElement>(null);
+  const [spinStandard, setSpinStandard] = useState<File[]>([]);
+  const [spinHd, setSpinHd] = useState<File[]>([]);
 
   const selectedVehicle = vehiclesData.find((v) => v.slug === selectedSlug) || vehiclesData[0] || {
     slug: "",
@@ -269,39 +273,39 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
     }
   };
 
-  const handleUploadSpinFrames = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !selectedSlug) return;
-    const valid = Array.from(files).filter((f) => /\.(jpe?g|png|webp)$/i.test(f.name));
-    if (valid.length === 0) {
-      setUploadError("Selecciona fotogramas JPG/PNG válidos.");
-      return;
-    }
+  const stageSpinFiles = (list: FileList | null, kind: "standard" | "hd") => {
+    const files = sortFramesByNumber(Array.from(list || []));
+    if (kind === "standard") setSpinStandard(files);
+    else setSpinHd(files);
+    setUploadError(null);
+    setUploadSuccess(null);
+  };
 
+  const handleUploadSpin = async () => {
+    if (!selectedSlug) return;
+    const total = spinStandard.length + spinHd.length;
     setIsUploading(true);
     setUploadError(null);
     setUploadSuccess(null);
-    setUploadProgress(`360° 0/${valid.length}…`);
-
+    setUploadProgress(`0/${total}`);
     try {
-      const result = await uploadPhotosSequentially({
+      const result = await uploadSpinSets({
         slug: selectedSlug,
-        type: "spin",
-        files: valid,
-        onProgress: (p) => {
-          setUploadProgress(
-            p.done >= p.total
-              ? `360° listo ${p.total}/${p.total}`
-              : `360° ${p.done + 1}/${p.total}: ${p.currentName}`,
-          );
-        },
+        standard: spinStandard,
+        hd: spinHd,
+        onProgress: (done, count) => setUploadProgress(`${done}/${count}`),
       });
-      setUploadSuccess(result.message || `¡${result.count} fotogramas 360° guardados!`);
+      setUploadSuccess(result.message);
+      setSpinStandard([]);
+      setSpinHd([]);
+      if (spinInputRef.current) spinInputRef.current.value = "";
+      if (hdInputRef.current) hdInputRef.current.value = "";
       await fetchPhotos(selectedSlug);
+      await refreshVehicleMeta();
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Error desconocido");
+      setUploadError(err instanceof Error ? err.message : "No se pudo subir el giro.");
     } finally {
       setIsUploading(false);
-      setUploadProgress(null);
     }
   };
 
@@ -400,6 +404,13 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
 
   const readyCount = staged.filter((s) => s.ready && !s.error).length;
   const busy = isPreparing || isUploading;
+  const catalogVehicle = vehiclesData.find((v) => v.slug === selectedSlug);
+  const liveSpinFrames = catalogVehicle?.spin
+    ? spinFramesOf(catalogVehicle).map((frame) => asset(frame))
+    : [];
+  const liveSpinHiFrames = catalogVehicle?.spin?.hiPattern
+    ? spinHiFramesOf(catalogVehicle).map((frame) => asset(frame))
+    : [];
 
   return (
     <div className="space-y-6">
@@ -812,45 +823,95 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
       {activeTab === "spin" && (
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="space-y-4 rounded-2xl border border-white/10 bg-ink-800/60 p-5">
-            <h3 className="font-semibold text-white">Subir fotogramas 360° directos</h3>
+            <h3 className="font-semibold text-white">Subir giro 360°</h3>
             <p className="text-xs text-white/50">
-              Si tienes fotos individuales de la vuelta 360° (ej: 001.jpg … 024.jpg), súbelas
-              aquí.
+              Estándar: WebP, JPG o PNG, entre 24 y 200 fotos, ordenadas por número.
+              HD opcional: AVIF o WebP, la misma cantidad. Las WebP y AVIF que ya vienen
+              listas no se recomprimen. El vehículo se actualiza solo si la subida termina.
             </p>
-            <div
-              onClick={() => spinInputRef.current?.click()}
-              className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/15 bg-ink-900/50 p-6 text-center transition hover:border-brand-500 hover:bg-ink-900"
-            >
-              <input
-                ref={spinInputRef}
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => void handleUploadSpinFrames(e.target.files)}
-              />
-              <span className="text-3xl">🔄</span>
-              <p className="mt-2 text-sm font-medium text-white">
-                Haz clic para elegir los fotogramas 360°
-              </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => spinInputRef.current?.click()}
+                className="rounded-2xl border border-dashed border-white/15 bg-ink-900/50 px-4 py-5 text-left transition hover:border-brand-500 disabled:opacity-50"
+              >
+                <input
+                  ref={spinInputRef}
+                  type="file"
+                  multiple
+                  accept="image/webp,image/jpeg,image/png,.webp,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(e) => stageSpinFiles(e.target.files, "standard")}
+                />
+                <p className="text-sm font-medium text-white">Estándar</p>
+                <p className="mt-1 text-xs text-white/50">
+                  {spinStandard.length > 0
+                    ? `${spinStandard.length} archivos · ${spinStandard[0]?.name} → ${spinStandard[spinStandard.length - 1]?.name}`
+                    : "WebP, JPG o PNG"}
+                </p>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => hdInputRef.current?.click()}
+                className="rounded-2xl border border-dashed border-white/15 bg-ink-900/50 px-4 py-5 text-left transition hover:border-brand-500 disabled:opacity-50"
+              >
+                <input
+                  ref={hdInputRef}
+                  type="file"
+                  multiple
+                  accept="image/avif,image/webp,.avif,.webp"
+                  className="hidden"
+                  onChange={(e) => stageSpinFiles(e.target.files, "hd")}
+                />
+                <p className="text-sm font-medium text-white">HD opcional</p>
+                <p className="mt-1 text-xs text-white/50">
+                  {spinHd.length > 0
+                    ? `${spinHd.length} archivos · ${spinHd[0]?.name} → ${spinHd[spinHd.length - 1]?.name}`
+                    : "AVIF o WebP"}
+                </p>
+              </button>
             </div>
-            <SpinUploader />
-            {isUploading && (
-              <div className="flex items-center justify-center gap-2 rounded-xl bg-brand-500/10 p-3 text-xs text-brand-300">
-                Guardando fotogramas 360°…
+            <button
+              type="button"
+              disabled={busy || spinStandard.length < 24 || spinStandard.length > 200 || (spinHd.length > 0 && spinHd.length !== spinStandard.length)}
+              onClick={() => void handleUploadSpin()}
+              className="flex w-full items-center justify-center rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:opacity-50"
+            >
+              {isUploading ? uploadProgress || "0/0" : "Subir giro"}
+            </button>
+            {spinStandard.length > 0 && (spinStandard.length < 24 || spinStandard.length > 200) && (
+              <p className="text-xs text-amber-200">El estándar necesita entre 24 y 200 fotogramas.</p>
+            )}
+            {spinHd.length > 0 && spinHd.length !== spinStandard.length && (
+              <p className="text-xs text-amber-200">La HD tiene que tener la misma cantidad que el estándar.</p>
+            )}
+            {isUploading && uploadProgress && (
+              <div className="rounded-xl bg-brand-500/10 p-3 text-center text-xs font-semibold text-brand-300">
+                {uploadProgress}
               </div>
             )}
+            {uploadError && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+                {uploadError}
+              </div>
+            )}
+            {uploadSuccess && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-300">
+                {uploadSuccess}
+              </div>
+            )}
+            <SpinUploader />
           </div>
           <div className="rounded-2xl border border-white/10 bg-ink-800/60 p-5">
             <h3 className="mb-2 font-semibold text-white">Visor 360° en vivo</h3>
-            {spinCount > 0 ? (
+            {liveSpinFrames.length > 0 ? (
               <div className="aspect-video overflow-hidden rounded-xl bg-black">
                 <PhotoSpin360
-                  frames={Array.from(
-                    { length: spinCount },
-                    (_, i) =>
-                      `/cars/spin/${selectedSlug}/${String(i + 1).padStart(3, "0")}.jpg`,
-                  )}
+                  frames={liveSpinFrames}
+                  hiFrames={liveSpinHiFrames.length > 0 ? liveSpinHiFrames : undefined}
+                  frontIndex={catalogVehicle?.spin?.front}
                   autoPlay={false}
                   className="h-full w-full"
                 />

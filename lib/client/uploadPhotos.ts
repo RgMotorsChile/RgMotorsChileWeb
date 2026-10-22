@@ -315,7 +315,7 @@ async function postOnePhoto(
 /** Sube fotos de a una (ya deberían venir preparadas). */
 export async function uploadPhotosSequentially(opts: {
   slug: string;
-  type: "gallery" | "cover" | "spin";
+  type: "gallery" | "cover";
   files: File[];
   onProgress?: (p: UploadProgress) => void;
 }): Promise<{ count: number; message: string; errors: string[] }> {

@@ -1430,6 +1430,26 @@ export function spinFramesOf(v: Vehicle): string[] {
   });
 }
 
+/**
+ * Lo que el editor puede guardar del giro sin inventar extensión ni ruta.
+ * La subida real vive en /api/spin/commit. Aquí solo se conserva el patrón
+ * que ya está en la ficha, o se apaga el giro.
+ */
+export function spinMetadataForEditorSave(
+  enabled: boolean,
+  count: number,
+  current: VehicleSpin | undefined,
+): VehicleSpin | undefined {
+  if (!enabled) return undefined;
+  const next: VehicleSpin = { ...(current ?? {}), count };
+  const pattern = next.pattern ?? "";
+  const patternIsJpeg = /\{(?:i|index)\}\.jpe?g(?:\?|$)/i.test(pattern);
+  if (next.ext === "jpg" && !patternIsJpeg) {
+    delete next.ext;
+  }
+  return next;
+}
+
 export function spinHiFramesOf(v: Vehicle): string[] {
   if (!v.spin || v.spin.count <= 0 || !v.spin.hiPattern) return [];
   const pattern = v.spin.hiPattern;
