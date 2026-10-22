@@ -1,4 +1,5 @@
 import type { Vehicle } from "@/lib/vehicles";
+import { publicVehicleSlug, type SlugSource } from "@/lib/vehicles/publicSlug";
 
 /** Campos mínimos para cards de catálogo / listados (payload liviano). */
 export type VehicleCardDTO = Pick<
@@ -47,7 +48,7 @@ type HiddenFromPublic = {
  * (proveedor, revisión técnica, permiso, portada bloqueada, precio lista, payload).
  * El admin autenticado sigue recibiendo el vehículo completo vía `?admin=true`.
  */
-export function stripPlateForPublic<T extends HiddenFromPublic>(
+export function stripPlateForPublic<T extends HiddenFromPublic & SlugSource>(
   vehicle: T,
 ): Omit<T, keyof HiddenFromPublic> {
   const {
@@ -62,14 +63,15 @@ export function stripPlateForPublic<T extends HiddenFromPublic>(
     ownersCount: _ownersCount,
     ...rest
   } = vehicle;
-  // Kilometraje: nunca se muestra en el sitio público (sigue en BD y admin).
-  delete (rest as { km?: number }).km;
-  return rest;
+  return {
+    ...rest,
+    slug: publicVehicleSlug(vehicle),
+  };
 }
 
 export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
   return {
-    slug: v.slug,
+    slug: publicVehicleSlug(v),
     brand: v.brand,
     model: v.model,
     version: v.version,

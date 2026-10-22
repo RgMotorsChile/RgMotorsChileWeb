@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getVehicle } from "@/lib/vehicles";
 import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { publishesOnRg } from "@/lib/vehicles/branch";
 import TestDriveForm from "@/components/TestDriveForm";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default async function PruebaManejoPage({
 }) {
   const { slug } = await params;
   const raw = (await getVehicleBySlug(slug)) || getVehicle(slug);
-  if (!raw) notFound();
+  if (!raw || !publishesOnRg(raw)) notFound();
   const v = stripPlateForPublic(raw);
 
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { asset } from "@/lib/asset";
 
 const PLACEHOLDER = "/images/placeholder-pending-car.svg";
@@ -21,9 +21,12 @@ type Props = {
   width?: number;
   height?: number;
   className?: string;
+  style?: CSSProperties;
   sizes?: string;
   priority?: boolean;
   quality?: number;
+  loading?: "lazy" | "eager";
+  fetchPriority?: "high" | "low" | "auto";
 };
 
 /**
@@ -36,9 +39,12 @@ export default function SafeImage({
   width,
   height,
   className,
+  style,
   sizes = "(max-width: 768px) 100vw, 33vw",
   priority,
-  quality = 85,
+  quality = 70,
+  loading,
+  fetchPriority,
 }: Props) {
   const [failed, setFailed] = useState(false);
 
@@ -57,9 +63,12 @@ export default function SafeImage({
       width={fill ? undefined : width}
       height={fill ? undefined : height}
       className={className}
+      style={style}
       sizes={sizes}
       priority={priority}
       quality={quality}
+      loading={priority ? "eager" : loading || "lazy"}
+      fetchPriority={fetchPriority || (priority ? "high" : "low")}
       unoptimized={unoptimized}
       onError={() => {
         if (!failed) setFailed(true);

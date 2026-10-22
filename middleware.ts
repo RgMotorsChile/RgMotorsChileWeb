@@ -4,12 +4,27 @@ import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/auth/sessio
 import { isPublicApi } from "@/lib/auth/apiAccess";
 import { isMachineAuthPath } from "@/lib/auth/machineAuth";
 import { applySecurityHeaders, rejectUntrustedOrigin } from "@/lib/server/security";
+import publication from "@/lib/vehicles/publicationRedirects.json";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const method = request.method;
+
+  if (pathname.startsWith("/vehiculo/")) {
+    if (publication.gone.includes(pathname)) {
+      return applySecurityHeaders(
+        new NextResponse("Este vehículo ya no está publicado en RG Motors.", {
+          status: 410,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+      );
+    }
+    // El resto sigue al 301 de next.config y a la ficha. No reescribir
+    // headers aquí: vercel.json ya publica una CSP más estricta.
+    return NextResponse.next();
+  }
 
   // CSRF básico en mutaciones públicas. Cron/webhook usan Bearer (sin Origin).
   if (
@@ -70,5 +85,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/:path*"],
+  matcher: ["/admin/:path*", "/api/:path*", "/vehiculo/:path*"],
 };

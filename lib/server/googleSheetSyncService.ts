@@ -2,6 +2,7 @@ import { getVehicles, replaceAllVehicles } from "./vehiclesStore";
 import { archiveSoldVehicle, getSoldVehicles } from "./soldVehiclesStore";
 import { releaseVehiclePhotos } from "./vehiclePhotoGc";
 import { Vehicle } from "@/lib/vehicles";
+import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 import {
   evaluateSheetWipeGuard,
   guessBodyTypeFromModel,
@@ -470,9 +471,15 @@ export async function syncFromLiveGoogleSheet(
     } else {
       // New vehicle in sheet — sin inventar diésel/manual/4x4
       const formattedPlate = `${item.plate.slice(0, 4)} ${item.plate.slice(4)}`;
-      const slug = `${item.brand.toLowerCase()}-${item.model.toLowerCase()}-${item.year}-${item.plate.toLowerCase()}`
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+      const version = `${item.model} · ${item.color}`;
+      const slug = publicVehicleSlug({
+        slug: `${item.brand}-${item.model}-${item.year}-${item.plate}`.toLowerCase(),
+        brand: item.brand,
+        model: item.model,
+        version,
+        year: item.year,
+        plate: item.plate,
+      });
 
       const newV: Vehicle = {
         slug,

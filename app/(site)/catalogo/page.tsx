@@ -9,7 +9,9 @@ import {
   Vehicle,
 } from "@/lib/vehicles";
 import { isCamionetaBody } from "@/lib/vehicles/publicCatalog";
+import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 import VehicleCard from "@/components/VehicleCard";
+import CatalogCardSkeleton from "@/components/CatalogCardSkeleton";
 import CatalogPdfButton from "@/components/CatalogPdfButton";
 import QuickCategoryFilter, { CategoryPill } from "@/components/QuickCategoryFilter";
 import CarRequestModal from "@/components/CarRequestModal";
@@ -28,14 +30,17 @@ type Sort = "relevancia" | "precio-asc" | "precio-desc" | "year-desc";
 
 export default function CatalogPage() {
   return (
-    <Suspense fallback={<div className="p-12 text-center text-xs text-white/40">Cargando catálogo…</div>}>
+    <Suspense fallback={<div className="min-h-screen p-12 text-center text-xs text-white/70">Cargando catálogo…</div>}>
       <CatalogContent />
     </Suspense>
   );
 }
 
 function CatalogContent() {
-  const [vehicleList, setVehicleList] = useState<Vehicle[]>(initialVehicles);
+  const [vehicleList, setVehicleList] = useState<Vehicle[]>(() =>
+    initialVehicles.map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
+  );
+  const [catalogReady, setCatalogReady] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -61,9 +66,12 @@ function CatalogContent() {
       .then((data) => {
         if (data && data.vehicles && data.vehicles.length > 0) {
           setVehicleList(data.vehicles);
+        } else {
+          setVehicleList(initialVehicles);
         }
       })
-      .catch(() => {});
+      .catch(() => setVehicleList(initialVehicles))
+      .finally(() => setCatalogReady(true));
   }, []);
 
   // Initialize filters from URL search params
@@ -388,6 +396,7 @@ function CatalogContent() {
               </button>
 
               <select
+                aria-label="Ordenar catálogo"
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
                 className="min-h-11 min-w-0 flex-1 rounded-full border border-white/15 bg-white/[0.06] px-3 py-2 text-base font-medium text-white outline-none focus:border-brand-500 transition cursor-pointer backdrop-blur-md sm:flex-none sm:px-4 sm:text-sm"
@@ -406,14 +415,22 @@ function CatalogContent() {
             </div>
           )}
 
-          <p className="mb-4 text-xs font-medium text-white/45">
-            Mostrando {filtered.length} {filtered.length === 1 ? "vehículo" : "vehículos"}
+          <p className="mb-4 min-h-4 text-xs font-medium text-white/70">
+            {catalogReady
+              ? `Mostrando ${filtered.length} ${filtered.length === 1 ? "vehículo" : "vehículos"}`
+              : "Cargando catálogo"}
           </p>
 
-          {filtered.length ? (
+          {!catalogReady ? (
+            <div className="grid min-h-screen gap-3 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3" aria-hidden>
+              {Array.from({ length: 6 }, (_, i) => (
+                <CatalogCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : filtered.length ? (
             <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((v) => (
-                <VehicleCard key={v.slug} vehicle={v} />
+              {filtered.map((v, index) => (
+                <VehicleCard key={v.slug} vehicle={v} priority={index < 2} />
               ))}
             </div>
           ) : (

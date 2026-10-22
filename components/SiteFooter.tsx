@@ -8,10 +8,10 @@ export default function SiteFooter() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 sm:py-14 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-3">
           <Logo size={50} />
-          <p className="max-w-xs text-xs leading-relaxed text-white/45">
+          <p className="max-w-xs text-xs leading-relaxed text-white/60">
             Automotora en Puerto Montt. Vehículos seleccionados y atención en showroom.
           </p>
-          <div className="space-y-1 text-[11px] leading-relaxed text-white/40">
+          <div className="space-y-1 text-[11px] leading-relaxed text-white/60">
             <p className="font-medium text-white/55">{COMPANY.legalName}</p>
             {COMPANY.rut ? <p>RUT {COMPANY.rut}</p> : null}
             <p>{COMPANY.address}</p>
@@ -92,7 +92,7 @@ export default function SiteFooter() {
             <li className="font-semibold text-white/80">{COMPANY.phoneDisplay}</li>
             <li>{COMPANY.email}</li>
             <li>{COMPANY.address}</li>
-            <li className="pt-1 text-[11px] text-white/35">{COMPANY.hours}</li>
+            <li className="pt-1 text-[11px] text-white/60">{COMPANY.hours}</li>
           </ul>
 
           <div className="mt-4 flex items-center gap-3">
@@ -100,7 +100,7 @@ export default function SiteFooter() {
               href={COMPANY.instagram}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-white/45 transition hover:text-white"
+              className="text-xs font-medium text-white/70 transition hover:text-white"
               aria-label="Instagram de RG Motors"
             >
               Instagram
@@ -110,7 +110,7 @@ export default function SiteFooter() {
               href={COMPANY.facebook}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-white/45 transition hover:text-white"
+              className="text-xs font-medium text-white/70 transition hover:text-white"
               aria-label={COMPANY.facebookLabel}
             >
               Facebook
@@ -120,22 +120,22 @@ export default function SiteFooter() {
       </div>
 
       <div className="border-t border-white/[0.08]">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-white/40 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-white/60 sm:px-6">
           <span>
             © {new Date().getFullYear()} {COMPANY.legalName}
             {COMPANY.rut ? ` · RUT ${COMPANY.rut}` : ""} · Todos los derechos reservados
           </span>
           <div className="flex flex-wrap gap-4">
-            <Link href="/privacidad" className="transition-colors hover:text-white/70">
+            <Link href="/privacidad" className="transition-colors hover:text-white">
               Privacidad
             </Link>
-            <Link href="/terminos" className="transition-colors hover:text-white/70">
+            <Link href="/terminos" className="transition-colors hover:text-white">
               Términos
             </Link>
-            <Link href="/cookies" className="transition-colors hover:text-white/70">
+            <Link href="/cookies" className="transition-colors hover:text-white">
               Cookies
             </Link>
-            <Link href="/aviso-credito" className="transition-colors hover:text-white/70">
+            <Link href="/aviso-credito" className="transition-colors hover:text-white">
               Aviso de crédito
             </Link>
           </div>
@@ -143,24 +143,14 @@ export default function SiteFooter() {
       </div>
       <div className="border-t border-white/[0.05]">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-1.5 px-4 py-4 text-center text-[11px] text-white/35 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-2 sm:px-6">
-          <span>
-            Desarrollado por <span className="font-medium text-white/60">Mathias Jara</span> &middot; Desarrollador Full Stack
-          </span>
-          <span className="hidden text-white/20 sm:inline">&middot;</span>
-          <span className="flex flex-wrap items-center justify-center gap-x-2">
-            <a
-              href="https://wa.me/56964710361"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-white/70"
-            >
-              +56 9 6471 0361
-            </a>
-            <span className="text-white/20">&middot;</span>
-            <a href="mailto:mathias.jara@hotmail.com" className="transition-colors hover:text-white/70">
-              mathias.jara@hotmail.com
-            </a>
-          </span>
+          <a
+            href="https://southsoftware.cl"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-white/60 transition-colors hover:text-white"
+          >
+            Desarrollado por South Software
+          </a>
         </div>
       </div>
     </footer>

@@ -1,4 +1,5 @@
 import type { Vehicle } from "@/lib/vehicles";
+import { publishesOnRg } from "@/lib/vehicles/branch";
 
 /** Estados visibles en catálogo / home (no borrador ni vendido). */
 export function isPublicCatalogVehicle(v: Vehicle): boolean {
@@ -9,6 +10,7 @@ export function isPublicCatalogVehicle(v: Vehicle): boolean {
   // Solo listos para vender: precio real. Km puede faltar en hoja.
   if (!(v.price >= 1_000_000)) return false;
   if (!v.brand?.trim() || !v.model?.trim()) return false;
+  if (!publishesOnRg(v)) return false;
   return true;
 }
 

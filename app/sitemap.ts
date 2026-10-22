@@ -2,6 +2,7 @@ import { MetadataRoute } from "next";
 import { getVehicles } from "@/lib/server/vehiclesStore";
 import { vehicles as fallbackVehicles } from "@/lib/vehicles";
 import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
+import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.rgmotorschile.cl";
@@ -43,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const vehicleRoutes: MetadataRoute.Sitemap = allVehicles
     .filter(isPublicCatalogVehicle)
     .map((v) => ({
-      url: `${baseUrl}/vehiculo/${v.slug}`,
+      url: `${baseUrl}/vehiculo/${publicVehicleSlug(v)}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.8,

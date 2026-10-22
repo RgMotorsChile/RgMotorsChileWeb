@@ -72,26 +72,25 @@ test.describe("Sitio público", () => {
     await expect(page.locator("body")).not.toContainText(/simula|preaprob|pre-aprob/i);
   });
 
-  test("sin simulador ni cuotas: solo precio de venta", async ({ page }) => {
-    const noCuota = /simula|\/mes\b|desde \$|cuota desde/i;
+  test("sin cuotas de marketing en home, catálogo y comparador", async ({ page }) => {
+    const noCuota = /cuota desde|simula tu cuota/i;
     await page.goto("/");
     await expect(page.locator("body")).not.toContainText(noCuota);
     await page.goto("/catalogo");
     const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
     expect(href).toBeTruthy();
     await expect(page.locator("body")).not.toContainText(noCuota);
-    await page.goto(href!);
-    await expect(page.getByRole("main")).not.toContainText(noCuota);
     await page.goto("/comparador");
     await expect(page.locator("body")).not.toContainText(noCuota);
   });
 
-  test("ficha: fotos estables, sin simulador y sin desborde", async ({ page }) => {
+  test("ficha: fotos estables, cuota referencial y sin desborde", async ({ page }) => {
     await page.goto("/catalogo");
     const href = await page.locator('a[href^="/vehiculo/"]').first().getAttribute("href");
     await page.goto(href!);
     const main = page.getByRole("main");
-    await expect(main).not.toContainText(/simula|\/mes/i);
+    await expect(main).toContainText(/cuota referencial/i);
+    await expect(main).toContainText(/simulación referencial/i);
     await expect(main).toContainText(/consigna tu vehículo/i);
     // Foto real o placeholder, nunca ambos; una vez cargada la página no cambia.
     await page.waitForLoadState("load");

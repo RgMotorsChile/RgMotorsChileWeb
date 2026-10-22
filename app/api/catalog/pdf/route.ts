@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getVehicles } from "@/lib/server/vehiclesStore";
 import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
-import { enrichVehicleTechSpec } from "@/lib/vehicles/techSpecs";
+import { slugMatchesVehicle } from "@/lib/vehicles/publicSlug";
 import {
   generateCatalogPdfBuffer,
   isPdfSafeImagePath,
@@ -124,14 +124,12 @@ export async function GET(req: NextRequest) {
     }
 
     const origin = siteOrigin(req);
-    const all = (await getVehicles())
-      .filter(isPublicCatalogVehicle)
-      .map((v) => enrichVehicleTechSpec(v));
+    const all = (await getVehicles()).filter(isPublicCatalogVehicle);
 
     const slugs = parseSlugs(req);
     const vehicles = slugs?.length
       ? (slugs
-          .map((slug) => all.find((v) => v.slug === slug))
+          .map((slug) => all.find((v) => slugMatchesVehicle(v, slug)))
           .filter(Boolean) as Vehicle[])
       : all;
 

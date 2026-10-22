@@ -1,4 +1,5 @@
 // Stock importado desde "total inventario tiempo real.xlsx" (primeros 40 con precio válido)
+import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 
 export interface VehicleSpin {
   count: number;
@@ -42,6 +43,8 @@ export interface Vehicle {
   techReview?: string;
   circPermit?: string;
   highlights?: string[];
+  /** Sucursal física: rg-motors, unidades-chile o salgado. */
+  branch?: "rg-motors" | "unidades-chile" | "salgado";
 }
 
 export const initialVehicles: Vehicle[] = [
@@ -1405,7 +1408,7 @@ export const HERO_SHOWCASE_VEHICLES: Vehicle[] = initialVehicles
 export const vehicles: Vehicle[] = initialVehicles;
 
 export function getVehicle(slug: string): Vehicle | undefined {
-  return vehicles.find((v) => v.slug === slug);
+  return vehicles.find((v) => v.slug === slug || publicVehicleSlug(v) === slug);
 }
 
 export function formatCLP(amount: number): string {

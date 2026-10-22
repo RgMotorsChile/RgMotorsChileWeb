@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { asset } from "@/lib/asset";
 import { vehicles as initialVehicles, Vehicle, formatCLP } from "@/lib/vehicles";
+import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 
 const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
   { label: "Precio", get: (v) => formatCLP(v.price) },
@@ -18,7 +19,9 @@ const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
 ];
 
 export default function ComparadorPage() {
-  const [vehiclesData, setVehiclesData] = useState<Vehicle[]>(initialVehicles);
+  const [vehiclesData, setVehiclesData] = useState<Vehicle[]>(() =>
+    initialVehicles.map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
+  );
   
   useEffect(() => {
     fetch("/api/vehicles?fields=card")

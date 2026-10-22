@@ -89,11 +89,14 @@ export default function VehicleViewer({
               key={current}
               src={asset(current)}
               alt={`${name} - Foto ${idx + 1} de ${count}`}
-              fill
+              width={1600}
+              height={1200}
               priority={idx === 0}
-              sizes="(max-width: 1024px) 100vw, 60vw"
-              quality={85}
-              className="select-none object-cover object-center"
+              fetchPriority={idx === 0 ? "high" : "low"}
+              loading={idx === 0 ? "eager" : "lazy"}
+              sizes="(max-width: 480px) 480px, (max-width: 800px) 800px, (max-width: 1200px) 1200px, 1600px"
+              quality={62}
+              className="absolute inset-0 h-full w-full select-none object-cover object-center"
               onError={() => markFailed(current)}
             />
             {count > 1 && (
@@ -144,14 +147,15 @@ export default function VehicleViewer({
                 i === idx ? "border-brand-400 ring-1 ring-brand-400/40" : "border-white/10 opacity-70 hover:opacity-100"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={asset(src)}
                 alt=""
+                width={160}
+                height={120}
+                sizes="160px"
+                quality={45}
                 loading="lazy"
-                decoding="async"
-                width={96}
-                height={64}
+                fetchPriority="low"
                 className="h-full w-full object-cover"
                 onError={() => markFailed(src)}
               />

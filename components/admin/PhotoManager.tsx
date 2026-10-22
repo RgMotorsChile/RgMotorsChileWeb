@@ -696,7 +696,10 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
               <div>
                 <h3 className="font-semibold text-white">Fotos ya publicadas</h3>
                 <p className="text-xs text-white/50">
-                  {gallery.length} en catálogo · Arrastra el orden con ← → · #1 = portada
+                  {gallery.length} en catálogo · La portada es la foto del catálogo y de la ficha.
+                </p>
+                <p className="mt-1 max-w-md text-xs text-amber-200/80">
+                  Si la portada muestra la placa de otra automotora, elige otra foto del mismo set. Acá no se editan las imágenes.
                 </p>
               </div>
               <button
@@ -725,12 +728,12 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {gallery.map((photo, idx) => {
-                  const isCover =
-                    idx === 0 ||
-                    photo.isCover ||
-                    (coverImage &&
-                      (mediaUrlsEqual(coverImage, photo.url) ||
-                        coverImage.includes(photo.name)));
+                  const coverMatched = gallery.some(
+                    (item) => coverImage && mediaUrlsEqual(coverImage, item.url),
+                  );
+                  const isCover = coverMatched
+                    ? mediaUrlsEqual(coverImage, photo.url)
+                    : idx === 0;
                   return (
                     <div
                       key={`${photo.url}-${idx}`}
@@ -799,17 +802,14 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
                             →
                           </button>
                         </div>
-                        {!isCover ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleSetAsCover(photo.url)}
-                            className="font-semibold text-brand-300 underline hover:text-white"
-                          >
-                            Poner portada
-                          </button>
-                        ) : (
-                          <span className="font-bold text-emerald-400">Principal</span>
-                        )}
+                        <button
+                          type="button"
+                          disabled={isCover}
+                          onClick={() => void handleSetAsCover(photo.url)}
+                          className="rounded-md bg-brand-500/90 px-2 py-1 font-semibold text-white hover:bg-brand-400 disabled:bg-emerald-500/20 disabled:text-emerald-300"
+                        >
+                          {isCover ? "Portada actual" : "Elegir como portada"}
+                        </button>
                       </div>
                     </div>
                   );

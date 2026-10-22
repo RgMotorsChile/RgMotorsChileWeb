@@ -1,6 +1,7 @@
 import { Vehicle, vehicles as initialVehicles } from "@/lib/vehicles";
+import { branchOf } from "@/lib/vehicles/branch";
 import { withFrontCover } from "@/lib/vehicles/frontCoverMap";
-import { enrichVehicleTechSpec } from "@/lib/vehicles/techSpecs";
+import { slugMatchesVehicle } from "@/lib/vehicles/publicSlug";
 import { cacheGet, cacheInvalidate, cacheSet } from "./memoryCache";
 import { logStorageHealthOnce } from "./storageHealth";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -39,7 +40,7 @@ function normalizeVehicle(vehicle: Vehicle): Vehicle {
   if (cleaned.bodyType === "Pickup") {
     cleaned = { ...cleaned, bodyType: "Camioneta" };
   }
-  cleaned = enrichVehicleTechSpec(cleaned);
+  cleaned = { ...cleaned, branch: branchOf(cleaned) };
   return withFrontCover(cleaned);
 }
 
@@ -97,7 +98,7 @@ export async function getVehicleBySlug(
   opts?: { bypassCache?: boolean; scope?: CatalogReadScope },
 ): Promise<Vehicle | null> {
   const list = await getVehicles(opts);
-  return list.find((v) => v.slug === slug) ?? null;
+  return list.find((v) => slugMatchesVehicle(v, slug)) ?? null;
 }
 
 /** Reemplaza el inventario completo (import Excel / sync). */
