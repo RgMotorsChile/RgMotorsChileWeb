@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { Vehicle, VehicleSpin } from "@/lib/vehicles";
 import { getVehicleBySlug, saveVehicle } from "@/lib/server/vehiclesStore";
 import { deleteUnreferencedVehiclePhotos } from "@/lib/server/vehiclePhotoGc";
+import { ensureVehiclePhotosBucket } from "@/lib/server/mediaStorage";
 import {
   VEHICLE_PHOTOS_BUCKET,
   supabasePublicObjectUrl,
@@ -25,6 +26,8 @@ export const SPIN_SET_NAMES = ["m900", "d1600"] as const;
 export const SPIN_EXTS = ["webp", "avif"] as const;
 export const SPIN_FRAME_MIN = 24;
 export const SPIN_FRAME_MAX = 200;
+/** Tope por petición. 142+142 en una sola llamada no cabe en el límite de la función. */
+export const SPIN_SIGN_BATCH_MAX = 48;
 
 export type SpinSetName = (typeof SPIN_SET_NAMES)[number];
 export type SpinExt = (typeof SPIN_EXTS)[number];
@@ -33,6 +36,9 @@ export type SpinSetInput = {
   name: SpinSetName;
   ext: SpinExt;
   count: number;
+  /** Inclusivo, desde 1. Si no viene, la petición firma el set completo. */
+  from?: number;
+  to?: number;
 };
 
 export type SpinUploadRequest = {
@@ -65,6 +71,7 @@ export type SpinUploadDeps = {
   listFolder?: (prefix: string) => Promise<SpinFolderEntry[]>;
   deleteUnreferenced?: typeof deleteUnreferencedVehiclePhotos;
   removeLocalSpin?: (slug: string) => Promise<void>;
+  removeObjects?: (paths: string[]) => Promise<void>;
 };
 
 const SETS = new Set<string>(SPIN_SET_NAMES);
@@ -148,11 +155,19 @@ export function parseSpinUploadBody(
         error: `Cada set tiene que tener entre ${SPIN_FRAME_MIN} y ${SPIN_FRAME_MAX} fotogramas.`,
       };
     }
+    const from = raw.from === undefined ? 1 : raw.from;
+    const to = raw.to === undefined ? count : raw.to;
+    if (typeof from !== "number" || typeof to !== "number" || !Number.isInteger(from) || !Number.isInteger(to)) {
+      return { ok: false, status: 400, error: "El rango del set tiene que ser de enteros." };
+    }
+    if (from < 1 || to > count || from > to) {
+      return { ok: false, status: 400, error: "El rango del set se sale de la cantidad de fotogramas." };
+    }
     if (seen.has(name)) {
       return { ok: false, status: 400, error: "El set viene repetido." };
     }
     seen.add(name);
-    sets.push({ name: name as SpinSetName, ext: ext as SpinExt, count });
+    sets.push({ name: name as SpinSetName, ext: ext as SpinExt, count, from, to });
   }
 
   if (!seen.has("m900")) {
@@ -184,13 +199,22 @@ async function defaultFindVehicle(slug: string): Promise<Vehicle | null> {
   return getVehicleBySlug(slug, { bypassCache: true, scope: "staff" });
 }
 
+let signingClient: ReturnType<typeof createServerSupabase> | null = null;
+let mimeReady: Promise<void> | null = null;
+
 async function defaultSign(path: string): Promise<SignedSpinUpload> {
   if (!isSupabaseConfigured()) {
     const error = new Error("Falta SUPABASE_SERVICE_ROLE_KEY. El giro se guarda en Supabase Storage.");
     (error as Error & { status?: number }).status = 503;
     throw error;
   }
-  const sb = createServerSupabase();
+  mimeReady ??= ensureVehiclePhotosBucket().catch((err: unknown) => {
+    mimeReady = null;
+    throw err;
+  });
+  await mimeReady;
+  signingClient ??= createServerSupabase();
+  const sb = signingClient;
   const { data, error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
   });
@@ -261,6 +285,26 @@ function statusOf(err: unknown): number {
   return 500;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const error = new Error(message) as Error & { status?: number };
+      error.status = 504;
+      reject(error);
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 export async function createSpinUploadUrls(
   body: unknown,
   deps: SpinUploadDeps = {},
@@ -280,31 +324,51 @@ export async function createSpinUploadUrls(
     }
 
     const planned = [];
+    let framesToSign = 0;
+    for (const set of sets) {
+      framesToSign += (set.to ?? set.count) - (set.from ?? 1) + 1;
+    }
+    if (framesToSign > SPIN_SIGN_BATCH_MAX) {
+      return {
+        status: 400,
+        body: {
+          error: `Cada petición firma como máximo ${SPIN_SIGN_BATCH_MAX} fotogramas. Hay que pedirlos por lotes.`,
+        },
+      };
+    }
     for (const set of sets) {
       const prefix = spinSetPrefix({ tenant, slug, version, set: set.name });
-      const paths = Array.from({ length: set.count }, (_, index) =>
+      const from = set.from ?? 1;
+      const to = set.to ?? set.count;
+      const indexes: number[] = [];
+      for (let index = from; index <= to; index += 1) indexes.push(index);
+      const paths = indexes.map((index) =>
         spinFrameObjectPath({
           tenant,
           slug,
           version,
           set: set.name,
-          index: index + 1,
+          index,
           ext: set.ext,
         }),
       );
       if (paths.some((path) => !path.startsWith(`${prefix}/`) || path.includes(".."))) {
         return { status: 400, body: { error: "Ruta de giro inválida." } };
       }
-      const signed = await mapPool(paths, 8, (path) => sign(path));
+      const signed = await mapPool(paths, 8, (path) =>
+        withTimeout(sign(path), 8_000, "Se agotó el tiempo al firmar una subida."),
+      );
       planned.push({
         name: set.name,
         ext: set.ext,
         count: set.count,
+        from,
+        to,
         prefix,
-        uploads: signed.map((item, index) => ({
-          index: index + 1,
-          fileName: spinFrameFileName(index + 1, set.ext),
-          path: paths[index],
+        uploads: signed.map((item, offset) => ({
+          index: indexes[offset],
+          fileName: spinFrameFileName(indexes[offset]!, set.ext),
+          path: paths[offset],
           signedUrl: item.signedUrl,
           token: item.token,
           contentType: set.ext === "avif" ? "image/avif" : "image/webp",
@@ -504,5 +568,80 @@ async function cleanupReplacedSpin(opts: {
     await opts.removeLocal(opts.slug);
   } catch (err) {
     console.warn("[spin/commit] no se pudo borrar cars/spin local", publicError(err, "local"));
+  }
+}
+
+export function spinVersionRoot(tenant: string, slug: string, version: string): string {
+  return `${tenant}/${slug}/spin/${version}`;
+}
+
+function parseAbortBody(
+  body: unknown,
+): { ok: true; slug: string; version: string } | { ok: false; status: number; error: string } {
+  if (!isRecord(body)) {
+    return { ok: false, status: 400, error: "El cuerpo tiene que ser un objeto JSON." };
+  }
+  const slug = String(body.slug || "").trim().toLowerCase();
+  const version = String(body.version || "").trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return { ok: false, status: 400, error: "Slug de vehículo no válido." };
+  }
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(version)) {
+    return { ok: false, status: 400, error: "Versión de giro no válida." };
+  }
+  return { ok: true, slug, version };
+}
+
+async function defaultRemoveObjects(paths: string[]): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    const error = new Error("Falta SUPABASE_SERVICE_ROLE_KEY. El giro se guarda en Supabase Storage.");
+    (error as Error & { status?: number }).status = 503;
+    throw error;
+  }
+  const sb = signingClient ?? createServerSupabase();
+  for (let i = 0; i < paths.length; i += 100) {
+    const slice = paths.slice(i, i + 100);
+    const { error } = await sb.storage.from(VEHICLE_PHOTOS_BUCKET).remove(slice);
+    if (error) throw new Error(error.message || "No se pudo borrar el intento.");
+  }
+}
+
+/** Borra solo la versión de un intento que no llegó a publicarse. No toca la base. */
+export async function abortSpinUpload(
+  body: unknown,
+  deps: SpinUploadDeps = {},
+): Promise<SpinEndpointResult> {
+  const parsed = parseAbortBody(body);
+  if (!parsed.ok) return { status: parsed.status, body: { error: parsed.error } };
+
+  const tenant = deps.tenantSlug || RG_MOTORS_TENANT_SLUG;
+  const findVehicle = deps.findVehicle ?? defaultFindVehicle;
+  const listFolder = deps.listFolder ?? defaultListFolder;
+  const removeObjects = deps.removeObjects ?? defaultRemoveObjects;
+  const { slug, version } = parsed;
+  const root = spinVersionRoot(tenant, slug, version);
+  if (!root.startsWith(`${tenant}/${slug}/spin/`) || root.includes("..")) {
+    return { status: 400, body: { error: "Ruta de giro inválida." } };
+  }
+
+  try {
+    const vehicle = await findVehicle(slug);
+    if (!vehicle) {
+      return { status: 404, body: { error: `No existe el vehículo «${slug}».` } };
+    }
+    const published = [vehicle.spin?.pattern, vehicle.spin?.hiPattern]
+      .map((pattern) => spinVersionPrefixFromPattern(pattern))
+      .filter((prefix): prefix is string => Boolean(prefix));
+    if (published.includes(root)) {
+      return { status: 409, body: { error: "Esa versión ya está publicada. No se borró." } };
+    }
+
+    const files = (await listFilesRecursive(root, listFolder)).filter(
+      (path) => path.startsWith(`${root}/`) && !path.includes(".."),
+    );
+    if (files.length > 0) await removeObjects(files);
+    return { status: 200, body: { success: true, deleted: files.length, version } };
+  } catch (err) {
+    return { status: statusOf(err), body: { error: publicError(err, "No se pudo borrar el intento.") } };
   }
 }

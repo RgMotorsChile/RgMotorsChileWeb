@@ -10,6 +10,11 @@ export const SPIN_UPLOAD_CONCURRENCY = 6;
 export const SPIN_PUT_ATTEMPTS = 4;
 export const SPIN_FRAME_MIN = 24;
 export const SPIN_FRAME_MAX = 200;
+/** Fotogramas que se firman en cada POST /api/spin/upload-urls. */
+export const SPIN_SIGN_BATCH = 24;
+export const SPIN_SIGN_TIMEOUT_MS = 25_000;
+export const SPIN_PUT_TIMEOUT_MS = 30_000;
+export const SPIN_COMMIT_TIMEOUT_MS = 50_000;
 const MAX_SPIN_BYTES = 20 * 1024 * 1024;
 
 type SpinExt = "webp" | "avif";
@@ -145,20 +150,49 @@ async function prepareSet(
   return prepared;
 }
 
-async function putOnce(url: string, file: File, contentType: string): Promise<void> {
+function isAbortError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "name" in err && (err as { name?: string }).name === "AbortError";
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  timeoutMessage: string,
+  offlineMessage: string,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    if (isAbortError(err)) throw new Error(timeoutMessage);
+    throw new Error(offlineMessage);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function putOnce(url: string, file: File, contentType: string, timeoutMs: number): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: "PUT",
-      body: file,
-      headers: {
-        "Content-Type": contentType,
-        "x-upsert": "true",
-        "cache-control": "31536000",
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": contentType,
+          "x-upsert": "true",
+          "cache-control": "31536000",
+        },
       },
-    });
-  } catch {
-    throw new Error("Sin conexión al subir un fotograma.");
+      timeoutMs,
+      "Se agotó el tiempo al subir un fotograma.",
+      "Sin conexión al subir un fotograma.",
+    );
+  } catch (err) {
+    throw err instanceof Error ? err : new Error("Sin conexión al subir un fotograma.");
   }
   if (!res.ok) {
     throw new Error(`No se pudo subir un fotograma (HTTP ${res.status}).`);
@@ -170,11 +204,12 @@ async function putWithRetries(
   file: File,
   contentType: string,
   retryDelayMs: number,
+  timeoutMs: number,
 ): Promise<void> {
   let last = "No se pudo subir un fotograma.";
   for (let attempt = 1; attempt <= SPIN_PUT_ATTEMPTS; attempt += 1) {
     try {
-      await putOnce(url, file, contentType);
+      await putOnce(url, file, contentType, timeoutMs);
       return;
     } catch (err) {
       last = err instanceof Error ? err.message : last;
@@ -217,9 +252,13 @@ export async function uploadSpinSets(opts: {
   slug: string;
   standard: File[];
   hd?: File[];
-  onProgress?: (done: number, total: number) => void;
+  onProgress?: (done: number, total: number, phase?: "sign" | "upload") => void;
   retryDelayMs?: number;
   concurrency?: number;
+  signBatchSize?: number;
+  signTimeoutMs?: number;
+  putTimeoutMs?: number;
+  commitTimeoutMs?: number;
 }): Promise<{ count: number; message: string }> {
   const standardFiles = sortFramesByNumber(opts.standard);
   const hdFiles = sortFramesByNumber(opts.hd ?? []);
@@ -232,51 +271,53 @@ export async function uploadSpinSets(opts: {
 
   const standard = await prepareSet(standardFiles, prepareStandardFrame);
   const hd = hdFiles.length > 0 ? await prepareSet(hdFiles, prepareHdFrame) : [];
-  const sets: Array<{ name: "m900" | "d1600"; ext: SpinExt; count: number }> = [
-    { name: "m900", ext: standard[0]!.ext, count: standard.length },
-  ];
-  if (hd.length > 0) {
-    sets.push({ name: "d1600", ext: hd[0]!.ext, count: hd.length });
-  }
-
   const version = createSpinVersion();
-  let planRes: Response;
-  try {
-    planRes = await fetch("/api/spin/upload-urls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: opts.slug, version, sets }),
-    });
-  } catch {
-    throw new Error("Sin conexión al preparar el giro.");
-  }
-  if (!planRes.ok) throw new Error(await readApiError(planRes));
-  const plan = (await planRes.json()) as { sets?: SignedSet[] };
-  const jobs = jobsFromPlan(plan.sets ?? [], standard, hd);
+  const batchSize = Math.max(1, opts.signBatchSize ?? SPIN_SIGN_BATCH);
+  const signTimeoutMs = opts.signTimeoutMs ?? SPIN_SIGN_TIMEOUT_MS;
+  const putTimeoutMs = opts.putTimeoutMs ?? SPIN_PUT_TIMEOUT_MS;
+  const commitTimeoutMs = opts.commitTimeoutMs ?? SPIN_COMMIT_TIMEOUT_MS;
 
-  let done = 0;
-  const total = jobs.length;
-  opts.onProgress?.(0, total);
-  const concurrency = opts.concurrency ?? SPIN_UPLOAD_CONCURRENCY;
-  const retryDelayMs = opts.retryDelayMs ?? 250;
-  await runPool(jobs, concurrency, async (job) => {
-    await putWithRetries(job.signedUrl, job.file, job.contentType, retryDelayMs);
-    done += 1;
-    opts.onProgress?.(done, total);
-  });
-
-  let commitRes: Response;
   try {
-    commitRes = await fetch("/api/spin/commit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: opts.slug, version, sets }),
+    const jobs = await signInBatches({
+      slug: opts.slug,
+      version,
+      standard,
+      hd,
+      batchSize,
+      signTimeoutMs,
+      onProgress: opts.onProgress,
     });
-  } catch {
-    throw new Error("Los fotogramas se subieron, pero no se pudo confirmar el giro. Si el visor no cambió, el vehículo sigue igual.");
-  }
-  if (!commitRes.ok) {
-    throw new Error(await readApiError(commitRes));
+
+    let done = 0;
+    const total = jobs.length;
+    opts.onProgress?.(0, total, "upload");
+    const concurrency = opts.concurrency ?? SPIN_UPLOAD_CONCURRENCY;
+    const retryDelayMs = opts.retryDelayMs ?? 250;
+    await runPool(jobs, concurrency, async (job) => {
+      await putWithRetries(job.signedUrl, job.file, job.contentType, retryDelayMs, putTimeoutMs);
+      done += 1;
+      opts.onProgress?.(done, total, "upload");
+    });
+
+    const sets = commitSets(standard, hd);
+    const commitRes = await fetchWithTimeout(
+      "/api/spin/commit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: opts.slug, version, sets }),
+      },
+      commitTimeoutMs,
+      "Se agotó el tiempo al confirmar el giro.",
+      "Los fotogramas se subieron, pero no se pudo confirmar el giro. Si el visor no cambió, el vehículo sigue igual.",
+    );
+    if (!commitRes.ok) {
+      throw new Error(await readApiError(commitRes));
+    }
+  } catch (err) {
+    const extra = await discardFailedAttempt(opts.slug, version);
+    const message = err instanceof Error ? err.message : "No se pudo subir el giro.";
+    throw new Error(`${message}${extra}`);
   }
 
   const hdNote = hd.length > 0 ? " con HD" : "";
@@ -286,35 +327,115 @@ export async function uploadSpinSets(opts: {
   };
 }
 
-function jobsFromPlan(sets: SignedSet[], standard: PreparedFrame[], hd: PreparedFrame[]) {
-  const m900 = sets.find((set) => set.name === "m900");
-  if (!m900 || m900.uploads.length !== standard.length) {
-    throw new Error("El servidor no entregó todas las URLs del estándar.");
+function commitSets(standard: PreparedFrame[], hd: PreparedFrame[]) {
+  const sets: Array<{ name: "m900" | "d1600"; ext: SpinExt; count: number }> = [
+    { name: "m900", ext: standard[0]!.ext, count: standard.length },
+  ];
+  if (hd.length > 0) sets.push({ name: "d1600", ext: hd[0]!.ext, count: hd.length });
+  return sets;
+}
+
+async function signInBatches(opts: {
+  slug: string;
+  version: string;
+  standard: PreparedFrame[];
+  hd: PreparedFrame[];
+  batchSize: number;
+  signTimeoutMs: number;
+  onProgress?: (done: number, total: number, phase?: "sign" | "upload") => void;
+}) {
+  const total = opts.standard.length + opts.hd.length;
+  const jobs: Array<{ signedUrl: string; file: File; contentType: string }> = [];
+  let signed = 0;
+  opts.onProgress?.(0, total, "sign");
+  for (let from = 1; from <= opts.standard.length; from += opts.batchSize) {
+    const to = Math.min(opts.standard.length, from + opts.batchSize - 1);
+    const sets: Array<{ name: "m900" | "d1600"; ext: SpinExt; count: number; from: number; to: number }> = [
+      { name: "m900", ext: opts.standard[0]!.ext, count: opts.standard.length, from, to },
+    ];
+    if (opts.hd.length > 0) {
+      sets.push({ name: "d1600", ext: opts.hd[0]!.ext, count: opts.hd.length, from, to });
+    }
+    const planRes = await fetchWithTimeout(
+      "/api/spin/upload-urls",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: opts.slug, version: opts.version, sets }),
+      },
+      opts.signTimeoutMs,
+      "Se agotó el tiempo al firmar las subidas. No se subió este intento.",
+      "Sin conexión al preparar el giro.",
+    );
+    if (!planRes.ok) throw new Error(await readApiError(planRes));
+    const plan = (await planRes.json()) as { sets?: SignedSet[]; version?: string };
+    if (plan.version && plan.version !== opts.version) {
+      throw new Error("El servidor cambió la versión del giro. Reintenta.");
+    }
+    jobs.push(...jobsFromSlice(plan.sets ?? [], "m900", opts.standard, from, to));
+    if (opts.hd.length > 0) {
+      jobs.push(...jobsFromSlice(plan.sets ?? [], "d1600", opts.hd, from, to));
+    }
+    signed += (to - from + 1) * (opts.hd.length > 0 ? 2 : 1);
+    opts.onProgress?.(signed, total, "sign");
   }
-  const ordered = [...m900.uploads].sort((a, b) => a.index - b.index);
-  const jobs = standard.map((frame, index) => {
-    const upload = ordered[index];
-    if (!upload?.signedUrl) throw new Error("Falta una URL firmada del estándar.");
-    return {
-      signedUrl: upload.signedUrl,
-      file: frame.file,
-      contentType: upload.contentType || (frame.ext === "avif" ? "image/avif" : "image/webp"),
-    };
-  });
-  if (hd.length === 0) return jobs;
-  const d1600 = sets.find((set) => set.name === "d1600");
-  if (!d1600 || d1600.uploads.length !== hd.length) {
-    throw new Error("El servidor no entregó todas las URLs de la HD.");
+  return jobs;
+}
+
+async function discardFailedAttempt(slug: string, version: string): Promise<string> {
+  try {
+    const res = await fetchWithTimeout(
+      "/api/spin/abort",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, version }),
+      },
+      20_000,
+      "Se agotó el tiempo al borrar el intento fallido.",
+      "Sin conexión al borrar el intento fallido.",
+    );
+    if (!res.ok) {
+      return ` No se pudo borrar lo subido: ${await readApiError(res)}`;
+    }
+    const body = (await res.json()) as { deleted?: number };
+    if ((body.deleted ?? 0) > 0) return " Se borró lo que este intento había subido.";
+    return "";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudo borrar lo subido.";
+    return ` No se pudo borrar lo subido: ${message}`;
   }
-  const hdOrdered = [...d1600.uploads].sort((a, b) => a.index - b.index);
-  hd.forEach((frame, index) => {
-    const upload = hdOrdered[index];
-    if (!upload?.signedUrl) throw new Error("Falta una URL firmada de la HD.");
+}
+
+function jobsFromSlice(
+  sets: SignedSet[],
+  name: "m900" | "d1600",
+  frames: PreparedFrame[],
+  from: number,
+  to: number,
+) {
+  const signed = sets.find((set) => set.name === name);
+  const expected = to - from + 1;
+  if (!signed || signed.uploads.length !== expected) {
+    throw new Error(
+      name === "m900"
+        ? "El servidor no entregó todas las URLs del estándar."
+        : "El servidor no entregó todas las URLs de la HD.",
+    );
+  }
+  const byIndex = new Map(signed.uploads.map((upload) => [upload.index, upload]));
+  const jobs = [];
+  for (let index = from; index <= to; index += 1) {
+    const frame = frames[index - 1];
+    const upload = byIndex.get(index);
+    if (!frame || !upload?.signedUrl) {
+      throw new Error(name === "m900" ? "Falta una URL firmada del estándar." : "Falta una URL firmada de la HD.");
+    }
     jobs.push({
       signedUrl: upload.signedUrl,
       file: frame.file,
       contentType: upload.contentType || (frame.ext === "avif" ? "image/avif" : "image/webp"),
     });
-  });
+  }
   return jobs;
 }

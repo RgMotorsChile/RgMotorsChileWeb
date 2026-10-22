@@ -68,6 +68,7 @@ describe("stripPlateForPublic", () => {
       circPermit: "Al día",
       coverLocked: true,
       highlights: ["Fotos reales"],
+      spin: { count: 142, front: 0, pattern: "https://cdn.example/spin/{i}.webp" },
     } as Vehicle & { payload?: unknown };
 
     const pub = stripPlateForPublic({ ...v, payload: { secret: true } });
@@ -83,5 +84,49 @@ describe("stripPlateForPublic", () => {
     expect(pub).not.toHaveProperty("payload");
     expect(pub).not.toHaveProperty("owners");
     expect(pub).not.toHaveProperty("ownersCount");
+    expect(pub).toMatchObject({
+      spin: { count: 142, pattern: "https://cdn.example/spin/{i}.webp" },
+    });
+  });
+});
+
+describe("buildCatalogUpsertRow", () => {
+  it("no manda spin null si el objeto no trae giro y sí lo manda si viene", async () => {
+    const { buildCatalogUpsertRow } = await import("@/lib/server/catalogSupabase");
+    const base = {
+      slug: "ford-edge-2017-jrth26",
+      brand: "Ford",
+      model: "Edge",
+      version: "Edge",
+      year: 2017,
+      price: 1,
+      km: 1,
+      fuel: "Bencina",
+      transmission: "Automática",
+      bodyType: "SUV",
+      location: "Puerto Montt",
+      image: "/cars/x.jpg",
+      engine: "2.0",
+      power: "245 HP",
+      traction: "4x2",
+      doors: 5,
+    } satisfies Vehicle;
+
+    const withoutSpin = buildCatalogUpsertRow(base, "tenant-1");
+    expect(withoutSpin).not.toHaveProperty("spin");
+
+    const spin = {
+      count: 142,
+      front: 0,
+      pattern: "https://cdn.example/spin/mvjnpp9vui5jn5/m900/{i}.webp",
+    };
+    const withSpin = buildCatalogUpsertRow({ ...base, spin }, "tenant-1");
+    expect(withSpin.spin).toEqual(spin);
+
+    const cleared = buildCatalogUpsertRow(
+      { ...base, spin: null } as Vehicle & { spin: null },
+      "tenant-1",
+    );
+    expect(cleared.spin).toBeNull();
   });
 });

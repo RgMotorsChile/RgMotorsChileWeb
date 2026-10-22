@@ -76,7 +76,9 @@ function rowToVehicle(row: Record<string, unknown>, scope: CatalogReadScope): Ve
     location: String(row.location || ""),
     image: String(row.image || ""),
     gallery: Array.isArray(row.gallery) ? (row.gallery as string[]) : undefined,
-    spin: (row.spin as Vehicle["spin"]) || undefined,
+    ...(row.spin && typeof row.spin === "object"
+      ? { spin: row.spin as Vehicle["spin"] }
+      : {}),
     engine: String(row.engine || ""),
     power: String(row.power || ""),
     traction: String(row.traction || ""),
@@ -132,8 +134,13 @@ export async function getCatalogVehiclesFromSupabase(
   }
 }
 
-function vehicleToRow(v: Vehicle, tenantId: string): Record<string, unknown> {
-  return {
+/**
+ * Fila de upsert. Si el objeto no trae giro, no manda `spin`:
+ * un sync que cargó el auto antes de un UPDATE manual no lo vuelve a null.
+ * Borrar el giro exige `spin: null` explícito en el objeto.
+ */
+export function buildCatalogUpsertRow(v: Vehicle, tenantId: string): Record<string, unknown> {
+  const row: Record<string, unknown> = {
     tenant_id: tenantId,
     slug: v.slug,
     plate: v.plate ?? null,
@@ -150,7 +157,6 @@ function vehicleToRow(v: Vehicle, tenantId: string): Record<string, unknown> {
     location: v.location || "",
     image: v.image || "",
     gallery: v.gallery ?? [],
-    spin: v.spin ?? null,
     engine: v.engine || "",
     power: v.power || "",
     traction: v.traction || "",
@@ -166,6 +172,10 @@ function vehicleToRow(v: Vehicle, tenantId: string): Record<string, unknown> {
     highlights: v.highlights ?? [],
     updated_at: new Date().toISOString(),
   };
+  const spin = (v as { spin?: Vehicle["spin"] | null }).spin;
+  if (spin === null) row.spin = null;
+  else if (spin && spin.count > 0) row.spin = spin;
+  return row;
 }
 
 /** Upsert catálogo por tenant (sync Sheet / import). */
@@ -187,7 +197,7 @@ export async function upsertCatalogVehiclesToSupabase(
       return { ok: false, count: 0, error: tErr?.message || "Tenant no encontrado" };
     }
 
-    const rows = vehicles.map((v) => vehicleToRow(v, tenant.id));
+    const rows = vehicles.map((v) => buildCatalogUpsertRow(v, tenant.id));
     const chunk = 50;
     for (let i = 0; i < rows.length; i += chunk) {
       const slice = rows.slice(i, i + chunk);

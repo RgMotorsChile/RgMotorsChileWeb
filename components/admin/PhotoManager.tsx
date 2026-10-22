@@ -283,17 +283,17 @@ export default function PhotoManager({ initialSlug }: { initialSlug?: string }) 
 
   const handleUploadSpin = async () => {
     if (!selectedSlug) return;
-    const total = spinStandard.length + spinHd.length;
     setIsUploading(true);
     setUploadError(null);
     setUploadSuccess(null);
-    setUploadProgress(`0/${total}`);
+    setUploadProgress("Preparando el giro…");
     try {
       const result = await uploadSpinSets({
         slug: selectedSlug,
         standard: spinStandard,
         hd: spinHd,
-        onProgress: (done, count) => setUploadProgress(`${done}/${count}`),
+        onProgress: (done, count, phase) =>
+          setUploadProgress(phase === "sign" ? `Firmando ${done}/${count}…` : `${done}/${count}`),
       });
       setUploadSuccess(result.message);
       setSpinStandard([]);
