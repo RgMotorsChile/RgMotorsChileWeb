@@ -239,7 +239,7 @@ export default function SpinUploader() {
           <h2 className="mb-3 font-semibold">Vista previa</h2>
           {previewFrames.length > 0 ? (
             <div className="aspect-video overflow-hidden rounded-xl">
-              <PhotoSpin360 frames={previewFrames} className="h-full w-full" />
+              <PhotoSpin360 frames={previewFrames} autoPlay={false} className="h-full w-full" />
             </div>
           ) : (
             <div className="grid aspect-video place-items-center rounded-xl border border-white/10 bg-ink-900 text-sm text-white/40">

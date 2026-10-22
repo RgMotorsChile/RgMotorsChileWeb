@@ -4,6 +4,7 @@ import {
   ORPHAN_MIN_AGE_MS,
   deleteUnreferencedVehiclePhotos,
   orphanRow,
+  releaseVehiclePhotos,
   runVehiclePhotoOrphanCleanup,
   selectOrphanPhotoPaths,
 } from "@/lib/server/vehiclePhotoGc";
@@ -126,6 +127,28 @@ describe("vehicle_photo_orphans", () => {
     expect(dry.deleted).toEqual(["rg-motors/a/old.jpg"]);
     expect(removeObjects).not.toHaveBeenCalled();
     expect(upsertOrphans).not.toHaveBeenCalled();
+  });
+
+  it("al soltar un auto también suelta los fotogramas de spin.hiPattern", async () => {
+    const removeObjects = vi.fn(async () => undefined);
+    const result = await releaseVehiclePhotos(
+      {
+        spin: {
+          pattern: photo("rg-motors/hilux/spin/{index}.jpg"),
+          hiPattern: photo("rg-motors/hilux/spin-hi/{index}.jpg"),
+          count: 2,
+        },
+      },
+      "deleted",
+      { isReferenced: async () => false, removeObjects },
+    );
+    expect(result.deleted).toEqual([
+      "rg-motors/hilux/spin/001.jpg",
+      "rg-motors/hilux/spin/002.jpg",
+      "rg-motors/hilux/spin-hi/001.jpg",
+      "rg-motors/hilux/spin-hi/002.jpg",
+    ]);
+    expect(result.kept).toEqual([]);
   });
 
   it("rechaza buckets que no son vehicle-photos", () => {
