@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import type { drive_v3 } from "googleapis";
 import {
+  filterExcludedDriveImages,
   isImportableDriveImage,
   looksLikeRasterImage,
   renderedThumbnailUrl,
@@ -208,7 +209,7 @@ export async function listImagesInFolder(
     pageToken = res.data.nextPageToken || undefined;
   } while (pageToken);
 
-  return out.sort((a, b) =>
+  return filterExcludedDriveImages(out).sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { numeric: true }),
   );
 }
