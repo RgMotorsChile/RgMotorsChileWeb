@@ -1,0 +1,11 @@
+# SHA-256 del tar.gz producido con git archive del commit de main indicado.
+# El tar.gz no se versiona. El sello OpenTimestamps está en
+# docs/autoria/rgmotors-main-e456148f.tar.gz.ots
+# Fecha UTC en que se registró este hash, después de ots stamp: 2026-10-27T14:16:43Z
+# Esa fecha no es una confirmación en Bitcoin.
+commit=e456148f970204824f8c10524b7cf1ef68601d3c
+archive_sha256=33c4cdf7be8cca2a10d4a148dd701ed31e13513a8388c03530e35cd24d598873
+archive_bytes=264016944
+archive_command=git archive --format=tar.gz e456148f970204824f8c10524b7cf1ef68601d3c
+ots_client=0.7.2
+ots_status=pending-bitcoin-confirmation
