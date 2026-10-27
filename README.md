@@ -8,6 +8,8 @@
 Catálogo, solicitud de reserva **sin pago online**,
 comparador y panel admin.
 
+**Autor:** Mathias Jara ([@MathiasAlejandr0](https://github.com/MathiasAlejandr0)), desarrollador full-stack, Chile — diseñó y desarrolló el proyecto completo (2026).
+
 <br/>
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
@@ -123,9 +125,22 @@ Detalle: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
-## Autor
+## Autor y desarrollador
+
+> **Mathias Jara** ([@MathiasAlejandr0](https://github.com/MathiasAlejandr0)), desarrollador full-stack, Chile, diseñó y desarrolló el proyecto completo (2026).
 
 Proyecto para **RG Motors** por [**MathiasAlejandr0**](https://github.com/MathiasAlejandr0).
+
+| Documento | Contenido |
+|-----------|-----------|
+| [`AUTHORS.md`](AUTHORS.md) | Autor e identidades que Git registró en `main` |
+| [`LICENSE`](LICENSE) | Licencia del software |
+| [`CITATION.cff`](CITATION.cff) | Metadatos para citar el software |
+| [`docs/autoria/DOSSIER.md`](docs/autoria/DOSSIER.md) | Dossier de autoría del commit fijado |
+
+**© 2026 Mathias Jara. Todos los derechos reservados.**
+
+Sello de fecha OpenTimestamps del código de `main` en el commit `e456148f970204824f8c10524b7cf1ef68601d3c`: [`docs/autoria/rgmotors-main-e456148f.tar.gz.ots`](docs/autoria/rgmotors-main-e456148f.tar.gz.ots). El hash quedó registrado el 2026-10-27T14:16:43Z; al redactar el dossier, la confirmación en Bitcoin seguía pendiente. Detalle en [`docs/autoria/DOSSIER.md`](docs/autoria/DOSSIER.md).
 
 <div align="center">
 <sub>Hecho en Chile — alcance documentado con honestidad técnica.</sub>
