@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: >-
+  Para citar este software, use estos metadatos.
+  El código es propietario; vea LICENSE.
+title: "RG Motors — Plataforma de Autos Usados"
+type: software
+authors:
+  - family-names: Jara
+    given-names: Mathias
+    alias: MathiasAlejandr0
+    email: mathias.jara@hotmail.com
+repository-code: "https://github.com/RgMotorsChile/RgMotorsChileWeb"
+url: "https://github.com/RgMotorsChile/RgMotorsChileWeb"
+version: "0.1.0"
+commit: e456148f970204824f8c10524b7cf1ef68601d3c
+license: LicenseRef-Proprietary
+keywords:
+  - rg-motors
+  - nextjs
