@@ -135,31 +135,55 @@ async function persistAndRespond(input: {
     console.error("[CronSync] sync_state falló:", persisted.error);
   }
 
-  if (input.thrown || !input.result) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: input.thrown || "Error en sync",
-        tenant: input.tenant,
-        syncState: detail,
-        syncStatePersisted: persisted.ok,
-        syncStateError: persisted.error,
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 },
-    );
-  }
-
-  const status = input.result.success ? 200 : 500;
+  const status = input.thrown || !input.result?.success ? 500 : 200;
   return NextResponse.json(
-    {
-      ...input.result,
-      syncState: detail,
-      syncStatePersisted: persisted.ok,
-      syncStateError: persisted.ok ? undefined : persisted.error,
-    },
+    publicSyncBody(detail, soldFromSheet(input.result?.sheetSync), persisted),
     { status },
   );
+}
+
+/** Patente chilena (LLNNNN o LLLLNN), con o sin espacio. No toca "HTTP 404". */
+const PLATE_IN_TEXT =
+  /\b(?:[A-Za-z]{4}\s?[0-9]{2}|[A-Za-z]{2}\s?[0-9]{4})\b/g;
+
+function redactPlates(message: string): string {
+  return message.replace(PLATE_IN_TEXT, "[patente]");
+}
+
+/**
+ * Cuerpo público del cron. Los logs de GitHub Actions son visibles para
+ * cualquier sesión de GitHub: solo conteos, success y mensajes de error.
+ * Nunca la ficha (patente, proveedor, precio lista, portada bloqueada).
+ * Si un error nombra la carpeta de Drive, la patente se reemplaza.
+ */
+function publicSyncBody(
+  detail: CatalogSyncDetail,
+  sold: number,
+  persisted: { ok: boolean; error?: string },
+) {
+  const errors = detail.errors
+    .filter((err) => err.length > 0)
+    .map(redactPlates);
+  if (!persisted.ok && persisted.error) {
+    const persistError = redactPlates(persisted.error);
+    if (!errors.includes(persistError)) errors.push(persistError);
+  }
+  return {
+    success: detail.success,
+    tenant: detail.tenant,
+    read: detail.read,
+    inserted: detail.inserted,
+    updated: detail.updated,
+    sold,
+    skipped: detail.skipped,
+    errors,
+  };
+}
+
+function soldFromSheet(sheet: unknown): number {
+  if (!sheet || typeof sheet !== "object") return 0;
+  const sold = (sheet as { soldVehicles?: unknown }).soldVehicles;
+  return typeof sold === "number" && Number.isFinite(sold) ? sold : 0;
 }
 
 async function handleCronSync(req: NextRequest) {

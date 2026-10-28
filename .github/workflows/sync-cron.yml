@@ -71,6 +71,32 @@ jobs:
           url="https://www.rgmotorschile.cl/api/cron/sync?tenant=${tenant}"
           echo "GET ${url}"
 
+          # Los logs de este workflow son públicos. Solo conteos, success y
+          # errores en texto. Nunca el JSON ni fichas (proveedor, precio lista,
+          # portada, patente), tampoco si curl o el HTTP fallan.
+          summarize_sync_body() {
+            local file="$1"
+            if [ ! -s "${file}" ]; then
+              echo "Sin cuerpo de respuesta."
+              return 0
+            fi
+            if ! jq -e 'type == "object"' "${file}" >/dev/null 2>&1; then
+              echo "La respuesta no es un objeto JSON. No se imprime el cuerpo."
+              return 0
+            fi
+            jq -r '
+              def num($v): $v | if type == "number" then . else 0 end;
+              def msgs:
+                [ (.errors // .syncState.errors // [])[]?, (.error // empty) ]
+                | map(select(type == "string" and length > 0))
+                | map(select(test("^[[:space:]]*[{\\[]") | not))
+                | unique
+                | .[];
+              "success=\(if .success == true then "true" else "false" end) leidos=\(num(.read // .syncState.read)) insertados=\(num(.inserted // .syncState.inserted)) actualizados=\(num(.updated // .syncState.updated)) vendidos=\(num(.sold // .sheetSync.soldVehicles)) omitidos=\(num(.skipped // .syncState.skipped))",
+              (msgs | "error: \(if length > 300 then .[0:300] else . end)")
+            ' "${file}" | sed -E 's/\b([A-Za-z]{4}[[:space:]]?[0-9]{2}|[A-Za-z]{2}[[:space:]]?[0-9]{4})\b/[patente]/g'
+          }
+
           set +e
           http_code=$(curl --silent --show-error --max-time 75 \
             -o /tmp/sync-body.json \
@@ -82,12 +108,12 @@ jobs:
 
           if [ "${curl_status}" -ne 0 ]; then
             echo "curl falló (exit ${curl_status})" >&2
-            cat /tmp/sync-body.json >&2 || true
+            summarize_sync_body /tmp/sync-body.json >&2
             exit 1
           fi
 
           echo "HTTP ${http_code}"
-          cat /tmp/sync-body.json
+          summarize_sync_body /tmp/sync-body.json
           echo
           case "${http_code}" in
             2*) exit 0 ;;
