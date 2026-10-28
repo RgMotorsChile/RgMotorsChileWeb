@@ -93,8 +93,6 @@ describe("GET /api/cron/sync", () => {
       "https://rgmotorschile.cl/api/cron/sync?tenant=unidades-chile",
     );
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.tenant).toBe("unidades-chile");
     expect(syncFromLiveGoogleSheet).toHaveBeenCalledWith(undefined, {
       tenantSlug: "unidades-chile",
     });
@@ -105,6 +103,18 @@ describe("GET /api/cron/sync", () => {
       }),
     );
     expect(runAutoSync).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.tenant).toBe("unidades-chile");
+    expect(body).toEqual({
+      success: true,
+      tenant: "unidades-chile",
+      read: 12,
+      inserted: 1,
+      updated: 3,
+      sold: 0,
+      skipped: 9,
+      errors: [],
+    });
     expect(recordCatalogSyncState).toHaveBeenCalledWith(
       "unidades-chile",
       expect.objectContaining({
@@ -158,8 +168,10 @@ describe("GET /api/cron/sync", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.success).toBe(false);
-    expect(body.syncState.errors).toContain("sheets caídos");
-    expect(body.syncState.success).toBe(false);
+    expect(body.errors).toContain("sheets caídos");
+    expect(body.syncState).toBeUndefined();
+    expect(body.sheetSync).toBeUndefined();
+    expect(body.driveSync).toBeUndefined();
     expect(recordCatalogSyncState).toHaveBeenCalledWith(
       "rg-motors",
       expect.objectContaining({
@@ -178,11 +190,26 @@ describe("GET /api/cron/sync", () => {
       newVehicles: 0,
       updatedVehicles: 0,
       skippedIncomplete: 0,
+      soldVehicles: 0,
+      vehicles: [
+        {
+          plate: "KWRC91",
+          supplier: "ARVAL RELSA",
+          listPrice: 15490001,
+          coverLocked: true,
+        },
+      ],
     });
     const res = await call(
       "https://rgmotorschile.cl/api/cron/sync?tenant=rg-motors",
     );
     expect(res.status).toBe(500);
+    const failed = await res.json();
+    expect(failed.success).toBe(false);
+    expect(failed.errors).toContain("hoja restringida");
+    expect(JSON.stringify(failed)).not.toContain("KWRC91");
+    expect(JSON.stringify(failed)).not.toContain("ARVAL RELSA");
+    expect(failed.vehicles).toBeUndefined();
     expect(recordCatalogSyncState).toHaveBeenCalledWith(
       "rg-motors",
       expect.objectContaining({
@@ -190,6 +217,84 @@ describe("GET /api/cron/sync", () => {
         errors: ["hoja restringida"],
       }),
     );
+  });
+
+  it("no devuelve patente, proveedor, precio lista ni portada bloqueada", async () => {
+    const ficha = {
+      plate: "KWRC91",
+      supplier: "ARVAL RELSA",
+      listPrice: 15490001,
+      coverLocked: true,
+      techReview: "REV-INTERNA",
+      circPermit: "PERM-INTERNO",
+      payload: { secret: "PAYLOAD-INTERNO" },
+      owners: 3,
+    };
+    syncFromLiveGoogleSheet.mockResolvedValue({
+      ...sheetOk,
+      soldVehicles: 4,
+      vehicles: [ficha],
+      changes: [{ ...ficha, supplier: "PROVEEDOR-GAMA" }],
+    });
+    syncDrivePhotosViaOAuth.mockResolvedValue({
+      ...driveOk,
+      vehicles: [{ ...ficha, plate: "PXSV97", supplier: "PROVEEDOR-GAMA" }],
+      errors: ["No se listaron fotos de KWRC91: timeout", "HTTP 404 al bajar"],
+    });
+    const res = await call(
+      "https://rgmotorschile.cl/api/cron/sync?tenant=unidades-chile",
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual([
+      "errors",
+      "inserted",
+      "read",
+      "skipped",
+      "sold",
+      "success",
+      "tenant",
+      "updated",
+    ]);
+    expect(body).toEqual({
+      success: true,
+      tenant: "unidades-chile",
+      read: 12,
+      inserted: 1,
+      updated: 3,
+      sold: 4,
+      skipped: 9,
+      errors: [
+        "No se listaron fotos de [patente]: timeout",
+        "HTTP 404 al bajar",
+      ],
+    });
+    expect(recordCatalogSyncState).toHaveBeenCalledWith(
+      "unidades-chile",
+      expect.objectContaining({
+        errors: [
+          "No se listaron fotos de KWRC91: timeout",
+          "HTTP 404 al bajar",
+        ],
+      }),
+    );
+    const dumped = JSON.stringify(body);
+    for (const secret of [
+      "KWRC91",
+      "PXSV97",
+      "ARVAL RELSA",
+      "PROVEEDOR-GAMA",
+      "15490001",
+      "REV-INTERNA",
+      "PERM-INTERNO",
+      "PAYLOAD-INTERNO",
+      "coverLocked",
+      "listPrice",
+      "supplier",
+      "\"plate\"",
+    ]) {
+      expect(dumped).not.toContain(secret);
+    }
   });
 
   it("status=1 no dispara el sync", async () => {
