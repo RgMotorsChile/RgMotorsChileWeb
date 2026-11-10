@@ -3,13 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
-  vehicles as initialVehicles,
-  formatCLP,
-  Vehicle,
-} from "@/lib/vehicles";
-import { isCamionetaBody, isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
-import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
+import { isCamionetaBody } from "@/lib/vehicles/publicCatalog";
 import VehicleCard from "@/components/VehicleCard";
 import CatalogCardSkeleton from "@/components/CatalogCardSkeleton";
 import CatalogPdfButton from "@/components/CatalogPdfButton";
@@ -37,9 +33,9 @@ export default function CatalogPage() {
 }
 
 function CatalogContent() {
-  const [vehicleList, setVehicleList] = useState<Vehicle[]>(() =>
-    initialVehicles.filter(isPublicCatalogVehicle).map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
-  );
+  // Sin seed estático en el navegador: el stock (y sus fotos) llega solo desde
+  // /api/vehicles, que aplica el modo de fotos público.
+  const [vehicleList, setVehicleList] = useState<Vehicle[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
 
   const searchParams = useSearchParams();
@@ -64,13 +60,9 @@ function CatalogContent() {
     fetch("/api/vehicles?fields=card")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data && data.vehicles && data.vehicles.length > 0) {
-          setVehicleList(data.vehicles);
-        } else {
-          setVehicleList(initialVehicles);
-        }
+        setVehicleList(data?.vehicles ?? []);
       })
-      .catch(() => setVehicleList(initialVehicles))
+      .catch(() => setVehicleList([]))
       .finally(() => setCatalogReady(true));
   }, []);
 

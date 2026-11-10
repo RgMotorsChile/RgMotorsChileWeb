@@ -1,6 +1,7 @@
 "use client";
 
-import { formatCLP, type Vehicle } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 import { whatsappLink } from "@/lib/company";
 
 /** Barra fija de contacto en ficha — solo móvil/tablet. */

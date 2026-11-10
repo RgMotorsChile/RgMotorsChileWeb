@@ -7,6 +7,7 @@ import { storeMediaFile } from "@/lib/server/mediaStorage";
 import { isVercelProduction } from "@/lib/server/storageHealth";
 import { convertHeicToJpegBuffer, isHeicFile } from "@/lib/server/convertHeic";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import { isPlaceholderPhotosMode } from "@/lib/vehicles/publicPhotos";
 import { isSupabaseConfigured, RG_MOTORS_TENANT_SLUG } from "@/lib/supabase/client";
 import { photoContentHash, vehiclePhotoRelativePath } from "@/lib/server/photoObjectPath";
 import { deleteUnreferencedVehiclePhotos } from "@/lib/server/vehiclePhotoGc";
@@ -101,6 +102,14 @@ export async function GET(req: NextRequest) {
 
   if (!slug || !/^[a-z0-9-]+$/i.test(slug)) {
     return NextResponse.json({ error: "Slug inválido o no especificado." }, { status: 400 });
+  }
+
+  // Modo de fotos público (placeholder): sin sesión admin no se listan fotos reales.
+  if (isPlaceholderPhotosMode() && !(await requireAdminSession())) {
+    return NextResponse.json(
+      { slug, gallery: [], spinCount: 0, coverImage: "", orderedGalleryUrls: [] },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
   const uploadDir = join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "uploads", slug);

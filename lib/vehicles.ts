@@ -1401,9 +1401,11 @@ export const initialVehicles: Vehicle[] = [
   }
 ];
 
-export const HERO_SHOWCASE_VEHICLES: Vehicle[] = initialVehicles
-  .filter((v) => v.featured && v.hasRealPhotos)
-  .slice(0, 6);
+export const HERO_SHOWCASE_VEHICLES: Vehicle[] = /* @__PURE__ */ pickHeroShowcase(initialVehicles);
+
+function pickHeroShowcase(list: Vehicle[]): Vehicle[] {
+  return list.filter((v) => v.featured && v.hasRealPhotos).slice(0, 6);
+}
 
 export const vehicles: Vehicle[] = initialVehicles;
 
@@ -1411,13 +1413,7 @@ export function getVehicle(slug: string): Vehicle | undefined {
   return vehicles.find((v) => v.slug === slug || publicVehicleSlug(v) === slug);
 }
 
-export function formatCLP(amount: number): string {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+export { formatCLP } from "@/lib/vehicles/format";
 
 export function formatKm(km: number): string {
   return `${km.toLocaleString("es-CL")} km`;

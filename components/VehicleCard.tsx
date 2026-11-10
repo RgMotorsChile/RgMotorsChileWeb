@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Vehicle, formatCLP } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 import { isKnownSpec } from "@/lib/vehicles/publicSpecs";
 import { plateToken, publicVehicleSlug, scrubPlate } from "@/lib/vehicles/publicSlug";
 import SafeImage from "@/components/SafeImage";

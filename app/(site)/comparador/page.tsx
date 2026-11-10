@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { asset } from "@/lib/asset";
-import { vehicles as initialVehicles, Vehicle, formatCLP } from "@/lib/vehicles";
-import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
-import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 
 const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
   { label: "Precio", get: (v) => formatCLP(v.price) },
@@ -20,9 +19,8 @@ const ROWS: { label: string; get: (v: Vehicle) => string }[] = [
 ];
 
 export default function ComparadorPage() {
-  const [vehiclesData, setVehiclesData] = useState<Vehicle[]>(() =>
-    initialVehicles.filter(isPublicCatalogVehicle).map((vehicle) => ({ ...vehicle, slug: publicVehicleSlug(vehicle) })),
-  );
+  // Sin seed estático en el navegador: el stock llega desde /api/vehicles.
+  const [vehiclesData, setVehiclesData] = useState<Vehicle[]>([]);
   
   useEffect(() => {
     fetch("/api/vehicles?fields=card")

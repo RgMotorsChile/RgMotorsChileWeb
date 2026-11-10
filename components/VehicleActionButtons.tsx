@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Vehicle, formatCLP } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 import { whatsappLink } from "@/lib/company";
 import TradeInModal from "./TradeInModal";
 import VehiclePdfButton from "./VehiclePdfButton";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatCLP } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
 import { getTrafficSource } from "@/lib/trafficTracking";
 
 type Props = {

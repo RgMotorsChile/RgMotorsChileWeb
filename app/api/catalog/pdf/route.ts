@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getVehicles } from "@/lib/server/vehiclesStore";
 import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
+import { withPublicPhotos } from "@/lib/vehicles/publicPhotos";
 import { slugMatchesVehicle } from "@/lib/vehicles/publicSlug";
 import {
   generateCatalogPdfBuffer,
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
     }
 
     const origin = siteOrigin(req);
-    const all = (await getVehicles()).filter(isPublicCatalogVehicle);
+    const all = (await getVehicles()).filter(isPublicCatalogVehicle).map(withPublicPhotos);
 
     const slugs = parseSlugs(req);
     const vehicles = slugs?.length

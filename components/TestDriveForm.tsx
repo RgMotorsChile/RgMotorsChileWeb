@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { asset } from "@/lib/asset";
-import { Vehicle, formatCLP } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 import { getTrafficSource } from "@/lib/trafficTracking";
 import { trackEvent } from "@/lib/googleAnalytics";
 import { whatsappLink } from "@/lib/company";

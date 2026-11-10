@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import { Vehicle } from "@/lib/vehicles";
-import { toVehicleCardDTO, stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { toVehicleCardDTO, toPublicVehicle } from "@/lib/vehicles/publicFields";
+import { withPublicPhotos } from "@/lib/vehicles/publicPhotos";
 import { withVerifiedCover } from "@/lib/server/verifyPhotos";
 import { isCamionetaBody, isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
@@ -52,6 +53,8 @@ export async function GET(req: NextRequest) {
     // Exclude drafts / sold unless admin mode autenticado
     if (!isAdmin) {
       list = list.filter(isPublicCatalogVehicle);
+      // Modo de fotos público: sin fotos reales (por defecto solo placeholder).
+      list = list.map(withPublicPhotos);
       // Portadas verificadas: sin fotos 404 que hagan parpadear las tarjetas del catálogo.
       list = await Promise.all(list.map((v) => withVerifiedCover(v)));
     }
@@ -62,7 +65,7 @@ export async function GET(req: NextRequest) {
         ? list.map(toVehicleCardDTO)
         : isAdmin
           ? list
-          : list.map(stripPlateForPublic);
+          : list.map(toPublicVehicle);
 
     const res = NextResponse.json({ vehicles: payload, total: payload.length });
     if (isAdmin || process.env.NODE_ENV !== "production") {

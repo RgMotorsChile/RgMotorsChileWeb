@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVehicleBySlug } from "@/lib/server/vehiclesStore";
-import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { toPublicVehicle } from "@/lib/vehicles/publicFields";
 import { publishesOnRg } from "@/lib/vehicles/branch";
 import TestDriveForm from "@/components/TestDriveForm";
 
@@ -15,7 +15,7 @@ export default async function PruebaManejoPage({
   const { slug } = await params;
   const raw = await getVehicleBySlug(slug);
   if (!raw || !publishesOnRg(raw)) notFound();
-  const v = stripPlateForPublic(raw);
+  const v = toPublicVehicle(raw);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
