@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { asset } from "@/lib/asset";
-import { Vehicle, formatCLP, HERO_SHOWCASE_VEHICLES } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
+import type { Vehicle } from "@/lib/vehicles";
 
 interface Hero3DCarouselProps {
   vehicles?: Vehicle[];

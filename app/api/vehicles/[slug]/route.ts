@@ -3,7 +3,7 @@ import { getVehicleBySlug, saveVehicle, deleteVehicle } from "@/lib/server/vehic
 import { Vehicle } from "@/lib/vehicles";
 import { isPublicCatalogVehicle } from "@/lib/vehicles/publicCatalog";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
-import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { toPublicVehicle } from "@/lib/vehicles/publicFields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function GET(
   }
 
   return NextResponse.json({
-    vehicle: isAdmin ? v : stripPlateForPublic(v),
+    vehicle: isAdmin ? v : toPublicVehicle(v),
   });
 }
 

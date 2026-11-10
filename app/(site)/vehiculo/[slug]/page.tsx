@@ -5,7 +5,7 @@ import { formatCLP, spinFramesOf, spinHiFramesOf, type Vehicle } from "@/lib/veh
 import { getVehicles, getVehicleBySlug } from "@/lib/server/vehiclesStore";
 import { getSettings } from "@/lib/server/settingsStore";
 import { verifiedGallery, withVerifiedCover } from "@/lib/server/verifyPhotos";
-import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { toPublicVehicle } from "@/lib/vehicles/publicFields";
 import { vehicleSpecBar } from "@/lib/vehicles/publicSpecs";
 import { plateToken, scrubPlate } from "@/lib/vehicles/publicSlug";
 import { publicationDecision } from "@/lib/vehicles/publication";
@@ -42,7 +42,7 @@ export async function generateMetadata({
   if (!raw || decision.type !== "render" || !publishesOnRg(raw)) {
     return { title: "Vehículo no encontrado | RG Motors", robots: { index: false } };
   }
-  const v = stripPlateForPublic(raw);
+  const v = toPublicVehicle(raw);
   const [cover] = await verifiedGallery(v.image, v.gallery);
   const title = vehicleDocumentTitle(v);
   const description = vehicleMetaDescription(v);
@@ -70,7 +70,7 @@ export default async function VehiclePage({
   if (decision.type === "redirect") permanentRedirect(decision.to);
   if (decision.type === "gone" || !raw || !publishesOnRg(raw)) notFound();
 
-  const v = stripPlateForPublic(raw);
+  const v = toPublicVehicle(raw);
   const headline = vehicleHeadline(v);
 
   const [allVehicles, settings, gallery] = await Promise.all([
@@ -88,7 +88,7 @@ export default async function VehiclePage({
           return x.slug !== raw.slug && x.bodyType === v.bodyType && x.hasRealPhotos && status !== "Borrador" && status !== "Vendido" && publishesOnRg(x);
         })
         .slice(0, 6)
-        .map((x) => withVerifiedCover(stripPlateForPublic(x))),
+        .map((x) => withVerifiedCover(toPublicVehicle(x))),
     )
   )
     .filter((x) => Boolean(x.image))

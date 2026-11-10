@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { formatCLP } from "@/lib/vehicles";
+import { formatCLP } from "@/lib/vehicles/format";
 import { whatsappLink } from "@/lib/company";
 import {
   DEFAULT_DOWN_RATIO,

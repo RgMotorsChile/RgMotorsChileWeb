@@ -1,5 +1,6 @@
 import type { Vehicle } from "@/lib/vehicles";
 import { publicVehicleSlug, type SlugSource } from "@/lib/vehicles/publicSlug";
+import { withPublicPhotos } from "@/lib/vehicles/publicPhotos";
 
 /** Campos mínimos para cards de catálogo / listados (payload liviano). */
 export type VehicleCardDTO = Pick<
@@ -69,7 +70,18 @@ export function stripPlateForPublic<T extends HiddenFromPublic & SlugSource>(
   };
 }
 
-export function toVehicleCardDTO(v: Vehicle): VehicleCardDTO {
+/**
+ * Vehículo para la vitrina pública: sin patente ni columnas internas y, en el
+ * modo de fotos por defecto, sin ninguna foto real (ver publicPhotos.ts).
+ */
+export function toPublicVehicle<T extends HiddenFromPublic & SlugSource & Parameters<typeof withPublicPhotos>[0]>(
+  vehicle: T,
+) {
+  return withPublicPhotos(stripPlateForPublic(vehicle));
+}
+
+export function toVehicleCardDTO(input: Vehicle): VehicleCardDTO {
+  const v = withPublicPhotos(input);
   return {
     slug: publicVehicleSlug(v),
     brand: v.brand,

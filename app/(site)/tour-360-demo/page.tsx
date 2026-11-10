@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import PhotoSpin360 from "@/components/PhotoSpin360";
+import { notFound } from "next/navigation";
 import { asset } from "@/lib/asset";
+import { isPlaceholderPhotosMode } from "@/lib/vehicles/publicPhotos";
 
 /**
  * Página de prueba (no indexada) para revisar el Tour 360° antes de asociarlo
@@ -19,6 +21,8 @@ const hiFrames = Array.from({ length: COUNT }, (_, i) =>
 );
 
 export default function Tour360DemoPage() {
+  // Modo de fotos público (placeholder): la demo usa fotos reales de un auto.
+  if (isPlaceholderPhotosMode()) notFound();
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10">
       <h1 className="mb-4 text-2xl font-bold text-white">Tour 360° · Toyota Hilux DX (prueba)</h1>

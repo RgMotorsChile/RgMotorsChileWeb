@@ -6,7 +6,8 @@ import {
   filterPublicCatalog,
   pickFeaturedVehicles,
 } from "@/lib/vehicles/publicCatalog";
-import { stripPlateForPublic } from "@/lib/vehicles/publicFields";
+import { toPublicVehicle } from "@/lib/vehicles/publicFields";
+import { withPublicPhotos } from "@/lib/vehicles/publicPhotos";
 import { withVerifiedCover } from "@/lib/server/verifyPhotos";
 import VehicleCard from "@/components/VehicleCard";
 import RevealOnScroll from "@/components/RevealOnScroll";
@@ -18,10 +19,10 @@ import TrustMarquee from "@/components/TrustMarquee";
 export const revalidate = 120;
 
 export default async function Home() {
-  const vehicles = await getVehicles();
+  const vehicles = (await getVehicles()).map(withPublicPhotos);
   const [publicVehicles, featured] = await Promise.all([
-    Promise.all(filterPublicCatalog(vehicles).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
-    Promise.all(pickFeaturedVehicles(vehicles, 6).map((v) => withVerifiedCover(stripPlateForPublic(v)))),
+    Promise.all(filterPublicCatalog(vehicles).map((v) => withVerifiedCover(toPublicVehicle(v)))),
+    Promise.all(pickFeaturedVehicles(vehicles, 6).map((v) => withVerifiedCover(toPublicVehicle(v)))),
   ]);
 
   return (

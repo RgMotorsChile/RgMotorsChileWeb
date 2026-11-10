@@ -39,7 +39,12 @@ describe("toVehicleCardDTO", () => {
       hasRealPhotos: true,
     } as Vehicle;
 
+    // Con fotos reales habilitadas (el modo por defecto del sitio es placeholder).
+    const prevMode = process.env.NEXT_PUBLIC_PHOTOS_MODE;
+    process.env.NEXT_PUBLIC_PHOTOS_MODE = "real";
     const dto = toVehicleCardDTO(v);
+    if (prevMode === undefined) delete process.env.NEXT_PUBLIC_PHOTOS_MODE;
+    else process.env.NEXT_PUBLIC_PHOTOS_MODE = prevMode;
     expect(dto.galleryCount).toBe(3);
     expect(dto.hasSpin).toBe(true);
     expect(dto.engine).toBe("2.5");

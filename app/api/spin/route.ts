@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
+import { isPlaceholderPhotosMode } from "@/lib/vehicles/publicPhotos";
 import { processVideoToSpin } from "@/lib/server/spinProcessor";
 
 export const runtime = "nodejs";
@@ -11,6 +12,10 @@ export const maxDuration = 300;
 
 /** Lista los giros 360° ya generados (público: solo metadatos, sin archivos). */
 export async function GET() {
+  // Modo de fotos público (placeholder): sin sesión admin no se listan giros 360°.
+  if (isPlaceholderPhotosMode() && !(await requireAdminSession())) {
+    return Response.json({ spins: [] });
+  }
   const base = join(/*turbopackIgnore: true*/ process.cwd(), "public", "cars", "spin");
   const out: Array<{ slug: string; count: number; studio?: boolean; aiUsed?: boolean; updatedAt?: string }> = [];
   try {
