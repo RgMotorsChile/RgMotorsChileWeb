@@ -1,22 +1,17 @@
 /**
- * Modo de fotos del sitio público.
+ * Fotos del sitio público.
  *
- * Por defecto ("placeholder") la vitrina muestra TODOS los autos como si aún
- * no tuvieran fotos: solo la imagen "Fotografías en preparación", sin galería,
- * sin giro 360°, sin contador de fotos y sin URLs de fotos reales en el HTML,
- * el JSON de la API, el JSON-LD ni los metadatos. Textos, precios y demás
- * datos del auto no cambian.
+ * Cada vehículo muestra sus fotos reales (galería, contador, og:image y giro 360)
+ * cuando tiene al menos una. El placeholder "Fotografías en preparación" aparece
+ * solo si ese vehículo no tiene ninguna foto. No se tocan los datos: el admin
+ * sigue subiendo y viendo las fotos igual.
  *
- * No toca datos: las fotos siguen en Supabase/Storage/Drive y el admin las ve
- * igual. Para volver a mostrar fotos reales: definir
- * NEXT_PUBLIC_PHOTOS_MODE=real en Vercel y redeployar (o revertir este cambio).
+ * NEXT_PUBLIC_PHOTOS_MODE ya no fuerza el placeholder en toda la vitrina,
+ * aunque quede definido en Vercel.
  */
 export const PENDING_PHOTO = "/images/placeholder-pending-car.svg";
 
-export function isPlaceholderPhotosMode(): boolean {
-  const raw = (process.env.NEXT_PUBLIC_PHOTOS_MODE || "").trim().toLowerCase();
-  return raw !== "real";
-}
+const PLACEHOLDER_RE = /placeholder-pending|fotos-en-proceso/i;
 
 type PhotoFields = {
   image?: string;
@@ -25,9 +20,34 @@ type PhotoFields = {
   hasRealPhotos?: boolean;
 };
 
-/** Versión pública del vehículo: en modo placeholder quita toda foto real. */
+function isRealPhoto(src?: string | null): boolean {
+  if (!src) return false;
+  const value = String(src).trim();
+  return Boolean(value) && !PLACEHOLDER_RE.test(value);
+}
+
+export function hasPublicPhotos(vehicle: PhotoFields): boolean {
+  if (isRealPhoto(vehicle.image)) return true;
+  return Array.isArray(vehicle.gallery) && vehicle.gallery.some(isRealPhoto);
+}
+
+/** El modo forzado de placeholder global se desactivó. Se conserva por compatibilidad. */
+export function isPlaceholderPhotosMode(): boolean {
+  return false;
+}
+
+/** Versión pública del vehículo: fotos reales si las hay; si no, solo el placeholder. */
 export function withPublicPhotos<T extends PhotoFields>(vehicle: T): T {
-  if (!isPlaceholderPhotosMode()) return vehicle;
+  if (hasPublicPhotos(vehicle)) {
+    const image = isRealPhoto(vehicle.image)
+      ? vehicle.image
+      : (vehicle.gallery || []).find(isRealPhoto) || vehicle.image;
+    return {
+      ...vehicle,
+      image,
+      hasRealPhotos: true,
+    };
+  }
   return {
     ...vehicle,
     image: PENDING_PHOTO,
