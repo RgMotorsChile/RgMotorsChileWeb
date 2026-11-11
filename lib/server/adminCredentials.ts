@@ -2,10 +2,15 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { readJsonOptional, writeJson } from "@/lib/server/db";
 import { isVercelProduction } from "@/lib/server/storageHealth";
 
-const FILENAME = "admin-credentials.json";
+export const PRIMARY_CREDENTIALS_FILENAME = "admin-credentials.json";
+export const ADDITIONAL_USERS_FILENAME = "admin-users.json";
+
+const FILENAME = PRIMARY_CREDENTIALS_FILENAME;
 
 export const DEFAULT_ADMIN_USERNAME = "admin";
 export const DEFAULT_ADMIN_PASSWORD = "rgmotors2026";
+
+export type AdminRole = "admin";
 
 type StoredCredentials = {
   username: string;
@@ -13,6 +18,26 @@ type StoredCredentials = {
   passwordHash: string;
   mustChangePassword: boolean;
   updatedAt: string;
+};
+
+export type AdditionalAdminUser = {
+  username: string;
+  passwordHash: string;
+  mustChangePassword: boolean;
+  role: AdminRole;
+  updatedAt: string;
+};
+
+export type AdditionalUsersStore = {
+  users: AdditionalAdminUser[];
+};
+
+export type AdminLoginSuccess = {
+  ok: true;
+  mustChange: boolean;
+  username: string;
+  role: AdminRole;
+  source: "primary" | "additional";
 };
 
 function hashPassword(password: string, salt?: string): string {
@@ -37,6 +62,10 @@ function defaultCredentials(): StoredCredentials {
     mustChangePassword: true,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeUsername(username: string): string {
+  return username.trim().toLowerCase();
 }
 
 /**
@@ -69,22 +98,57 @@ export async function getAdminCredentials(): Promise<StoredCredentials> {
   return defaults;
 }
 
+async function readPrimaryCredentials(): Promise<StoredCredentials | null> {
+  const existing = await readJsonOptional<StoredCredentials>(PRIMARY_CREDENTIALS_FILENAME);
+  if (existing?.username && existing?.passwordHash) return existing;
+  return null;
+}
+
+async function readAdditionalUsers(): Promise<AdditionalAdminUser[]> {
+  const store = await readJsonOptional<AdditionalUsersStore>(ADDITIONAL_USERS_FILENAME);
+  if (!store || !Array.isArray(store.users)) return [];
+  return store.users.filter((user) => Boolean(user?.username && user?.passwordHash));
+}
+
 export async function validateAdminLogin(
   username: string,
   password: string,
-): Promise<{ ok: true; mustChange: boolean; username: string } | { ok: false }> {
+): Promise<AdminLoginSuccess | { ok: false }> {
   try {
     const creds = await getAdminCredentials();
     const userOk = username.trim().toLowerCase() === creds.username.toLowerCase();
-    const passOk = verifyPassword(password, creds.passwordHash);
-    if (!userOk || !passOk) return { ok: false };
-    return {
-      ok: true,
-      mustChange: creds.mustChangePassword,
-      username: creds.username,
-    };
+    if (userOk) {
+      const passOk = verifyPassword(password, creds.passwordHash);
+      if (!passOk) return { ok: false };
+      return {
+        ok: true,
+        mustChange: creds.mustChangePassword,
+        username: creds.username,
+        role: "admin",
+        source: "primary",
+      };
+    }
   } catch (err) {
     console.error("[AdminAuth] Credenciales no disponibles:", err);
+    // Si el registro primario no está disponible, se intenta el almacén adicional.
+  }
+
+  try {
+    const users = await readAdditionalUsers();
+    const match = users.find(
+      (user) => normalizeUsername(user.username) === normalizeUsername(username),
+    );
+    if (!match) return { ok: false };
+    if (!verifyPassword(password, match.passwordHash)) return { ok: false };
+    return {
+      ok: true,
+      mustChange: match.mustChangePassword,
+      username: match.username,
+      role: match.role === "admin" ? match.role : "admin",
+      source: "additional",
+    };
+  } catch (err) {
+    console.error("[AdminAuth] Usuarios adicionales no disponibles:", err);
     return { ok: false };
   }
 }
@@ -110,6 +174,22 @@ export function validateStrongUsername(username: string): string | null {
   return null;
 }
 
+function usernameTakenByOther(
+  nextNorm: string,
+  currentNorm: string,
+  primary: StoredCredentials | null,
+  extras: AdditionalAdminUser[],
+): boolean {
+  if (primary && normalizeUsername(primary.username) === nextNorm && currentNorm !== normalizeUsername(primary.username)) {
+    return true;
+  }
+  return extras.some(
+    (user) =>
+      normalizeUsername(user.username) === nextNorm &&
+      normalizeUsername(user.username) !== currentNorm,
+  );
+}
+
 export async function changeAdminCredentials(
   currentUsername: string,
   currentPassword: string,
@@ -124,13 +204,47 @@ export async function changeAdminCredentials(
   const passErr = validateStrongPassword(newPassword);
   if (passErr) return { ok: false, error: passErr };
 
+  const nextUsername = newUsername.trim();
+  const nextNorm = normalizeUsername(nextUsername);
+  const currentNorm = normalizeUsername(login.username);
+
+  const primary = await readPrimaryCredentials();
+  const extras = await readAdditionalUsers();
+
+  if (usernameTakenByOther(nextNorm, currentNorm, primary, extras)) {
+    return { ok: false, error: "Ese usuario ya está en uso." };
+  }
+
   const next: StoredCredentials = {
-    username: newUsername.trim(),
+    username: nextUsername,
     passwordHash: hashPassword(newPassword),
     mustChangePassword: false,
     updatedAt: new Date().toISOString(),
   };
-  const saved = await writeJson(FILENAME, next);
+
+  if (login.source === "primary") {
+    const saved = await writeJson(FILENAME, next);
+    if (!saved) {
+      return {
+        ok: false,
+        error: "No se pudo guardar las credenciales (revisa KV en producción).",
+      };
+    }
+    return { ok: true };
+  }
+
+  const updated = extras.map((user) =>
+    normalizeUsername(user.username) === currentNorm
+      ? {
+          ...user,
+          username: nextUsername,
+          passwordHash: next.passwordHash,
+          mustChangePassword: false,
+          updatedAt: next.updatedAt,
+        }
+      : user,
+  );
+  const saved = await writeJson(ADDITIONAL_USERS_FILENAME, { users: updated });
   if (!saved) {
     return {
       ok: false,
@@ -138,6 +252,46 @@ export async function changeAdminCredentials(
     };
   }
   return { ok: true };
+}
+
+/**
+ * Crea o actualiza UN usuario en el almacén adicional.
+ * Nunca lee con siembra ni escribe admin-credentials.json.
+ */
+export async function upsertAdditionalAdminUser(
+  username: string,
+  password: string,
+  options?: { mustChangePassword?: boolean; role?: AdminRole },
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+  const userErr = validateStrongUsername(username);
+  if (userErr) return { ok: false, error: userErr };
+  const passErr = validateStrongPassword(password);
+  if (passErr) return { ok: false, error: passErr };
+
+  const nextUsername = username.trim();
+  const nextNorm = normalizeUsername(nextUsername);
+
+  const primary = await readPrimaryCredentials();
+  if (primary && normalizeUsername(primary.username) === nextNorm) {
+    return {
+      ok: false,
+      error: "Ese usuario es la cuenta primaria y no se modifica desde este almacén.",
+    };
+  }
+
+  const extras = await readAdditionalUsers();
+  const record: AdditionalAdminUser = {
+    username: nextUsername,
+    passwordHash: hashPassword(password),
+    mustChangePassword: options?.mustChangePassword ?? true,
+    role: options?.role ?? "admin",
+    updatedAt: new Date().toISOString(),
+  };
+  const index = extras.findIndex((user) => normalizeUsername(user.username) === nextNorm);
+  const users = index >= 0 ? extras.map((user, i) => (i === index ? record : user)) : [...extras, record];
+  const saved = await writeJson(ADDITIONAL_USERS_FILENAME, { users });
+  if (!saved) return { ok: false, error: "No se pudo guardar el usuario adicional." };
+  return { ok: true, username: nextUsername };
 }
 
 /** Fingerprint no reversible para logs. */

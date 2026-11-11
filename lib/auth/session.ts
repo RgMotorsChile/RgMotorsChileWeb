@@ -74,6 +74,7 @@ export type AdminSessionPayload = {
   mustChange: boolean;
   iat: number;
   exp: number;
+  role?: "admin";
 };
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 días
@@ -82,6 +83,7 @@ export { SESSION_TTL_SECONDS };
 export async function createAdminSessionToken(
   username: string,
   mustChange: boolean,
+  role: "admin" = "admin",
 ): Promise<string> {
   const secret = getSecret();
   if (!secret) {
@@ -93,6 +95,7 @@ export async function createAdminSessionToken(
   const payload: AdminSessionPayload = {
     sub: username,
     mustChange,
+    role,
     iat: now,
     exp: now + SESSION_TTL_SECONDS,
   };
