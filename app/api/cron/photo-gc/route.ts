@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { authorizeMachineSecret } from "@/lib/auth/machineAuth";
-import { runVehiclePhotoOrphanCleanup } from "@/lib/server/vehiclePhotoGc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,23 +15,10 @@ function authorize(req: NextRequest): boolean {
   });
 }
 
-/**
- * Red de seguridad: reintenta public.vehicle_photo_orphans y borra objetos
- * de vehicle-photos que nadie cita, con un margen de minutos.
- * GitHub Actions lo llama una vez al día. dryRun=1 solo lista.
- */
+/** El job automatico de huerfanos queda desactivado; el panel sigue gestionando fotos a mano. */
 export async function GET(req: NextRequest) {
   if (!authorize(req)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
-  const dryRun = req.nextUrl.searchParams.get("dryRun") === "1";
-  try {
-    const result = await runVehiclePhotoOrphanCleanup({ dryRun });
-    return NextResponse.json({ ok: true, ...result });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "No se pudo limpiar fotos huérfanas.";
-    console.error("[PhotoGc]", err);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
 }
