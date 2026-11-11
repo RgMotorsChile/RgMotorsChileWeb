@@ -39,4 +39,11 @@ describe("admin session tokens", () => {
       .replace(/=+$/, "");
     expect(await verifyAdminSessionToken(`${fakeBody}.${signature}`)).toBeNull();
   });
+
+  it("incluye role admin en tokens nuevos", async () => {
+    const token = await createAdminSessionToken("rg.mathias", false);
+    const payload = await verifyAdminSessionToken(token);
+    expect(payload?.role).toBe("admin");
+    expect(payload?.sub).toBe("rg.mathias");
+  });
 });

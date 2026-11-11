@@ -72,8 +72,18 @@ export async function POST(request: Request) {
         );
       }
 
+      if (
+        currentUsername &&
+        currentUsername.trim().toLowerCase() !== session.sub.toLowerCase()
+      ) {
+        return NextResponse.json(
+          { error: "Solo puedes cambiar tu propia cuenta." },
+          { status: 403 },
+        );
+      }
+
       const result = await changeAdminCredentials(
-        currentUsername || session.sub,
+        session.sub,
         currentPassword,
         newUsername,
         newPassword,
@@ -82,12 +92,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
 
-      const token = await createAdminSessionToken(newUsername.trim(), false);
+      const token = await createAdminSessionToken(
+        newUsername.trim(),
+        false,
+        session.role ?? "admin",
+      );
       cookieStore.set(ADMIN_SESSION_COOKIE, token, sessionCookieOptions());
       return NextResponse.json({ success: true, mustChange: false, username: newUsername.trim() });
     }
 
-    // login — límite estricto anti fuerza bruta (fail-closed si KV cae en prod)
+    // login — límite estricto anti fuerza bruta (fail-closed si el almacén cae en prod)
     const rl = await rateLimitAsync(
       clientKey(request, "auth-login"),
       8,
@@ -109,7 +123,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Usuario o contraseña incorrectos" }, { status: 401 });
     }
 
-    const token = await createAdminSessionToken(result.username, result.mustChange);
+    const token = await createAdminSessionToken(
+      result.username,
+      result.mustChange,
+      result.role,
+    );
     const cookieStore = await cookies();
     cookieStore.set(ADMIN_SESSION_COOKIE, token, sessionCookieOptions());
 
