@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { syncCatalogFromDriveFolders, parseExcelStockBuffer } from "@/lib/server/driveSyncService";
 import { saveVehicle, getVehicles } from "@/lib/server/vehiclesStore";
 import { startAutoSyncScheduler, getAutoSyncStatus } from "@/lib/server/autoSyncScheduler";
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
   try {
     const contentType = req.headers.get("content-type") || "";
 

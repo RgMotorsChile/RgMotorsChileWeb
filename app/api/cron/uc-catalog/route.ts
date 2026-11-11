@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { authorizeMachineSecret } from "@/lib/auth/machineAuth";
 import { getVehicles, saveVehicle } from "@/lib/server/vehiclesStore";
 import {
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
   const body = (await req.json().catch(() => ({}))) as {
     slug?: string;
     image?: string;

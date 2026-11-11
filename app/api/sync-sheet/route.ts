@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { syncFromLiveGoogleSheet } from "@/lib/server/googleSheetSyncService";
 import { getSoldVehicles } from "@/lib/server/soldVehiclesStore";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
   try {
     let sheetId: string | undefined;
     try {

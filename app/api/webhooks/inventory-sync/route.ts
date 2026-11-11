@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { revalidatePath } from "next/cache";
 import { syncFromLiveGoogleSheet } from "@/lib/server/googleSheetSyncService";
 import { authorizeMachineSecret } from "@/lib/auth/machineAuth";
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
   if (!authorizeWebhook(req)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
 
   let sheetId: string | undefined;
   let source = "webhook";

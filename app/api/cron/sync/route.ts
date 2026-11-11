@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { runAutoSync, getAutoSyncStatus } from "@/lib/server/autoSyncScheduler";
 import {
   MAX_NEW_PHOTOS_PER_RUN,
@@ -163,6 +164,7 @@ async function persistAndRespond(input: {
 }
 
 async function handleCronSync(req: NextRequest) {
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
   const started = Date.now();
   const resolved = resolveCronTenant(req.nextUrl.searchParams.get("tenant"));
   if (!resolved.ok) {

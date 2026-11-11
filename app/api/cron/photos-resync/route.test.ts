@@ -50,32 +50,19 @@ describe("/api/cron/photos-resync", () => {
     expect(runPhotosResyncBatch).not.toHaveBeenCalled();
   });
 
-  it("rechaza un limit inválido", async () => {
-    const res = await call("https://www.rgmotorschile.cl/api/cron/photos-resync?limit=20");
-    expect(res.status).toBe(400);
-    expect(runPhotosResyncBatch).not.toHaveBeenCalled();
-  });
-
-  it("corre un lote y devuelve el cursor siguiente", async () => {
+  it("con sesion valida no re-sincroniza fotos y responde desactivado", async () => {
     const res = await call(
       "https://www.rgmotorschile.cl/api/cron/photos-resync?tenant=rg-motors&cursor=rg-motors&limit=2",
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.nextCursor).toBe("rg-motors:alfa");
-    expect(runPhotosResyncBatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cursor: "rg-motors",
-        tenant: "rg-motors",
-        limit: 2,
-        deadlineAt: expect.any(Number),
-      }),
-    );
+    expect(body.disabled).toBe(true);
+    expect(runPhotosResyncBatch).not.toHaveBeenCalled();
   });
 
-  it("POST usa la misma autenticación", async () => {
+  it("POST tampoco re-sincroniza", async () => {
     const res = await call("https://www.rgmotorschile.cl/api/cron/photos-resync", true, "POST");
-    expect(res.status).toBe(200);
-    expect(runPhotosResyncBatch).toHaveBeenCalled();
+    expect(res.status).toBe(409);
+    expect(runPhotosResyncBatch).not.toHaveBeenCalled();
   });
 });

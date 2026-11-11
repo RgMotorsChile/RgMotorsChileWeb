@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { authorizeMachineSecret } from "@/lib/auth/machineAuth";
 import { runVehiclePhotoOrphanCleanup } from "@/lib/server/vehiclePhotoGc";
 
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
   if (!authorize(req)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
   const dryRun = req.nextUrl.searchParams.get("dryRun") === "1";
   try {
     const result = await runVehiclePhotoOrphanCleanup({ dryRun });
