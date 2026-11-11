@@ -240,7 +240,7 @@ export function VehiclesSection({
             onClick={() => setIsSyncModalOpen(true)}
             className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25 shadow-sm flex items-center gap-1.5"
           >
-            <span>🔄</span> Sincronizar Drive & Excel
+            <span>🔄</span> Sobre la sincronización
           </button>
           {onManagePhotos && (
             <button

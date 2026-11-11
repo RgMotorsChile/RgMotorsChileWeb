@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { syncFromLiveGoogleSheet } from "@/lib/server/googleSheetSyncService";
+import { NextResponse } from "next/server";
+import { CATALOG_AUTOMATION_STATUS, catalogAutomationDisabledBody } from "@/lib/server/catalogAutomation";
 import { getSoldVehicles } from "@/lib/server/soldVehiclesStore";
 import { requireAdminSession } from "@/lib/auth/requireAdmin";
 
@@ -12,34 +12,16 @@ export async function GET() {
   }
   const sold = await getSoldVehicles();
   return NextResponse.json({
-    status: "ready",
+    status: "disabled",
     soldArchiveCount: sold.length,
-    message: "Servicio de sincronización continua con Google Sheets listo.",
+    disabled: true,
+    message: "El catalogo solo se administra desde el panel. La sincronizacion con Google Sheets esta desactivada.",
   });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
-  try {
-    let sheetId: string | undefined;
-    try {
-      const body = await req.json();
-      sheetId = body?.sheetId;
-    } catch {
-      /* noop */
-    }
-
-    const report = await syncFromLiveGoogleSheet(sheetId);
-    return NextResponse.json(report);
-  } catch (err) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: err instanceof Error ? err.message : "Error durante la sincronización",
-      },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(catalogAutomationDisabledBody(), { status: CATALOG_AUTOMATION_STATUS });
 }
