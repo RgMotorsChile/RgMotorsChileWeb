@@ -35,7 +35,7 @@ vi.mock("@/lib/auth/machineAuth", () => ({
     (req.headers.get("authorization") || "") === "Bearer test-cron-secret-16chars",
 }));
 
-import { GET } from "./route";
+import { GET, POST } from "./route";
 
 const sheetOk = {
   success: true,
@@ -87,24 +87,115 @@ describe("GET /api/cron/sync", () => {
     expect(recordCatalogSyncState).not.toHaveBeenCalled();
   });
 
-
-  it("no corre la planilla ni Drive y responde desactivado", async () => {
-    const res = await call("https://www.rgmotorschile.cl/api/cron/sync?tenant=rg-motors");
-    expect(res.status).toBe(409);
+  it("usa el tenant explícito y no el reloj", async () => {
+    vi.setSystemTime(new Date("2026-10-15T11:05:00.000Z"));
+    const res = await call(
+      "https://rgmotorschile.cl/api/cron/sync?tenant=unidades-chile",
+    );
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.disabled).toBe(true);
-    expect(body.success).toBe(false);
-    expect(syncFromLiveGoogleSheet).not.toHaveBeenCalled();
-    expect(syncDrivePhotosViaOAuth).not.toHaveBeenCalled();
+    expect(body.tenant).toBe("unidades-chile");
+    expect(syncFromLiveGoogleSheet).toHaveBeenCalledWith(undefined, {
+      tenantSlug: "unidades-chile",
+    });
+    expect(syncDrivePhotosViaOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantSlug: "unidades-chile",
+        maxNewPhotos: 36,
+      }),
+    );
     expect(runAutoSync).not.toHaveBeenCalled();
+    expect(recordCatalogSyncState).toHaveBeenCalledWith(
+      "unidades-chile",
+      expect.objectContaining({
+        tenant: "unidades-chile",
+        read: 12,
+        inserted: 1,
+        updated: 3,
+        skipped: 9,
+        photos: 4,
+        errors: [],
+        success: true,
+      }),
+    );
+  });
+
+  it("sin parámetro, 12 UTC sigue siendo Unidades Chile", async () => {
+    vi.setSystemTime(new Date("2026-10-15T12:00:00.000Z"));
+    const res = await call("https://rgmotorschile.cl/api/cron/sync");
+    expect(res.status).toBe(200);
+    expect(syncDrivePhotosViaOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantSlug: "unidades-chile" }),
+    );
+  });
+
+  it("sin parámetro, fuera de las 12 UTC sincroniza RG", async () => {
+    const res = await call("https://rgmotorschile.cl/api/cron/sync");
+    expect(res.status).toBe(200);
+    expect(runAutoSync).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantSlug: "rg-motors", maxNewPhotos: 36 }),
+    );
+    expect(syncDrivePhotosViaOAuth).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.tenant).toBe("rg-motors");
+  });
+
+  it("rechaza un tenant desconocido sin escribir sync_state", async () => {
+    const res = await call("https://rgmotorschile.cl/api/cron/sync?tenant=otro");
+    expect(res.status).toBe(400);
+    expect(syncFromLiveGoogleSheet).not.toHaveBeenCalled();
     expect(recordCatalogSyncState).not.toHaveBeenCalled();
   });
 
-  it("tampoco sincroniza el tenant de Unidades Chile", async () => {
-    const res = await call("https://www.rgmotorschile.cl/api/cron/sync?tenant=unidades-chile");
-    expect(res.status).toBe(409);
+  it("escribe sync_state aunque la corrida lance", async () => {
+    syncFromLiveGoogleSheet.mockRejectedValue(new Error("sheets caídos"));
+    const res = await POST(
+      new NextRequest("https://rgmotorschile.cl/api/cron/sync?tenant=rg-motors", {
+        method: "POST",
+        headers: { authorization: "Bearer test-cron-secret-16chars" },
+      }),
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.syncState.errors).toContain("sheets caídos");
+    expect(body.syncState.success).toBe(false);
+    expect(recordCatalogSyncState).toHaveBeenCalledWith(
+      "rg-motors",
+      expect.objectContaining({
+        success: false,
+        errors: ["sheets caídos"],
+        photos: 0,
+      }),
+    );
+  });
+
+  it("responde 500 si la planilla falla, y igual persiste el detalle", async () => {
+    syncFromLiveGoogleSheet.mockResolvedValue({
+      success: false,
+      message: "hoja restringida",
+      rowsRead: 0,
+      newVehicles: 0,
+      updatedVehicles: 0,
+      skippedIncomplete: 0,
+    });
+    const res = await call(
+      "https://rgmotorschile.cl/api/cron/sync?tenant=rg-motors",
+    );
+    expect(res.status).toBe(500);
+    expect(recordCatalogSyncState).toHaveBeenCalledWith(
+      "rg-motors",
+      expect.objectContaining({
+        success: false,
+        errors: ["hoja restringida"],
+      }),
+    );
+  });
+
+  it("status=1 no dispara el sync", async () => {
+    const res = await call("https://rgmotorschile.cl/api/cron/sync?status=1");
+    expect(res.status).toBe(200);
     expect(syncFromLiveGoogleSheet).not.toHaveBeenCalled();
-    expect(syncDrivePhotosViaOAuth).not.toHaveBeenCalled();
-    expect(runAutoSync).not.toHaveBeenCalled();
+    expect(recordCatalogSyncState).not.toHaveBeenCalled();
   });
 });
