@@ -250,7 +250,7 @@ describe("vehicle_photo_orphans", () => {
     expect(listed.files).toEqual(["rg-motors/edge/spin/v1/manifest.json"]);
   });
 
-  it("el sync suelta el auto que salió de la planilla de RG y conserva el resto", () => {
+  it("el sync suelta el auto que salió de la planilla de su tenant y conserva el resto", () => {
     expect(shouldReleaseRemovedVehicle({
       plateOnSheet: false,
       status: "Disponible",
@@ -280,6 +280,18 @@ describe("vehicle_photo_orphans", () => {
       status: "Disponible",
       skipArchive: false,
       tenantSlug: "unidades-chile",
+    })).toBe(true);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "En preparación",
+      skipArchive: false,
+      tenantSlug: "unidades-chile",
+    })).toBe(false);
+    expect(shouldReleaseRemovedVehicle({
+      plateOnSheet: false,
+      status: "Disponible",
+      skipArchive: false,
+      tenantSlug: "salgado",
     })).toBe(false);
   });
 
