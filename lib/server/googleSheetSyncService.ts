@@ -1,6 +1,11 @@
 import { getVehicles, replaceAllVehicles } from "./vehiclesStore";
 import { archiveSoldVehicle, getSoldVehicles } from "./soldVehiclesStore";
-import { releaseVehiclePhotos } from "./vehiclePhotoGc";
+import {
+  canLeaveCatalogBySheet,
+  findPanelVehicleForSheetRow,
+  normalizePlate,
+  vehiclesToKeep,
+} from "./sheetSyncProtection";
 import { Vehicle } from "@/lib/vehicles";
 import { publicVehicleSlug } from "@/lib/vehicles/publicSlug";
 import {
@@ -276,9 +281,9 @@ export interface SyncReport {
 }
 
 /**
- * Un auto que ya no está en la planilla de ESTE sitio se archiva y suelta
- * fotos y giro en el mismo sync. El anti-wipe no borra. Otro tenant no.
- * Borrador, vendido y en preparación no se tocan.
+ * Un auto que ya no está en la planilla de ESTE sitio puede salir del
+ * catálogo activo. Las fotos de Storage no se borran en el sync.
+ * Otro tenant no. Sin patente, borrador, vendido y en preparación no salen.
  */
 export function shouldReleaseRemovedVehicle(opts: {
   plateOnSheet: boolean;
@@ -380,7 +385,8 @@ export async function syncFromLiveGoogleSheet(
   });
   const currentPlateMap = new Map<string, Vehicle>();
   currentVehicles.forEach((v) => {
-    const p = cleanPlate(v.plate);
+    const p = normalizePlate(v.plate);
+    if (!p) return;
     currentPlateMap.set(p, v);
   });
 
@@ -389,13 +395,7 @@ export async function syncFromLiveGoogleSheet(
   const platesOnSheet = new Set(sheetVehicles.map((s) => s.plate));
   let wouldArchive = 0;
   for (const [plate, existing] of currentPlateMap.entries()) {
-    const st = existing.status || "Disponible";
-    if (
-      !platesOnSheet.has(plate) &&
-      st !== "Vendido" &&
-      st !== "Borrador" &&
-      st !== "En preparación"
-    ) {
+    if (!platesOnSheet.has(plate) && canLeaveCatalogBySheet(existing)) {
       wouldArchive++;
     }
   }
@@ -434,7 +434,9 @@ export async function syncFromLiveGoogleSheet(
   let newCount = 0;
   let updatedCount = 0;
   let soldCount = 0;
-  const soldForPhotoRelease: Vehicle[] = [];
+  const removedSlugs = new Set<string>();
+  const adoptedSlugs = new Set<string>();
+  const archivedWithPhotosKept: Vehicle[] = [];
 
   const updatedActiveList: Vehicle[] = [];
   // Autos que la sync sacó por error y vuelven: recuperar ficha del historial.
@@ -455,7 +457,8 @@ export async function syncFromLiveGoogleSheet(
           item.price,
           "Marcado como Vendido en planilla Google Sheets",
         );
-        soldForPhotoRelease.push(existing);
+        removedSlugs.add(existing.slug);
+        archivedWithPhotosKept.push(existing);
         soldCount++;
       }
       continue;
@@ -485,6 +488,22 @@ export async function syncFromLiveGoogleSheet(
       if (changed) updatedCount++;
       updatedActiveList.push(existing);
     } else {
+      const adopted = findPanelVehicleForSheetRow(
+        { brand: item.brand, model: item.model, year: item.year },
+        currentVehicles,
+        adoptedSlugs,
+      );
+      if (adopted) {
+        adopted.plate = `${item.plate.slice(0, 4)} ${item.plate.slice(4)}`;
+        if (item.price > 0) adopted.price = item.price;
+        if (item.km > 0) adopted.km = item.km;
+        currentPlateMap.set(item.plate, adopted);
+        adoptedSlugs.add(adopted.slug);
+        updatedActiveList.push(adopted);
+        updatedCount++;
+        continue;
+      }
+
       // New vehicle in sheet — sin inventar diésel/manual/4x4
       const formattedPlate = `${item.plate.slice(0, 4)} ${item.plate.slice(4)}`;
       const version = `${item.model} · ${item.color}`;
@@ -543,12 +562,11 @@ export async function syncFromLiveGoogleSheet(
   // Check if any previously active vehicles are no longer in the sheet (sold/discontinued)
   if (!wipeGuard.skipArchive) {
     for (const [plate, existing] of currentPlateMap.entries()) {
-      const st = existing.status || "Disponible";
-      const leftThisSheet = !platesOnSheet.has(plate) && st !== "Vendido" && st !== "Borrador" && st !== "En preparación";
+      const leftThisSheet = !platesOnSheet.has(plate) && canLeaveCatalogBySheet(existing);
       if (leftThisSheet) {
         if (shouldReleaseRemovedVehicle({
           plateOnSheet: false,
-          status: st,
+          status: existing.status || "Disponible",
           skipArchive: false,
           tenantSlug,
         })) {
@@ -557,26 +575,18 @@ export async function syncFromLiveGoogleSheet(
             existing.price,
             "Vehículo retirado de inventario activo (Vendido/Entregado)",
           );
-          soldForPhotoRelease.push(existing);
+          removedSlugs.add(existing.slug);
+          archivedWithPhotosKept.push(existing);
         }
         soldCount++;
       }
     }
-  } else {
-    // Conservar en activo los que no vinieron en la hoja
-    for (const [plate, existing] of currentPlateMap.entries()) {
-      const st = existing.status || "Disponible";
-      if (
-        !platesOnSheet.has(plate) &&
-        st !== "Vendido" &&
-        st !== "Borrador" &&
-        st !== "En preparación" &&
-        !updatedActiveList.some((v) => cleanPlate(v.plate) === plate)
-      ) {
-        updatedActiveList.push(existing);
-      }
-    }
   }
+
+  // replaceAllVehicles borra lo que no va en la lista. Los autos del panel
+  // que este sync no archivó (sin patente, borrador, vendido, en preparación,
+  // o retenidos por el anti-wipe) se conservan.
+  updatedActiveList.push(...vehiclesToKeep(currentVehicles, updatedActiveList, removedSlugs));
 
   // Sort updated active list (Toyota and Mitsubishi first, then by price)
   updatedActiveList.sort((a, b) => {
@@ -590,12 +600,9 @@ export async function syncFromLiveGoogleSheet(
   // Persistencia + invalidación de caché (no reportar éxito si KV falla)
   const saved = await replaceAllVehicles(updatedActiveList, { tenantSlug });
   if (saved.success) {
-    for (const sold of soldForPhotoRelease) {
-      // La fila ya salió de catalog_vehicles. Fotos y giro (cada versión) se borran ahora.
-      await releaseVehiclePhotos(sold, "sold").catch((err) => {
-        console.warn(`[GoogleSheetSync] No se pudieron borrar fotos de ${sold.slug}:`, err);
-      });
-    }
+    console.log(
+      `[GoogleSheetSync] ${archivedWithPhotosKept.length} autos archivados; sus fotos se conservan en Storage.`,
+    );
   }
   if (!saved.success) {
     return {
