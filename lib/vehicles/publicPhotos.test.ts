@@ -29,6 +29,14 @@ const car = {
   highlights: ["Fotos reales de patio", "Mantenciones al día"],
 } as unknown as Vehicle;
 
+const emptyCar = {
+  ...car,
+  image: PENDING_PHOTO,
+  gallery: [],
+  spin: undefined,
+  hasRealPhotos: false,
+} as unknown as Vehicle;
+
 const prev = process.env.NEXT_PUBLIC_PHOTOS_MODE;
 afterEach(() => {
   if (prev === undefined) delete process.env.NEXT_PUBLIC_PHOTOS_MODE;
@@ -36,19 +44,31 @@ afterEach(() => {
 });
 
 describe("modo de fotos público", () => {
-  it("por defecto es placeholder y no deja ninguna foto real", () => {
+  it("por defecto muestra las fotos reales del vehículo", () => {
     delete process.env.NEXT_PUBLIC_PHOTOS_MODE;
-    expect(isPlaceholderPhotosMode()).toBe(true);
+    expect(isPlaceholderPhotosMode()).toBe(false);
     const v = toPublicVehicle(car);
+    expect(v.image).toBe(REAL);
+    expect(v.gallery).toHaveLength(2);
+    expect(v.spin).toEqual(car.spin);
+    expect(v.hasRealPhotos).toBe(true);
+    expect(v.highlights).toEqual(["Fotos reales de patio", "Mantenciones al día"]);
+    expect(v.price).toBe(car.price);
+    expect(JSON.stringify(v)).toContain("supabase.co");
+    const card = toVehicleCardDTO(car);
+    expect(card.image).toBe(REAL);
+    expect(card.galleryCount).toBe(2);
+    expect(card.hasSpin).toBe(true);
+    expect(card.hasRealPhotos).toBe(true);
+  });
+
+  it("si el auto no tiene fotos, muestra solo el placeholder", () => {
+    const v = toPublicVehicle(emptyCar);
     expect(v.image).toBe(PENDING_PHOTO);
     expect(v.gallery).toEqual([]);
     expect(v.spin).toBeUndefined();
     expect(v.hasRealPhotos).toBe(false);
-    expect(v.highlights).toEqual(["Fotos reales de patio", "Mantenciones al día"]);
-    expect(v.price).toBe(car.price);
-    expect(JSON.stringify(v)).not.toContain("supabase.co");
-    expect(JSON.stringify(v)).not.toContain("/cars/spin");
-    const card = toVehicleCardDTO(car);
+    const card = toVehicleCardDTO(emptyCar);
     expect(card.image).toBe(PENDING_PHOTO);
     expect(card.galleryCount).toBe(0);
     expect(card.hasSpin).toBe(false);
@@ -62,8 +82,8 @@ describe("modo de fotos público", () => {
     expect(car.gallery).toHaveLength(2);
   });
 
-  it("NEXT_PUBLIC_PHOTOS_MODE=real vuelve a mostrar las fotos", () => {
-    process.env.NEXT_PUBLIC_PHOTOS_MODE = "real";
+  it("ignora NEXT_PUBLIC_PHOTOS_MODE y sigue mostrando las fotos reales", () => {
+    process.env.NEXT_PUBLIC_PHOTOS_MODE = "placeholder";
     expect(isPlaceholderPhotosMode()).toBe(false);
     const v = toPublicVehicle(car);
     expect(v.image).toBe(REAL);
