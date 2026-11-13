@@ -281,9 +281,16 @@ export interface SyncReport {
 }
 
 /**
- * Un auto que ya no está en la planilla de ESTE sitio puede salir del
- * catálogo activo. Las fotos de Storage no se borran en el sync.
- * Otro tenant no. Sin patente, borrador, vendido y en preparación no salen.
+ * Tenants cuya planilla manda el catálogo activo. El sync ya leyó solo
+ * los autos de ese tenant; archivar aquí no toca el stock de la otra
+ * automotora. Salgado y cualquier otro slug no tienen esta planilla.
+ */
+const SHEET_ARCHIVE_TENANTS = new Set(["rg-motors", "unidades-chile"]);
+
+/**
+ * Un auto que ya no está en la planilla de ESTE tenant sale de su catálogo
+ * activo. RG Motors y Unidades Chile archivan. Las fotos de Storage no se
+ * borran en el sync. Sin patente, borrador, vendido y en preparación no salen.
  */
 export function shouldReleaseRemovedVehicle(opts: {
   plateOnSheet: boolean;
@@ -291,7 +298,9 @@ export function shouldReleaseRemovedVehicle(opts: {
   skipArchive: boolean;
   tenantSlug: string;
 }): boolean {
-  if (opts.skipArchive || opts.plateOnSheet || opts.tenantSlug !== "rg-motors") return false;
+  if (opts.skipArchive || opts.plateOnSheet || !SHEET_ARCHIVE_TENANTS.has(opts.tenantSlug)) {
+    return false;
+  }
   const status = opts.status || "Disponible";
   return status !== "Vendido" && status !== "Borrador" && status !== "En preparación";
 }
@@ -577,8 +586,8 @@ export async function syncFromLiveGoogleSheet(
           );
           removedSlugs.add(existing.slug);
           archivedWithPhotosKept.push(existing);
+          soldCount++;
         }
-        soldCount++;
       }
     }
   }
