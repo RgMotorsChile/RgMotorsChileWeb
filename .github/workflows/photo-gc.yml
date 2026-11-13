@@ -1,19 +1,16 @@
-# Borrado de huérfanos en Supabase Storage. No usa pg_cron: el job necesita
-# el runtime de Next (service role) y el mismo CRON_SECRET que ya está en Actions.
+# Borrado de huérfanos en Supabase Storage. Solo manual (workflow_dispatch):
+# no hay schedule, y dry_run queda en true para no borrar fotos por defecto.
 # Nunca toca boletas-receipts, app-releases, vehicle-notes ni box-evidence.
 name: Fotos huérfanas
 
 on:
-  schedule:
-    # 04:15 UTC, una vez al día. El margen de edad vive en el endpoint (15 min).
-    - cron: "15 4 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
         description: Solo listar, sin borrar
         required: false
         type: boolean
-        default: false
+        default: true
 
 jobs:
   photo-gc:
