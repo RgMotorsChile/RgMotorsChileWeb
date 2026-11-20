@@ -44,12 +44,14 @@ test.describe("Ficha, catálogo y SEO", () => {
     await page.screenshot({ path: `${shot}/ficha-1440.png`, fullPage: true });
   });
 
-  test("el footer acredita a South Software y no publica el hotmail", async ({ page }) => {
+  test("el footer acredita a Mathias Jara con su WhatsApp y no publica el hotmail", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("link", { name: "Desarrollado por South Software" })).toHaveAttribute(
+    await expect(page.locator("footer")).toContainText("Desarrollado por Mathias Jara");
+    await expect(page.getByRole("link", { name: "+56 9 6471 0361" })).toHaveAttribute(
       "href",
-      "https://southsoftware.cl",
+      "https://wa.me/56964710361",
     );
+    await expect(page.locator("footer")).not.toContainText("South Software");
     await expect(page.locator("body")).not.toContainText("hotmail");
   });
 
