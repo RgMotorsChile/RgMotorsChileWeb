@@ -1,91 +1,42 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/auth/session";
-import { isPublicApi } from "@/lib/auth/apiAccess";
-import { isMachineAuthPath } from "@/lib/auth/machineAuth";
-import { applySecurityHeaders, rejectUntrustedOrigin } from "@/lib/server/security";
-import publication from "@/lib/vehicles/publicationRedirects.json";
 
-const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const FREEZE_HTML = `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Error de actualización</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #0b0b0b; color: #f4f4f4; font-family: Inter, system-ui, sans-serif; }
+      main { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; text-align: center; }
+      p { margin: 0; max-width: 32rem; line-height: 1.55; color: #cfcfcf; }
+      h1 { margin: 0 0 12px; font-size: 1.75rem; font-weight: 700; }
+      small { display: block; margin-top: 18px; color: #888; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Error de actualización</h1>
+        <p>El sitio de RG Motors no está disponible por un error durante una actualización. No es posible ingresar por ahora.</p>
+        <small>rgmotorschile.cl</small>
+      </div>
+    </main>
+  </body>
+</html>`;
 
-export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-  const method = request.method;
-
-  if (pathname.startsWith("/vehiculo/")) {
-    // 410 en este mismo dominio. No hay redirección a otro sitio.
-    const gone = publication.gone as readonly string[];
-    if (gone.includes(pathname)) {
-      return applySecurityHeaders(
-        new NextResponse("Este vehículo ya no está publicado en RG Motors.", {
-          status: 410,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        }),
-      );
-    }
-    // El resto sigue al 301 de next.config y a la ficha. No reescribir
-    // headers aquí: vercel.json ya publica una CSP más estricta.
-    return NextResponse.next();
-  }
-
-  // CSRF básico en mutaciones públicas. Cron/webhook usan Bearer (sin Origin).
-  if (
-    pathname.startsWith("/api/") &&
-    MUTATING.has(method) &&
-    isPublicApi(pathname, method, request.nextUrl.searchParams) &&
-    !isMachineAuthPath(pathname)
-  ) {
-    const blocked = rejectUntrustedOrigin(request);
-    if (blocked) return applySecurityHeaders(blocked);
-  }
-
-  const isProtectedAdminPath =
-    pathname.startsWith("/admin") && pathname !== "/admin/login";
-
-  const isProtectedApi =
-    pathname.startsWith("/api/") &&
-    !isPublicApi(pathname, method, request.nextUrl.searchParams);
-
-  if (isProtectedAdminPath || isProtectedApi) {
-    const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-    const session = await verifyAdminSessionToken(token);
-
-    if (!session) {
-      if (isProtectedApi) {
-        return applySecurityHeaders(
-          NextResponse.json({ error: "No autorizado" }, { status: 401 }),
-        );
-      }
-      return applySecurityHeaders(
-        NextResponse.redirect(new URL("/admin/login", request.url)),
-      );
-    }
-
-    if (session.mustChange) {
-      const allowedWhileMustChange =
-        pathname === "/admin/login" || pathname.startsWith("/api/auth");
-      if (!allowedWhileMustChange) {
-        if (isProtectedApi) {
-          return applySecurityHeaders(
-            NextResponse.json(
-              {
-                error: "Debes cambiar usuario y contraseña antes de continuar",
-                mustChange: true,
-              },
-              { status: 403 },
-            ),
-          );
-        }
-        return applySecurityHeaders(
-          NextResponse.redirect(new URL("/admin/login?change=1", request.url)),
-        );
-      }
-    }
-  }
-
-  return applySecurityHeaders(NextResponse.next());
+export function middleware() {
+  return new NextResponse(FREEZE_HTML, {
+    status: 503,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store, no-cache, must-revalidate",
+      "retry-after": "3600",
+    },
+  });
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/:path*", "/vehiculo/:path*"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };
